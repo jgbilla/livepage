@@ -2,7 +2,9 @@
   "name": "@livepage/agent",
   "private": true,
   "type": "module",
-  "bin": { "livepage-mcp": "src/mcp.ts" },
+  "bin": {
+    "livepage-mcp": "src/mcp.ts"
+  },
   "scripts": {
     "demo": "tsx --env-file-if-exists=../../.env src/demo.ts",
     "mcp": "tsx --env-file-if-exists=../../.env src/mcp.ts",
@@ -18,5 +20,13 @@
     "yjs": "^13.6.33",
     "zod": "^3.25.0"
   },
-  "devDependencies": { "@types/node": "^22.10.0", "@types/ws": "^8.18.0", "typescript": "^5.9.3" }
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.9.3"
+  },
+  "exports": {
+    "./tools": "./src/tools.ts",
+    "./client": "./src/client.ts"
+  }
 }

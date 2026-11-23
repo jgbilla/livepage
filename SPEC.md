@@ -226,10 +226,11 @@ An agent is a **participant**, not a feature. Three ways to connect, from riches
 | Way | Presence and caret | Best for | Where |
 |-----|-----|-----|-----|
 | **Live client** (Yjs over WebSocket) | Yes, streams edits as it types | Custom agents, demos | `packages/agent/src/client.ts` |
-| **MCP server** | Yes (uses the live client) | Claude Desktop/Code, ChatGPT and any MCP client | `packages/agent/src/mcp.ts` |
+| **Hosted MCP** (`https://<app>/mcp`, Streamable HTTP, `Authorization: Bearer lp_...`) | Yes (each session joins pages over loopback WS with the caller's token) | Any MCP client with just a URL and token: Claude Code, Cursor, Codex, Gemini CLI, VS Code | `apps/server/src/mcp-http.ts`, tools in `packages/agent/src/tools.ts` |
+| **Local MCP server** (stdio) | Yes (uses the live client) | Clients that only run local servers | `packages/agent/src/mcp.ts` |
 | **HTTP API** | No caret, edits still appear live | Scripts, webhooks, any language | `apps/server/src/agent-api.ts` |
 
-MCP tools today: `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+MCP tools today (same on both): `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
 
 **Choosing the output (from OpenIntelligentUI).** For each request the agent picks the lightest form that works: plain text, then a native component (table, mind map, later drawing or database), and custom UI only for motion or interaction. The MCP server's instructions spell this out for any model that connects.
 

@@ -21,7 +21,7 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Custom UI (HTML) blocks rendered in a sandboxed iframe on a separate origin with a strict CSP; they stream in progressively (CSS, HTML, then JS) and their code is co-editable live
 - Host bridge: controls inside a block can send validated input back to the agent
 - Agents as live participants with their own named caret (`packages/agent`)
-- MCP server so Claude, ChatGPT or any MCP client can read and write pages
+- Hosted MCP endpoint (`/mcp`) so Claude, Cursor, Codex, Gemini CLI or any MCP client can read and write pages with just a URL and a token
 - HTTP API for scripts in any language
 - Postgres persistence (hosted by default) plus a queryable `blocks` table
 - Docker Compose for self-hosting
@@ -70,15 +70,43 @@ DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --prof
 
 ## Connect an AI
 
-**MCP** (Claude Code example):
+Every Livepage app serves a **hosted MCP endpoint** at `https://<your app>/mcp` (Streamable HTTP). Any MCP client can connect with that URL and an agent token, with nothing to install. Create the token on your home page with **+ Agent token**, and send it as `Authorization: Bearer lp_...`. The agent joins pages live, with its own caret, and can only open pages its owner can.
 
-Create an agent token in the app (**Agents > + Agent token**), then:
+**Claude Code**
 
 ```bash
-claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --dir /path/to/livepage agent:mcp
+claude mcp add --transport http livepage https://<your app>/mcp --header "Authorization: Bearer lp_..."
 ```
 
-Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`. Set `LIVEPAGE_URL`, `AGENT_TOKEN` and `LIVEPAGE_AGENT_NAME` in the environment if needed.
+**Cursor** (`~/.cursor/mcp.json`) and **Gemini CLI** (`~/.gemini/settings.json`; use `"httpUrl"` in place of `"url"`)
+
+```json
+{ "mcpServers": { "livepage": { "url": "https://<your app>/mcp", "headers": { "Authorization": "Bearer lp_..." } } } }
+```
+
+**VS Code** (`.vscode/mcp.json`)
+
+```json
+{ "servers": { "livepage": { "type": "http", "url": "https://<your app>/mcp", "headers": { "Authorization": "Bearer lp_..." } } } }
+```
+
+**Codex** (`~/.codex/config.toml`, with the token in the `LIVEPAGE_TOKEN` environment variable)
+
+```toml
+[mcp_servers.livepage]
+url = "https://<your app>/mcp"
+bearer_token_env_var = "LIVEPAGE_TOKEN"
+```
+
+**Clients that only run local (stdio) servers:** bridge with `npx -y mcp-remote https://<your app>/mcp --header "Authorization: Bearer lp_..."`, or run the bundled stdio server from a checkout:
+
+```bash
+claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --silent --dir /path/to/livepage agent:mcp
+```
+
+Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
+
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
 
 **HTTP**:
 

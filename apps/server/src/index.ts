@@ -6,6 +6,7 @@ import { connect } from './db.ts';
 import { resolvePrincipal } from './auth.ts';
 import { canEdit, isPageId, roleFor, type Role } from './pages.ts';
 import { handleApi } from './routes.ts';
+import { handleMcp, isMcpPath } from './mcp-http.ts';
 import { staticHandler } from './static.ts';
 import { config } from './config.ts';
 
@@ -70,6 +71,10 @@ const server = new Server<Context>({
   },
 
   async onRequest({ request, response, instance }) {
+    if (isMcpPath(request.url)) {
+      await handleMcp(request, response, db);
+      throw null; // response sent
+    }
     if ((request.url ?? '').startsWith('/api/')) {
       await handleApi(request, response, db, instance);
       throw null; // response sent

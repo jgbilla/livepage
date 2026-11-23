@@ -36,10 +36,17 @@ export class LiveAgent {
 
   static async connect(opts: AgentOptions): Promise<LiveAgent> {
     const agent = new LiveAgent(opts);
-    await new Promise<void>((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('timed out connecting to the collab server')), 10_000);
-      agent.provider.on('synced', () => { clearTimeout(t); resolve(); });
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timed out connecting to the collab server')), 15_000);
+        agent.provider.on('synced', () => { clearTimeout(t); resolve(); });
+        agent.provider.on('authenticationFailed', () => { clearTimeout(t); reject(new Error(`no access to page ${opts.page} with this token`)); });
+      });
+    } catch (e) {
+      agent.provider.destroy();
+      agent.socket.destroy();
+      throw e;
+    }
     return agent;
   }
 
