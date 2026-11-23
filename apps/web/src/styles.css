@@ -195,3 +195,10 @@ button.google { border: 1px solid var(--line); background: var(--bg); color: var
 .backlinks ul { list-style: none; margin: 0; padding: 0; }
 .backlinks li { padding: 3px 0; }
 .backlinks a { color: #7048e8; text-decoration: none; }
+/* Phone width: the drawer is over the page, so keep the page's own ☰ visible, and keep the top bar on one tidy row */
+.layout-narrow .layout-main .topbar .sidebar-toggle { display: inline-block; }
+@media (max-width: 800px) {
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .topbar .crumbs { display: none; }
+  .copy-link-label { display: none; }
+}
