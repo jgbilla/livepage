@@ -4,7 +4,7 @@
 // access, so page permissions are enforced the same way for both.
 import { randomBytes } from 'node:crypto';
 import { LiveAgent } from '@livepage/agent/client';
-import { pageAsMarkdown, resolveTab } from '@livepage/schema';
+import { resolveTab } from '@livepage/schema';
 import type { Db } from '../db.ts';
 import { assistantTokens, type Principal } from '../auth.ts';
 import { config } from '../config.ts';
@@ -47,11 +47,11 @@ How to work:
 - Act on the page with tools instead of pasting content into chat. Chat replies are for short answers, questions, and a one or two sentence summary of what you changed.
 - If the person only asks a question about the page, answer in chat and don't edit.
 - Pick the lightest block that does the job: write_paragraph and add_heading for writing; insert_table for tabular data (never HTML tables); insert_mind_map for ideas and structure; insert_custom_ui only when it needs motion, drawing or interaction.
-- To change existing writing, use replace_text with the exact current text. Keep the person's voice; don't rewrite more than asked.
-- New blocks go at the end unless you pass after_text to place them after a specific passage.
+- To change what is already on the page, edit only what needs changing; never rewrite a page or a section to change a few words. In the page below, every block starts with a line like [b_1a2_3f paragraph]: that is its block id and type, not part of the text, so never write such a line yourself. Use replace_text for words or a sentence, replace_blocks to rewrite a block or a whole section with Markdown, insert_blocks to add content before or after a block, delete_blocks and move_blocks to remove or reorder, and edit_table for a cell or a row. A replaced or moved block gets a new id, which the tool returns. Keep the person's voice; don't rewrite more than asked.
+- New blocks from write_paragraph, add_heading, insert_table and the like go at the end unless you pass after_text to place them after a specific passage.
 - For custom UI: give css, html and js separately, keep it self-contained (CDN scripts are fine, network requests are blocked), and size it with initial_height. Style it with the Livepage design tokens so it matches the page in light and dark: var(--lp-text), var(--lp-text-secondary), var(--lp-surface), var(--lp-border), var(--lp-accent), var(--lp-radius-lg), var(--lp-space-4), var(--lp-font-sans), var(--lp-shadow-2), and var(--lp-cat-1) to var(--lp-cat-8) for chart series; the block background is transparent over the page.
-- The page content below is a snapshot from when the person asked. Others (people or agents) may be editing too; call read_page if you need a fresh look.
-- Write in the language of the page unless asked otherwise. Use plain text in paragraphs (no markdown syntax: headings, bullets and tables have their own tools).`;
+- The page content below is a snapshot from when the person asked. Others (people or agents) may be editing too; call read_blocks (one section) or read_page if you need a fresh look.
+- Write in the language of the page unless asked otherwise. write_paragraph takes plain text (no Markdown syntax); replace_blocks and insert_blocks take Markdown.`;
 
 export async function runAssistant(input: RunInput): Promise<void> {
   const { db, user, pageId, emit, signal } = input;
@@ -74,8 +74,9 @@ export async function runAssistant(input: RunInput): Promise<void> {
     tools = new PageTools(agent, tab);
     emit({ type: 'start', model: rt.model, provider: rt.provider.label });
 
-    let snapshot = pageAsMarkdown(agent.doc);
-    if (snapshot.length > MAX_CONTEXT) snapshot = `${snapshot.slice(0, MAX_CONTEXT)}\n\n(…truncated; call read_page for the rest)`;
+    // With block ids, so the model can edit a block without reading the page again.
+    let snapshot = agent.readBlocks();
+    if (snapshot.length > MAX_CONTEXT) snapshot = `${snapshot.slice(0, MAX_CONTEXT)}\n\n(…truncated; call read_blocks with from set to the last block id above for the rest)`;
     const sel = (input.selection ?? '').trim().slice(0, 8000);
     const messages: Msg[] = [];
     for (const h of (input.history ?? []).slice(-12)) {

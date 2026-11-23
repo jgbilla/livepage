@@ -19,6 +19,8 @@ const LABELS: Record<string, string> = {
   read_page: 'Reading the page', write_paragraph: 'Writing', add_heading: 'Adding a heading', replace_text: 'Editing text',
   insert_table: 'Making a table', insert_mind_map: 'Making a mind map', add_mind_map_node: 'Growing the mind map',
   insert_custom_ui: 'Building a custom block', update_html_block: 'Updating a block', add_tab: 'Adding a tab',
+  read_blocks: 'Reading a section', replace_blocks: 'Rewriting', insert_blocks: 'Writing', delete_blocks: 'Removing', move_blocks: 'Moving',
+  edit_table: 'Editing a table',
 };
 const SUGGESTIONS = ['Summarize this page', 'Continue writing from where I stopped', 'Turn this into a table', 'Make an animated diagram of this'];
 
