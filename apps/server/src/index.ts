@@ -8,9 +8,13 @@ import { canEdit, isPageId, roleFor, type Role } from './pages.ts';
 import { handleApi } from './routes.ts';
 import { handleMcp, isMcpPath } from './mcp-http.ts';
 import { staticHandler } from './static.ts';
+import { createHistory, VERSIONS_SQL, type Author } from './history.ts';
+import { handleVersions, isVersionsPath } from './versions-api.ts';
 import { config } from './config.ts';
 
 const db = await connect(process.env.DATABASE_URL);
+for (const stmt of VERSIONS_SQL.split(';').map((x) => x.trim()).filter(Boolean)) await db.query(stmt);
+const history = createHistory(db);
 const serveStatic = config.webDist
   ? staticHandler(config.webDist, config.sandboxUrl, config.neonAuthUrl ? new URL(config.neonAuthUrl).origin : null)
   : null;
@@ -77,7 +81,25 @@ const server = new Server<Context>({
     return { user: { id: who.id, name: who.name, kind: who.kind }, role };
   },
 
+  // Version history: credit each change to the person or agent who made it, and cut versions.
+  async afterLoadDocument({ documentName, document }) {
+    if (isPageId(documentName)) await history.loaded(documentName, document as unknown as Y.Doc).catch((e) => console.warn('[history]', e.message));
+  },
+  async onChange({ documentName, update, context }) {
+    if (isPageId(documentName)) history.changed(documentName, update, (context as Context | undefined)?.user as Author | undefined);
+  },
+  async afterUnloadDocument({ documentName }) {
+    if (isPageId(documentName)) history.unloaded(documentName);
+  },
+  async onDestroy() {
+    await history.flushAll();
+  },
+
   async onRequest({ request, response, instance }) {
+    if (isVersionsPath(request.url)) {
+      await handleVersions(request, response, db, instance, history);
+      throw null; // response sent
+    }
     if (isMcpPath(request.url)) {
       await handleMcp(request, response, db);
       throw null; // response sent

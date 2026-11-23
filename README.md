@@ -22,6 +22,7 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Real-time collaborative editor (TipTap + Yjs + Hocuspocus) with live carets and a presence bar
 - Any mix of blocks on one page: text, tables, mind maps and custom UI, all editable by people and agents
 - Optional tabs at the top of a page, each its own live document
+- Version history: see each saved version, who changed it (a person or an agent, marked ✦), a block-by-block diff with word-level edits, and restore any version live for everyone. Agent edits always land in their own version. Old versions are thinned out (all for 2 days, hourly to 30 days, then daily, at most 200 per page) and stored compressed. API: `GET /api/pages/:page/versions`, `GET .../versions/:id?compare=previous|current`, `POST .../versions/:id/restore`
 - Custom UI (HTML) blocks rendered in a sandboxed iframe on a separate origin with a strict CSP; they stream in progressively (CSS, HTML, then JS) and their code is co-editable live
 - Host bridge: controls inside a block can send validated input back to the agent
 - Agents as live participants with their own named caret (`packages/agent`)

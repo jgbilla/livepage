@@ -9,6 +9,7 @@ import { Backlinks } from '../Backlinks';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
+import { HistoryPanel } from './HistoryPanel';
 import { AssistantPanel } from './AssistantPanel';
 import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
@@ -40,6 +41,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   const [peers, setPeers] = useState<Peer[]>([]);
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [asking, setAsking] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
   // Following a link to another tab of this same page changes only ?tab=.
@@ -113,6 +115,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
           ))}
         </div>
         <Link to={`/graph?page=${pageId}`} className="ghost-link small" >◉ Graph</Link>
+        {!readOnly && <button type="button" className="ghost" onClick={() => setShowHistory(true)} title="Version history">History</button>}
         {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => setAsking((v) => !v)}>✦ Ask AI</button>}
         <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
           {copied ? 'Copied' : <>🔗<span className="copy-link-label"> Copy link</span></>}
@@ -135,6 +138,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
       </main>
       {asking && <AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} />}
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
+      {showHistory && <HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} />}
     </div>
   );
 }
