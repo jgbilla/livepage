@@ -3,6 +3,7 @@ import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'no
 import { promisify } from 'node:util';
 import type { IncomingMessage } from 'node:http';
 import type { Db } from './db.ts';
+import { config } from './config.ts';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 
@@ -37,11 +38,20 @@ export function validateSignup(email: unknown, name: unknown, password: unknown)
   return null;
 }
 
+export class SignupClosedError extends Error {
+  constructor() { super('Sign-ups are closed: this Livepage belongs to one person. To use Livepage yourself, clone it from GitHub and run your own.'); }
+}
+
 export async function createUser(db: Db, email: string, name: string, password: string): Promise<User> {
   const user = { id: randomId('u'), email: email.trim().toLowerCase(), name: name.trim() };
-  await db.query('insert into users (id, email, name, password_hash) values ($1,$2,$3,$4)', [
-    user.id, user.email, user.name, await hashPassword(password),
-  ]);
+  // In single-person mode the insert only happens while there is no account yet, so two
+  // sign-ups racing on a fresh server can't both get in.
+  const rows = await db.query(
+    `insert into users (id, email, name, password_hash) select $1,$2,$3,$4
+      where $5::boolean or not exists (select 1 from users) returning id`,
+    [user.id, user.email, user.name, await hashPassword(password), config.signupMode === 'open'],
+  );
+  if (!rows.length) throw new SignupClosedError();
   return user;
 }
 

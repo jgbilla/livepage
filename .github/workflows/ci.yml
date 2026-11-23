@@ -110,6 +110,7 @@ jobs:
           SECURE_COOKIES: '0' # plain http on localhost
           TRUST_PROXY: '0'
           AI_KEY_SECRET: ci-only-not-a-secret
+          SIGNUP_OPEN: '1' # the tests sign up several people (sharing); a real server allows only its first account
         run: |
           mkdir -p logs
           PORT=5174 nohup pnpm --filter @livepage/sandbox start > logs/sandbox.log 2>&1 &  # the job-wide PORT is the app's

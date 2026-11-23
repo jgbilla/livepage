@@ -2,7 +2,7 @@
 // 4x slower CPU, the Lighthouse mobile profile) and prints how long each takes and how much
 // is downloaded. Run it before and after a change to see the difference.
 //
-//   pnpm build && NODE_ENV=production LIVEPAGE_MEMORY_STORE=1 SECURE_COOKIES=0 PORT=5173 pnpm --filter @livepage/server start
+//   pnpm build && NODE_ENV=production LIVEPAGE_MEMORY_STORE=1 SIGNUP_OPEN=1 SECURE_COOKIES=0 PORT=5173 pnpm --filter @livepage/server start
 //   pnpm check:perf            # LIVEPAGE_BASE=http://localhost:5173 by default; RUNS=5
 //
 // Measure a production build (as above), not `pnpm dev`: the dev server ships unbundled modules.

@@ -5,7 +5,7 @@
 // tokens) is unchanged, and email/password accounts keep working side by side.
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import type { Db } from './db.ts';
-import { randomId, type User } from './auth.ts';
+import { randomId, SignupClosedError, type User } from './auth.ts';
 import { config } from './config.ts';
 
 let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -42,6 +42,11 @@ export async function userForNeonIdentity(db: Db, claims: NeonClaims): Promise<U
     return byEmail;
   }
   const user = { id: randomId('u'), email, name: String(claims.name ?? '').trim().slice(0, 80) || email.split('@')[0] };
-  await db.query('insert into users (id, email, name, password_hash, neon_auth_id) values ($1,$2,$3,null,$4)', [user.id, user.email, user.name, sub]);
+  const rows = await db.query(
+    `insert into users (id, email, name, password_hash, neon_auth_id) select $1,$2,$3,null,$4
+      where $5::boolean or not exists (select 1 from users) returning id`,
+    [user.id, user.email, user.name, sub, config.signupMode === 'open'],
+  );
+  if (!rows.length) throw new SignupClosedError(); // single-person mode: someone else got the first account
   return user;
 }
