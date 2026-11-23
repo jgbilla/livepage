@@ -12,6 +12,10 @@ import {
 } from './pages.ts';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
+import {
+  HttpError, createComment, deleteComment, isCommentId, listMentions, markMentionDone, mentionables, setWebhook, threadsWithText,
+  updateComment, waitForMention,
+} from './comments.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
 const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
@@ -108,7 +112,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/tokens') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       if (method === 'GET') {
-        return send(res, 200, { tokens: await db.query('select id, name, created_at, last_used_at from api_tokens where user_id = $1 order by created_at desc', [who.id]) });
+        return send(res, 200, { tokens: await db.query('select id, name, created_at, last_used_at, webhook_url from api_tokens where user_id = $1 order by created_at desc', [who.id]) });
       }
       if (method === 'POST') {
         const b = await readJson(req);
@@ -120,6 +124,30 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (tokenDel && method === 'DELETE') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       await db.query('delete from api_tokens where id = $1 and user_id = $2', [tokenDel[1], who.id]);
+      return send(res, 200, { ok: true });
+    }
+    // Optional webhook, called when someone @mentions this agent in a comment.
+    if (tokenDel && method === 'PATCH') {
+      if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
+      const b = await readJson(req);
+      return send(res, 200, await setWebhook(db, who.id, tokenDel[1], b.webhook_url ?? null));
+    }
+
+    // Mentions inbox: comments that @mention you (people) or this agent token (agents).
+    // ?wait=<seconds> long-polls up to 60s for a new one when there are none.
+    if (path === '/api/mentions' && method === 'GET') {
+      const all = url.searchParams.get('all') === '1';
+      let list = await listMentions(db, who, all);
+      const wait = Math.min(60, Math.max(0, Number(url.searchParams.get('wait')) || 0));
+      if (!list.length && wait && !all) {
+        await waitForMention(who, wait * 1000);
+        list = await listMentions(db, who);
+      }
+      return send(res, 200, { mentions: list });
+    }
+    const mentionDone = path.match(/^\/api\/mentions\/(mn_[\w-]+)\/done$/);
+    if (mentionDone && method === 'POST') {
+      await markMentionDone(db, who, mentionDone[1]);
       return send(res, 200, { ok: true });
     }
 
@@ -150,6 +178,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
 
     return send(res, 404, { error: 'not found' });
   } catch (e) {
+    if (e instanceof HttpError) return send(res, e.status, { error: e.message });
     const msg = (e as Error).message;
     if (msg === 'body too large' || e instanceof SyntaxError) return send(res, 400, { error: msg });
     console.error('[api]', e);
@@ -195,6 +224,32 @@ async function pageRoutes(c: PageCtx): Promise<void> {
     if (method === 'DELETE' && id) {
       await revokeShareLink(db, pageId, id);
       return send(res, 200, { ok: true });
+    }
+  }
+
+  if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId) });
+
+  if (sub === 'comments') {
+    try {
+      if (!id && method === 'GET') {
+        const st = url.searchParams.get('status');
+        const status = st === 'open' || st === 'resolved' ? st : 'all';
+        return send(res, 200, { threads: await threadsWithText(db, hp, who, pageId, status) });
+      }
+      const b = method === 'GET' || method === 'DELETE' ? {} : await readJson(req);
+      if (!id && method === 'POST') {
+        const comment = await createComment(db, hp, who, role, pageId, {
+          body: b.body, tab: b.tab, anchor: b.anchor, quote: b.quote, blockId: b.block_id ?? b.blockId, occurrence: b.occurrence,
+        });
+        return send(res, 201, { comment });
+      }
+      if (id && !isCommentId(id)) return send(res, 404, { error: 'not found' });
+      if (id && method === 'POST') return send(res, 201, { comment: await createComment(db, hp, who, role, pageId, { body: b.body, threadId: id }) });
+      if (id && method === 'PATCH') return send(res, 200, { comment: await updateComment(db, hp, who, role, pageId, id, { body: b.body, resolved: b.resolved }) });
+      if (id && method === 'DELETE') { await deleteComment(db, hp, who, role, pageId, id); return send(res, 200, { ok: true }); }
+    } catch (e) {
+      if (e instanceof HttpError) return send(res, e.status, { error: e.message });
+      throw e;
     }
   }
 

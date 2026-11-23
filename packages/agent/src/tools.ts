@@ -45,7 +45,9 @@ Pick the lightest block that does the job:
   run locally in js. To get input back from people, call livepage.send('action_name', {values}) from js,
   then poll get_block_actions and answer each with resolve_block_action.
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
-Use list_pages to find page ids, and call read_page first to see what is there.`,
+Use list_pages to find page ids, and call read_page first to see what is there.
+People comment on text, blocks or the whole page and can @mention you. Check get_mentions, read the thread
+(list_comments) and the page, then answer with reply_to_comment and make any edit they asked for.`,
     },
   );
 
@@ -118,6 +120,76 @@ Use list_pages to find page ids, and call read_page first to see what is there.`
   server.tool('resolve_block_action', 'Mark a block action as handled, with a short note people see under the block.',
     { page, action_id: z.string(), note: z.string().max(200).optional() },
     async ({ page: p, action_id, note }) => { (await agentFor(p)).resolveAction(action_id, note); return text('ok'); });
+
+  // ---- Comments and @mentions (HTTP API with the same token) ----
+  async function call(path: string, init: { method?: string; body?: unknown } = {}): Promise<any> {
+    const res = await fetch(`${httpBase}/api${path}`, {
+      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
+      headers: { authorization: `Bearer ${opts.token}`, ...(init.body === undefined ? {} : { 'content-type': 'application/json' }) },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    return data;
+  }
+  const safe = (fn: () => Promise<string>) => fn().then(text, (e: Error) => text(`error: ${e.message}`));
+  const plain = (b: string) => b.replace(/@\[([^\]\n]{1,80})\]\((?:user|agent):[\w-]{1,64}\)/g, '@$1');
+  type C = { id: string; author_name: string; author_kind: string; body: string; created_at: string };
+  type T = C & { tab: string; anchor: any; current_text?: string | null; resolved_at: string | null; replies: C[] };
+  const renderThread = (t: T) => {
+    const where = t.anchor?.kind === 'text' ? `on "${t.current_text ?? t.anchor.quote}"${t.current_text == null ? ' (text since deleted)' : ''}`
+      : t.anchor?.kind === 'block' ? `on block ${t.anchor.blockId}` : 'on the page';
+    const lines = [`thread ${t.id} ${where}${t.tab !== 'main' ? ` [tab ${t.tab}]` : ''}${t.resolved_at ? ' (resolved)' : ''}`];
+    for (const c of [t, ...t.replies]) lines.push(`  - ${c.author_name}${c.author_kind === 'agent' ? ' (agent)' : ''}: ${plain(c.body)}`);
+    return lines.join('\n');
+  };
+  const mentionHelp = 'To @mention someone, write @[Name](user:<id>) or @[Name](agent:<id>) with an id from list_comments.';
+
+  server.tool('list_comments',
+    'List comment threads on a page (open ones by default), with what each is anchored to, every reply, and who can be @mentioned.',
+    { page, status: z.enum(['open', 'resolved', 'all']).default('open') },
+    async ({ page: p, status }) => safe(async () => {
+      const [{ threads }, { mentionables }] = await Promise.all([call(`/pages/${p}/comments?status=${status}`), call(`/pages/${p}/mentionables`)]);
+      const people = (mentionables as { kind: string; id: string; name: string }[]).map((m) => `@[${m.name}](${m.kind}:${m.id})`).join('  ');
+      return `${(threads as T[]).map(renderThread).join('\n\n') || `no ${status === 'all' ? '' : `${status} `}comments`}\n\nCan be mentioned: ${people || 'nobody'}`;
+    }));
+
+  server.tool('add_comment',
+    `Start a comment thread. Anchor it to text by quoting it exactly (within one paragraph), to a block with block_id, or leave both out to comment on the whole page. ${mentionHelp}`,
+    { page, body: z.string().min(1).max(8000), quote: z.string().optional(), occurrence: z.number().int().min(1).optional().describe('Which match of quote, if it appears more than once'), block_id: z.string().optional(), tab },
+    async ({ page: p, body, quote, occurrence, block_id, tab: tb }) => safe(async () => {
+      const { comment } = await call(`/pages/${p}/comments`, { body: { body, quote, occurrence, block_id, tab: tb } });
+      return `started thread ${comment.id}`;
+    }));
+
+  server.tool('reply_to_comment',
+    `Reply in a comment thread. Replying also marks your mentions in that thread as handled. ${mentionHelp}`,
+    { page, thread_id: z.string(), body: z.string().min(1).max(8000) },
+    async ({ page: p, thread_id, body }) => safe(async () => {
+      const { comment } = await call(`/pages/${p}/comments/${thread_id}`, { body: { body } });
+      return `replied (${comment.id})`;
+    }));
+
+  server.tool('resolve_comment', 'Resolve a comment thread (or reopen it with resolved: false).',
+    { page, thread_id: z.string(), resolved: z.boolean().default(true) },
+    async ({ page: p, thread_id, resolved }) => safe(async () => {
+      await call(`/pages/${p}/comments/${thread_id}`, { method: 'PATCH', body: { resolved } });
+      return resolved ? 'resolved' : 'reopened';
+    }));
+
+  server.tool('get_mentions',
+    'Comments where someone @mentioned you (this agent) that you have not answered yet, across all pages. Waits up to wait_seconds for a new one. Answer with reply_to_comment (and edit the page if asked); use dismiss_mention if no reply is needed.',
+    { wait_seconds: z.number().min(0).max(60).default(0) },
+    async ({ wait_seconds }) => safe(async () => {
+      const { mentions } = await call(`/mentions?wait=${wait_seconds}`);
+      if (!mentions.length) return 'no new mentions';
+      return (mentions as any[]).map((m) =>
+        `mention ${m.id} on page ${m.page_id} "${m.page_title}", thread ${m.thread_id}${m.quote ? ` (on "${m.quote}")` : ''}\n  ${m.author_name}: ${m.text}\n  ${m.url}`).join('\n\n');
+    }));
+
+  server.tool('dismiss_mention', 'Mark a mention as handled without replying.',
+    { mention_id: z.string() },
+    async ({ mention_id }) => safe(async () => { await call(`/mentions/${mention_id}/done`, { method: 'POST' }); return 'ok'; }));
 
   const close = async () => {
     const live = await Promise.allSettled([...agents.values()]);

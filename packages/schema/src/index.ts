@@ -6,7 +6,7 @@
 //   - XmlFragment per tab     the TipTap block tree of that tab: "default" for the main tab, "tab:<id>" for others
 //                             (paragraphs, headings, lists, tables, htmlBlock and mindMap nodes, all mixed freely)
 //   - Map "htmlCode"          blockId -> Y.Text holding that HTML block's source (so code is co-edited char by char)
-//   - Map "comments"          commentId -> Y.Map (anchor, author, body, resolved)  [see SPEC.md, not wired in the UI yet]
+//   (Comment threads live in Postgres, anchored with Yjs relative positions: see comments.ts)
 //   - Map "meta"              title, icon, etc.
 //   - Map "actions"           actionId -> BlockAction: values a user sent from an HTML block's controls to the agent
 import * as Y from 'yjs';
@@ -413,3 +413,5 @@ export function mindMapAsOutline(doc: Y.Doc, blockId: string): string {
   walk(null, 0);
   return lines.join('\n');
 }
+
+export * from './comments.ts';

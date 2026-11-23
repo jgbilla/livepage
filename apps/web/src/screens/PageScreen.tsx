@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { META, MAIN_TAB } from '@livepage/schema';
+import { META, MAIN_TAB, listTabs, type CommentAnchor } from '@livepage/schema';
+import type { Editor } from '@tiptap/core';
 import { api, colorFor, type Me, type Role } from '../api';
 import { collabUrl } from '../config';
 import { Link } from '../router';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
+import { CommentsPanel } from './CommentsPanel';
+import { CommentStore } from '../editor/comments';
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
@@ -32,6 +35,13 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
+  const canComment = role !== 'viewer';
+  const commentStore = useMemo(() => new CommentStore(), [pageId]);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || window.innerWidth >= 1100);
+  const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
+  const [openComments, setOpenComments] = useState(0);
+  const startComment = useCallback((a: CommentAnchor) => { setPendingComment(a); setCommentsOpen(true); }, []);
 
   const selectTab = useCallback((id: string) => {
     setTab(id);
@@ -47,6 +57,8 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
     const provider = new HocuspocusProvider({ url: collabUrl(), name: pageId, document: doc, token: 'session' });
     return { doc, provider };
   }, [pageId]);
+
+  const tabTitle = useCallback((id: string) => listTabs(doc).find((t) => t.id === id)?.title ?? id, [doc]);
 
   useEffect(() => {
     const onStatus = ({ status }: { status: string }) => setStatus(status);
@@ -74,11 +86,11 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
   useEffect(() => { document.title = `${title || 'Untitled'} · Livepage`; }, [title]);
 
   return (
-    <div className="shell">
+    <div className={`shell ${commentsOpen ? 'with-comments' : ''}`}>
       <header className="topbar">
         <Link to="/" className="brand">Livepage</Link>
         <span className={`status status-${status}`}>{status}</span>
-        {readOnly && <span className="badge">View only</span>}
+        {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
         <div className="peers">
           {peers.map((p, i) => (
             <span key={i} className="peer" style={{ background: p.color }} title={p.name}>
@@ -86,6 +98,9 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
             </span>
           ))}
         </div>
+        <button type="button" className={`comments-toggle ${commentsOpen ? 'on' : ''}`} onClick={() => setCommentsOpen((o) => !o)} aria-pressed={commentsOpen}>
+          💬{openComments ? ` ${openComments}` : ''}<span className="sr-only"> comments</span>
+        </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
       <main className={`page ${readOnly ? 'read-only' : ''}`}>
@@ -98,8 +113,12 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
           onChange={(e) => doc.getMap(META).set('title', e.target.value.slice(0, 200))}
         />
         <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} />
-        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} />
+        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly}
+          comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor} />
       </main>
+      <CommentsPanel pageId={pageId} tab={tab} tabTitle={tabTitle} onSelectTab={selectTab} provider={provider} me={me} role={role}
+        editor={editor} store={commentStore} pending={pendingComment} setPending={setPendingComment}
+        open={commentsOpen} setOpen={setCommentsOpen} onCount={setOpenComments} />
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
     </div>
   );

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -10,9 +11,17 @@ import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { fragmentName } from '@livepage/schema';
 import { HtmlBlock } from './HtmlBlock';
 import { MindMap } from './MindMap';
+import { CommentHighlights, anchorFromSelection, type CommentStore } from './comments';
+import type { CommentAnchor } from '@livepage/schema';
 type User = { id: string; name: string; color: string };
 
-export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean }) {
+type Props = {
+  doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean;
+  /** Comments: highlights come from the store; onComment opens the composer for an anchor. */
+  comments?: CommentStore; canComment?: boolean; onComment?: (anchor: CommentAnchor) => void; onEditor?: (e: Editor | null) => void;
+};
+
+export function PageEditor({ doc, provider, user, tab, readOnly, comments, canComment, onComment, onEditor }: Props) {
   const meRef = useRef(user);
   meRef.current = user;
   const editor = useEditor(
@@ -29,10 +38,49 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
         TableCell,
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
+        CommentHighlights.configure({ store: comments ?? null }),
       ],
     },
     [doc, provider, tab, readOnly],
   );
+
+  useEffect(() => { onEditor?.(editor); return () => onEditor?.(null); }, [editor, onEditor]);
+
+  // A small "Comment" button next to a text selection or a selected block.
+  const [bubble, setBubble] = useState<{ top: number; left: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!editor || !canComment) return;
+    const update = () => {
+      const { selection } = editor.state;
+      const box = wrapRef.current?.getBoundingClientRect();
+      if (selection.empty || !box) return setBubble(null);
+      const end = editor.view.coordsAtPos(selection.to);
+      const start = editor.view.coordsAtPos(selection.from);
+      setBubble({ top: Math.min(start.top, end.top) - box.top - 36, left: Math.max(0, Math.min(end.right - box.left, box.width - 110)) });
+    };
+    const hide = () => setTimeout(() => { if (!wrapRef.current?.contains(document.activeElement)) setBubble(null); }, 150);
+    editor.on('selectionUpdate', update);
+    editor.on('blur', hide);
+    return () => { editor.off('selectionUpdate', update); editor.off('blur', hide); };
+  }, [editor, canComment]);
+
+  const startComment = () => {
+    if (!editor || !onComment) return;
+    onComment(anchorFromSelection(editor) ?? { kind: 'page' });
+    setBubble(null);
+  };
+
+  // Ctrl/Cmd+Alt+M comments on the selection, like Google Docs.
+  useEffect(() => {
+    if (!editor || !canComment) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'm') { e.preventDefault(); startComment(); }
+    };
+    const dom = editor.view.dom;
+    dom.addEventListener('keydown', onKey);
+    return () => dom.removeEventListener('keydown', onKey);
+  });
 
   useEffect(() => {
     editor?.commands.updateUser({ name: user.name, color: user.color, kind: 'human' });
@@ -49,8 +97,18 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Table</button>
         <button type="button" onClick={() => editor.chain().focus().insertMindMap().run()}>Mind map</button>
         <button type="button" onClick={() => editor.chain().focus().insertHtmlBlock().run()}>✦ HTML block</button>
+        {canComment && <button type="button" title="Comment on the selection (Ctrl+Alt+M)" onClick={startComment}>💬 Comment</button>}
       </div>}
-      <EditorContent editor={editor} className="editor" />
+      {readOnly && canComment && <div className="toolbar">
+        <button type="button" title="Select text, then comment on it (Ctrl+Alt+M)" onClick={startComment}>💬 Comment</button>
+      </div>}
+      <div className={`editor-wrap ${canComment ? 'can-comment' : ''}`} ref={wrapRef}>
+        <EditorContent editor={editor} className="editor" />
+        {bubble && (
+          <button type="button" className="comment-bubble" style={{ top: bubble.top, left: bubble.left }}
+            onMouseDown={(e) => e.preventDefault()} onClick={startComment}>💬 Comment</button>
+        )}
+      </div>
     </>
   );
 }
