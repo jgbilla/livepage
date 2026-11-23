@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type Role } from './api';
 import { reloadWorkspace } from './workspace';
 import { navigate } from './router';
+import { Icon } from './design/Icon';
 
 type Props = {
   pageId: string;
@@ -81,45 +82,45 @@ export function PageMenu({ pageId, role, title, isTemplate, publishedSlug, onCha
 
   return (
     <div className="page-menu" ref={ref}>
-      <button type="button" className="ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="More">⋯</button>
+      <button type="button" className="ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="More" aria-label="More"><Icon name="more" /></button>
       {open && (
         <div className="menu" role="menu">
           <div className="narrow-only">
             {onCopyLink && <button type="button" role="menuitem" onClick={() => { onCopyLink(); setTimeout(() => setOpen(false), 600); }}>
-              <span className="check">🔗</span>{copied ? 'Copied' : 'Copy link'}
+              <span className="check"><Icon name="link" /></span>{copied ? 'Copied' : 'Copy link'}
             </button>}
             {onHistory && <button type="button" role="menuitem" onClick={() => { setOpen(false); onHistory(); }}>
-              <span className="check">↺</span>Version history
+              <span className="check"><Icon name="history" /></span>Version history
             </button>}
             <a role="menuitem" href={`/graph?page=${pageId}`} onClick={(e) => { e.preventDefault(); setOpen(false); navigate(`/graph?page=${pageId}`); }}>
-              <span className="check">◉</span>Graph around this page
+              <span className="check"><Icon name="graph" /></span>Graph around this page
             </a>
             <div className="menu-sep" />
           </div>
           {canEdit && (
             <button type="button" role="menuitemcheckbox" aria-checked={isTemplate} onClick={toggleTemplate}>
-              <span className="check">{isTemplate ? '✓' : ''}</span>Use as a template
+              <span className="check">{isTemplate ? <Icon name="check" /> : <Icon name="template" />}</span>Use as a template
               <span className="menu-hint">New pages can start as a copy. Use {'{{date}}'}, {'{{title}}'}, or {'{{Any field}}'} to fill in later.</span>
             </button>
           )}
           {isTemplate && (
             <button type="button" role="menuitemcheckbox" aria-checked={dailyId === pageId} onClick={toggleDaily} disabled={dailyId === undefined}>
-              <span className="check">{dailyId === pageId ? '✓' : ''}</span>Use for my daily pages
-              <span className="menu-hint">The ☀ Today page starts from this template.</span>
+              <span className="check">{dailyId === pageId ? <Icon name="check" /> : <Icon name="today" />}</span>Use for my daily pages
+              <span className="menu-hint">The Today page starts from this template.</span>
             </button>
           )}
           <div className="menu-sep" />
           <button type="button" role="menuitem" onClick={run(async () => { await downloadMarkdown(pageId); setOpen(false); })}>
-            <span className="check">⤓</span>Export as Markdown
+            <span className="check"><Icon name="download" /></span>Export as Markdown
           </button>
           <button type="button" role="menuitem" onClick={() => { setOpen(false); printPage(title); }}>
-            <span className="check">⎙</span>Export as PDF
+            <span className="check"><Icon name="printer" /></span>Export as PDF
             <span className="menu-hint">Opens print; choose “Save as PDF”. Prints the open tab.</span>
           </button>
           {role === 'owner' && <>
             <div className="menu-sep" />
             <button type="button" role="menuitem" onClick={() => { setOpen(false); setPublishing(true); }}>
-              <span className="check">◎</span>{publishedSlug ? 'Published to the web…' : 'Publish to the web…'}
+              <span className="check"><Icon name="globe" /></span>{publishedSlug ? 'Published to the web…' : 'Publish to the web…'}
             </button>
           </>}
           {error && <p className="form-error small">{error}</p>}
@@ -149,7 +150,7 @@ function PublishDialog({ pageId, slug, onClose, onChange }: { pageId: string; sl
       <div className="modal" role="dialog" aria-label="Publish to the web" onClick={(e) => e.stopPropagation()}>
         <div className="home-head">
           <h2>Publish to the web</h2>
-          <button type="button" className="ghost" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="ghost icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
         {url ? <>
           <p>This page is public. Anyone with the link can read it, without an account. It always shows the latest version, and its live HTML blocks keep running.</p>

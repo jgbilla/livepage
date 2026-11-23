@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { AiSettings, type AiSettingsValue } from './AiSettings';
+import { Icon } from '../design/Icon';
 
 type ToolStep = { id: string; name: string; status: 'running' | 'done' | 'error'; note?: string };
 type Turn = { role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string; status?: string };
@@ -171,11 +172,11 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
   return (
     <aside className="assistant" aria-label="AI assistant">
       <div className="assistant-head">
-        <b>✦ Ask AI</b>
+        <h2 className="panel-title"><Icon name="sparkles" />Ask AI</h2>
         <span className="spacer" />
         {ready && builtin && <button type="button" className="ghost" onClick={() => setSetup((v) => !v)}>{setup ? 'Back to chat' : 'Settings'}</button>}
         {turns.length > 0 && !busy && <button type="button" className="ghost" onClick={() => setTurns([])}>Clear</button>}
-        <button type="button" className="ghost" aria-label="Close" onClick={onClose}>✕</button>
+        <button type="button" className="ghost icon-btn" aria-label="Close" onClick={onClose}><Icon name="x" /></button>
       </div>
 
       {agents.length > 0 && (
@@ -184,7 +185,7 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
           <select value={agent ? agent.id : BUILTIN} onChange={(e) => setTarget(e.target.value)} disabled={busy}>
             <option value={BUILTIN}>Built-in assistant (your API key)</option>
             <optgroup label="Your connected agents">
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.online ? '● ' : '○ '}{a.name}{a.online ? ' (online)' : ''}</option>)}
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}{a.online ? ' (online)' : ''}</option>)}
             </optgroup>
           </select>
         </label>
@@ -219,12 +220,12 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
                   <ul className="turn-steps">
                     {t.steps.map((s) => (
                       <li key={s.id} className={`step-${s.status}`} title={s.note}>
-                        {s.status === 'running' ? '◌' : s.status === 'done' ? '✓' : '!'} {LABELS[s.name] ?? s.name}{s.status === 'error' && s.note ? `: ${s.note}` : ''}
+                        <Icon name={s.status === 'running' ? 'loader' : s.status === 'done' ? 'check' : 'alert'} className={s.status === 'running' ? 'spin' : undefined} />{LABELS[s.name] ?? s.name}{s.status === 'error' && s.note ? `: ${s.note}` : ''}
                       </li>
                     ))}
                   </ul>
                 )}
-                {t.status && <div className="turn-status">{t.status}</div>}
+                {t.status && <div className="turn-status"><Icon name="sparkles" />{t.status}</div>}
                 {t.text && <div className="turn-text">{t.text}</div>}
                 {t.role === 'assistant' && !t.text && !t.error && busy && i === turns.length - 1 && !(t.steps?.length) && !t.status && <div className="muted small">Thinking…</div>}
                 {t.error && <div className="form-error small">{t.error}</div>}
@@ -236,7 +237,7 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
             {selection && (
               <div className="sel-chip">
                 <span>Selection: “{selection.length > 60 ? `${selection.slice(0, 60)}…` : selection}”</span>
-                <button type="button" className="ghost" onClick={clearSelection} aria-label="Don't use selection">✕</button>
+                <button type="button" className="ghost icon-btn" onClick={clearSelection} aria-label="Don't use selection"><Icon name="x" /></button>
               </div>
             )}
             <textarea

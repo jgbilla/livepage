@@ -11,6 +11,10 @@ import {
 import { ViewDialog } from './screens/ViewDialog';
 import { shortcutLabel, SwitcherProvider, useOpenSwitcher } from './QuickSwitcher';
 import { ImportDialog } from './screens/ImportDialog';
+import { Icon } from './design/Icon';
+import { ThemeSwitch } from './design/theme';
+import { initials } from './Presence';
+import { colorFor } from './api';
 
 // ---------- layout + open/closed state ----------
 
@@ -68,12 +72,12 @@ export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => voi
   );
 }
 
-/** The ☰ button screens put at the start of their top bar. */
+/** The sidebar button screens put at the start of their top bar. */
 export function SidebarToggle() {
   const { open, toggle } = useContext(SidebarCtx);
   return (
     <button type="button" className="ghost sidebar-toggle" onClick={toggle} aria-label={open ? 'Hide sidebar' : 'Show sidebar'} title={open ? 'Hide sidebar' : 'Show sidebar'}>
-      ☰
+      <Icon name="menu" />
     </button>
   );
 }
@@ -161,20 +165,20 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
     <aside className="sidebar" aria-label="Pages and folders">
       <div className="sb-head">
         <SidebarToggle />
-        <Link to="/" className="brand">Livepage</Link>
+        <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true" />Livepage</Link>
       </div>
       <div className="sb-nav">
         <button type="button" className="sb-search" onClick={openSwitcher} title="Search all pages, or jump to one">
-          <span>⌕ Search</span><kbd>{shortcutLabel}</kbd>
+          <span><Icon name="search" />Search</span><kbd>{shortcutLabel}</kbd>
         </button>
-        <Link to="/graph" className={`sb-graph ${path === '/graph' ? 'active' : ''}`}>◉ Graph</Link>
+        <Link to="/graph" className={`sb-graph ${path === '/graph' ? 'active' : ''}`}><Icon name="graph" />Graph</Link>
       </div>
       <div className="sb-actions">
         <button type="button" className="sb-today" onClick={today} disabled={busy} title="Open today's page (YYYY/MM/DD/daily)">
-          ☀ Today
+          <Icon name="today" />Today
         </button>
-        <button type="button" className="sb-icon" onClick={() => void run(() => newPage(null))} title="New page">＋ Page</button>
-        <button type="button" className="sb-icon" onClick={() => setCreating({ parentId: null })} title="New folder">＋ Folder</button>
+        <button type="button" className="sb-icon" onClick={() => void run(() => newPage(null))} title="New page"><Icon name="plus" />Page</button>
+        <button type="button" className="sb-icon" onClick={() => setCreating({ parentId: null })} title="New folder"><Icon name="folder-plus" />Folder</button>
       </div>
       {error && <p className="form-error small sb-error" onClick={() => setError(null)}>{error}</p>}
 
@@ -201,33 +205,33 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
               <li key={t.id} className={`sb-item ${activePage === t.id ? 'active' : ''}`}>
                 <button type="button" className="sb-link sb-template" title={`New page from "${titleOf(t) || 'Untitled'}"`}
                   onClick={() => void run(() => newPageFromTemplate(t.id))}>
-                  <span className="sb-glyph">＋</span>{titleOf(t) || 'Untitled'}
+                  <span className="sb-glyph"><Icon name="template" /></span>{titleOf(t) || 'Untitled'}
                 </button>
                 <span className="sb-hover">
-                  <Link to={`/p/${t.id}`} className="sb-mini" title="Edit template">✎</Link>
+                  <Link to={`/p/${t.id}`} className="sb-mini" title="Edit template" aria-label="Edit template"><Icon name="pencil" /></Link>
                 </span>
               </li>
             ))}
-            {ws && !templates.length && <li className="muted small sb-pad">Make any page a template from ⋯ on the page.</li>}
+            {ws && !templates.length && <li className="muted small sb-pad">Make any page a template from the ⋯ menu on the page.</li>}
           </ul>
         </div>
 
         <div className="sb-section">
           <div className="sb-label">
-            Views <button type="button" className="sb-mini" onClick={() => setViewDialog('new')} title="New view from tags">＋</button>
+            Views <button type="button" className="sb-mini" onClick={() => setViewDialog('new')} title="New view from tags" aria-label="New view from tags"><Icon name="plus" /></button>
           </div>
           <ul className="sb-list">
             {ws?.views.map((v) => (
               <li key={v.id} className={`sb-item ${path === `/view/${v.id}` ? 'active' : ''}`}>
-                <Link to={`/view/${v.id}`} className="sb-link"><span className="sb-glyph">◫</span>{v.name}</Link>
+                <Link to={`/view/${v.id}`} className="sb-link"><span className="sb-glyph"><Icon name="view" /></span>{v.name}</Link>
                 <span className="sb-hover">
-                  <button type="button" className="sb-mini" title="Edit view" onClick={() => setViewDialog(v)}>✎</button>
+                  <button type="button" className="sb-mini" title="Edit view" aria-label="Edit view" onClick={() => setViewDialog(v)}><Icon name="pencil" /></button>
                   <button type="button" className="sb-mini" title="Delete view"
-                    onClick={() => confirm(`Delete the view "${v.name}"? Pages and tags stay as they are.`) && void run(() => deleteView(v.id))}>✕</button>
+                    onClick={() => confirm(`Delete the view "${v.name}"? Pages and tags stay as they are.`) && void run(() => deleteView(v.id))} aria-label="Delete view"><Icon name="trash" /></button>
                 </span>
               </li>
             ))}
-            {ws && !ws.views.length && <li className="muted small sb-pad">Save a list of pages by tag with ＋.</li>}
+            {ws && !ws.views.length && <li className="muted small sb-pad">Save a list of pages by tag with +.</li>}
           </ul>
         </div>
 
@@ -236,7 +240,7 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <ul className="sb-list">
             {ws?.tags.map((t) => (
               <li key={t.tag} className={`sb-item ${decodeURIComponent(path) === `/tag/${t.tag}` ? 'active' : ''}`}>
-                <Link to={`/tag/${encodeURIComponent(t.tag)}`} className="sb-link"><span className="sb-glyph">#</span>{t.tag}</Link>
+                <Link to={`/tag/${encodeURIComponent(t.tag)}`} className="sb-link"><span className="sb-glyph"><Icon name="hash" /></span>{t.tag}</Link>
                 <span className="muted small sb-count">{t.count}</span>
               </li>
             ))}
@@ -246,10 +250,14 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
       </div>
 
       <div className="sb-foot">
-        <span className="muted small">{me.name}</span>
+        <span className="sb-me" title={me.name}>
+          <span className="avatar" style={{ background: colorFor(me.id) }} aria-hidden="true">{initials(me.name)}</span>
+          <span>{me.name}</span>
+        </span>
         <span className="row">
-          <button type="button" className="ghost" onClick={() => setImporting(true)} title="Import Markdown or an Obsidian vault, or export everything">⇅ Import / export</button>
-          <button type="button" className="ghost" onClick={onLogout}>Log out</button>
+          <ThemeSwitch />
+          <button type="button" className="ghost icon-btn" onClick={() => setImporting(true)} title="Import Markdown or an Obsidian vault, or export everything" aria-label="Import or export"><Icon name="import-export" /></button>
+          <button type="button" className="ghost icon-btn" onClick={onLogout} title="Log out" aria-label="Log out"><Icon name="log-out" /></button>
         </span>
       </div>
       {importing && <ImportDialog onClose={() => setImporting(false)} />}
@@ -278,7 +286,7 @@ function Children({ parentId, depth, ctx }: { parentId: string | null; depth: nu
     <>
       {ctx.creating && ctx.creating.parentId === parentId && (
         <li className="tree-row" style={{ paddingLeft: 8 + depth * 14 }}>
-          <span className="tree-chev">▸</span>
+          <span className="tree-chev"><Icon name="folder" /></span>
           <NameInput initial="" placeholder="Folder name" onDone={(name) => {
             ctx.setCreating(null);
             if (name) void ctx.run(async () => { await newFolder(name, parentId); if (parentId) ctx.expanded.open([parentId]); });
@@ -308,7 +316,8 @@ function FolderNode({ folder, depth, ctx }: { folder: Folder; depth: number; ctx
         onDrop={(e) => { setOver(false); ctx.drop(folder.id)(e); }}
         onClick={() => !renaming && ctx.expanded.toggle(folder.id)}
       >
-        <span className={`tree-chev ${open ? 'open' : ''}`}>▸</span>
+        <span className={`tree-chev ${open ? 'open' : ''}`}><Icon name="chevron-right" /></span>
+        <span className="sb-glyph"><Icon name={open ? 'folder-open' : 'folder'} /></span>
         {renaming ? (
           <NameInput initial={folder.name} onDone={(name) => { setRenaming(false); if (name && name !== folder.name) void ctx.run(() => renameFolder(folder.id, name)); }} />
         ) : (
@@ -316,15 +325,15 @@ function FolderNode({ folder, depth, ctx }: { folder: Folder; depth: number; ctx
         )}
         {!renaming && (
           <span className="sb-hover" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="sb-mini" title="New page here" onClick={() => void ctx.run(() => newPage(folder.id))}>＋</button>
-            <button type="button" className="sb-mini" title="New folder here" onClick={() => { ctx.expanded.open([folder.id]); ctx.setCreating({ parentId: folder.id }); }}>▸＋</button>
-            <button type="button" className="sb-mini" title="Rename" onClick={() => setRenaming(true)}>✎</button>
-            <button type="button" className="sb-mini" title="Delete folder" onClick={() => {
+            <button type="button" className="sb-mini" title="New page here" aria-label="New page here" onClick={() => void ctx.run(() => newPage(folder.id))}><Icon name="plus" /></button>
+            <button type="button" className="sb-mini" title="New folder here" onClick={() => { ctx.expanded.open([folder.id]); ctx.setCreating({ parentId: folder.id }); }} aria-label="New folder here"><Icon name="folder-plus" /></button>
+            <button type="button" className="sb-mini" title="Rename" aria-label="Rename" onClick={() => setRenaming(true)}><Icon name="pencil" /></button>
+            <button type="button" className="sb-mini" title="Delete folder" aria-label="Delete folder" onClick={() => {
               const msg = count
                 ? `Delete "${folder.name}" and the folders inside it? No pages are deleted: pages inside move to the top level.`
                 : `Delete the empty folder "${folder.name}"?`;
               if (confirm(msg)) void ctx.run(() => deleteFolder(folder.id));
-            }}>✕</button>
+            }}><Icon name="trash" /></button>
           </span>
         )}
       </div>
@@ -351,7 +360,7 @@ function PageNode({ page, depth, ctx }: { page: TreePage; depth: number; ctx: Tr
         onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: 'page', id: page.id })); e.dataTransfer.effectAllowed = 'move'; }}
         onDoubleClick={() => canEdit && setRenaming(true)}
       >
-        <span className="tree-chev tree-doc">{page.role === 'owner' ? '' : '⇄'}</span>
+        <span className="tree-chev tree-doc" title={page.role === 'owner' ? undefined : 'Shared with you'}><Icon name={page.role === 'owner' ? 'file' : 'users'} /></span>
         {renaming ? (
           <NameInput initial={titleOf(page)} placeholder="Untitled" onDone={(name) => {
             setRenaming(false);
@@ -362,16 +371,16 @@ function PageNode({ page, depth, ctx }: { page: TreePage; depth: number; ctx: Tr
         )}
         {!renaming && (
           <span className="sb-hover">
-            {canEdit && <button type="button" className="sb-mini" title="Rename" onClick={() => setRenaming(true)}>✎</button>}
+            {canEdit && <button type="button" className="sb-mini" title="Rename" aria-label="Rename" onClick={() => setRenaming(true)}><Icon name="pencil" /></button>}
             {page.role === 'owner' && (
-              <button type="button" className="sb-mini" title="Delete page" onClick={() => {
+              <button type="button" className="sb-mini" title="Delete page" aria-label="Delete page" onClick={() => {
                 if (!confirm(`Delete "${title}" for everyone? This cannot be undone.`)) return;
                 void ctx.run(async () => {
                   await api(`/pages/${page.id}`, { method: 'DELETE' });
                   await reloadWorkspace();
                   if (ctx.activePage === page.id) navigate('/');
                 });
-              }}>✕</button>
+              }}><Icon name="trash" /></button>
             )}
           </span>
         )}

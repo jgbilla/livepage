@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { MAIN_TAB, addTab, listTabs, removeTab, renameTab, tabsMap, type Tab } from '@livepage/schema';
+import { Icon } from './design/Icon';
 
 type Peer = { name: string; color: string; tab?: string };
 
@@ -52,8 +53,9 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced 
                 className="tab-close"
                 title="Delete tab"
                 onClick={() => { if (confirm(`Delete the tab "${t.title}" and everything in it?`)) removeTab(doc, t.id); }}
+                aria-label="Delete tab"
               >
-                ×
+                <Icon name="x" />
               </button>
             )}
           </div>

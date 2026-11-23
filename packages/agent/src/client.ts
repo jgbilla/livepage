@@ -32,7 +32,7 @@ export class LiveAgent {
       token: opts.token ?? process.env.AGENT_TOKEN ?? 'dev-agent-token',
     });
     this.provider.attach();
-    this.provider.setAwarenessField('user', { name: opts.name ?? 'Agent', color: opts.color ?? '#7048e8', kind: 'agent' });
+    this.provider.setAwarenessField('user', { name: opts.name ?? 'Agent', color: opts.color ?? '#6e56cf', kind: 'agent' });
   }
 
   static async connect(opts: AgentOptions): Promise<LiveAgent> {

@@ -6,6 +6,7 @@ import {
   MIND_NODE, addMindNode, mindChildren, mindMapNodes, newId, removeMindNode, setMindNodeText, type MindNode,
 } from '@livepage/schema';
 import { requestBlockComment } from './comments';
+import { Icon } from '../design/Icon';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -76,7 +77,7 @@ function MindMapView({ node, selected, doc, readOnly }: ReactNodeViewProps & { d
       <div className="html-block-bar" contentEditable={false}>
         <span className="html-block-label">{node.attrs.title || 'Mind map'}</span>
         {!readOnly && <span className="mm-hint">Tab adds a child, Enter adds a sibling</span>}
-        <button type="button" className="block-comment-btn" title="Comment on this mind map" onClick={() => requestBlockComment(blockId, node.attrs.title || 'Mind map')}>💬</button>
+        <button type="button" className="block-comment-btn" title="Comment on this mind map" aria-label="Comment on this mind map" onClick={() => requestBlockComment(blockId, node.attrs.title || 'Mind map')}><Icon name="comment" /></button>
       </div>
       <div className="mm-canvas" contentEditable={false}>
         {mindChildren(nodes, null).map((r) => <Branch key={r.id} n={r} isRoot nodes={nodes} doc={doc} blockId={blockId} readOnly={readOnly} />)}
@@ -102,7 +103,7 @@ function Branch({ n, isRoot, nodes, doc, blockId, readOnly }: { n: MindNode; isR
           }}
         />
         {!readOnly && <button type="button" title="Add child (Tab)" onClick={() => addMindNode(doc, blockId, n.id, 'New idea')}>+</button>}
-        {!isRoot && !readOnly && <button type="button" title="Remove" onClick={() => removeMindNode(doc, blockId, n.id)}>×</button>}
+        {!isRoot && !readOnly && <button type="button" title="Remove" aria-label="Remove" onClick={() => removeMindNode(doc, blockId, n.id)}><Icon name="x" /></button>}
       </div>
       {kids.length > 0 && (
         <div className="mm-children">

@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { safeUrl } from '@livepage/schema';
 import { collectFootnotes, footnotePos, removeFootnoteById, setFootnoteAttrs, type FootnoteEntry } from './Footnote';
+import { Icon } from '../design/Icon';
 
 // Everything footnotes need around the editor: the numbered list at the bottom of the tab,
 // the hover preview on each marker, and the small editor that opens when one is inserted.
@@ -192,7 +193,7 @@ export function Footnotes({ editor, readOnly, editRequest }: { editor: Editor; r
               <>
                 <div className="fn-card-body"><FootnoteBody f={current} /></div>
                 <div className="fn-card-actions">
-                  <button type="button" className="link" onClick={() => { setCard(null); flash(document.getElementById(`fn-${current.id}`)); }}>Go to note ↓</button>
+                  <button type="button" className="link" onClick={() => { setCard(null); flash(document.getElementById(`fn-${current.id}`)); }}>Go to note <Icon name="arrow-down" /></button>
                   {!readOnly && <button type="button" className="link" onClick={() => setCard({ id: current.id, mode: 'edit' })}>Edit</button>}
                 </div>
               </>
@@ -207,7 +208,7 @@ export function Footnotes({ editor, readOnly, editRequest }: { editor: Editor; r
             {list.map((f) => (
               <li key={f.id} id={`fn-${f.id}`} value={f.n}>
                 <button type="button" className="fn-back" title="Back to the text" aria-label={`Back to footnote ${f.n} in the text`}
-                  onClick={() => goToMarker(editor, f.id)}>↩</button>
+                  onClick={() => goToMarker(editor, f.id)}><Icon name="corner-up-left" /></button>
                 {editingInList === f.id && !readOnly
                   ? <FootnoteForm editor={editor} f={f} onDone={() => setEditingInList(null)} autoFocus />
                   : (

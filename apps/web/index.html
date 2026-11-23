@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fcfbf9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161514" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Livepage</title>
+    <!-- Apply the saved light/dark choice before first paint (see src/design/theme.tsx). -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

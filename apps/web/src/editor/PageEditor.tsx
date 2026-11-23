@@ -19,6 +19,7 @@ import { TemplateFields } from './TemplateFields';
 import { titleOf, workspaceSnapshot } from '../workspace';
 import { Footnote } from './Footnote';
 import { Footnotes } from './Footnotes';
+import { renderCaret } from './caret';
 type User = { id: string; name: string; color: string };
 
 type Props = {
@@ -38,7 +39,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         StarterKit.configure({ undoRedo: false, codeBlock: false }), // Yjs owns undo history
         CodeBlock,
         Collaboration.configure({ document: doc, field: fragmentName(tab) }), // one block tree per tab
-        CollaborationCaret.configure({ provider, user: { id: user.id, name: user.name, color: user.color, kind: 'human' } }),
+        CollaborationCaret.configure({ provider, user: { id: user.id, name: user.name, color: user.color, kind: 'human' }, render: renderCaret }),
         Placeholder.configure({ placeholder: 'Write, or add a table, a mind map or a live HTML block…' }),
         Table.configure({ resizable: false }),
         TableRow,

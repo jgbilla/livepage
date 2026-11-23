@@ -7,6 +7,8 @@ import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { MENTION_RE, mentionToken, parseMentions, type CommentAnchor, type MentionTarget } from '@livepage/schema';
 import { api, colorFor, type Me, type Role } from '../api';
 import { resolveAnchor, type CommentStore } from '../editor/comments';
+import { Icon } from '../design/Icon';
+import { initials } from '../Presence';
 
 type Comment = {
   id: string; thread_id: string; body: string; author_id: string; author_name: string; author_kind: 'human' | 'agent';
@@ -130,12 +132,12 @@ export function CommentsPanel(p: Props) {
   return (
     <aside className="comments" aria-label="Comments">
       <div className="comments-head">
-        <b>Comments</b>
+        <h2 className="panel-title"><Icon name="comment" />Comments</h2>
         <div className="seg">
           <button type="button" className={filter === 'open' ? 'on' : ''} onClick={() => setFilter('open')}>Open{openCount ? ` ${openCount}` : ''}</button>
           <button type="button" className={filter === 'resolved' ? 'on' : ''} onClick={() => setFilter('resolved')}>Resolved</button>
         </div>
-        <button type="button" className="ghost" aria-label="Close comments" onClick={() => setOpen(false)}>✕</button>
+        <button type="button" className="ghost icon-btn" aria-label="Close comments" onClick={() => setOpen(false)}><Icon name="x" /></button>
       </div>
       {error && <p className="error small">{error}</p>}
       <div className="comments-list" ref={listRef}>
@@ -152,7 +154,7 @@ export function CommentsPanel(p: Props) {
         {shown.length === 0 && !pending && (
           <p className="muted small comments-empty">
             {filter === 'open'
-              ? canComment ? 'No open comments. Select text or a block, then press 💬 Comment. Mention an agent with @ to ask it for help.' : 'No comments yet.'
+              ? canComment ? 'No open comments. Select text or a block, then press Comment. Mention an agent with @ to ask it for help.' : 'No comments yet.'
               : 'No resolved comments.'}
           </p>
         )}
@@ -194,10 +196,12 @@ function ThreadCard({ thread, me, role, people, active, missing, otherTab, onFoc
       {otherTab && <div className="muted small">In tab “{otherTab}”</div>}
       <AnchorLabel anchor={thread.anchor} missing={missing} />
       {[thread, ...thread.replies].map((c) => (
-        <div key={c.id} className="comment">
+        <div key={c.id} className={`comment ${c.author_kind === 'agent' ? 'comment-agent' : ''}`}>
           <div className="comment-meta">
-            <span className="avatar" style={{ background: colorFor(c.author_id + c.author_kind) }}>{c.author_kind === 'agent' ? '✦' : c.author_name.slice(0, 1).toUpperCase()}</span>
-            <b>{c.author_name}</b>{c.author_kind === 'agent' && <span className="badge">agent</span>}
+            {c.author_kind === 'agent'
+              ? <span className="avatar avatar-agent" aria-hidden="true"><Icon name="sparkles" size={12} /></span>
+              : <span className="avatar" style={{ background: colorFor(c.author_id + c.author_kind) }} aria-hidden="true">{initials(c.author_name)}</span>}
+            <b>{c.author_name}</b>{c.author_kind === 'agent' && <span className="agent-tag">Agent</span>}
             <span className="muted small" title={new Date(c.created_at).toLocaleString()}>{timeAgo(c.created_at)}{c.edited_at ? ' · edited' : ''}</span>
             <span className="spacer" />
             {mine(c) && editing !== c.id && <button type="button" className="ghost small" onClick={() => setEditing(c.id)}>Edit</button>}
@@ -224,7 +228,7 @@ function ThreadCard({ thread, me, role, people, active, missing, otherTab, onFoc
               <button type="button" onClick={() => setReplying(true)}>Reply</button>
               {thread.resolved_at
                 ? <button type="button" onClick={() => resolve(false)}>Reopen</button>
-                : <button type="button" onClick={() => resolve(true)}>✓ Resolve</button>}
+                : <button type="button" onClick={() => resolve(true)}><Icon name="check" />Resolve</button>}
             </>
           )}
         </div>
@@ -319,7 +323,7 @@ function Composer({ people, initial = '', placeholder, submitLabel, autoFocus, o
           {matches.map((m, i) => (
             <li key={`${m.kind}:${m.id}`} role="option" aria-selected={i === pick} className={i === pick ? 'on' : ''}
               onMouseDown={(e) => { e.preventDefault(); choose(m); }}>
-              <span>{m.kind === 'agent' ? '✦ ' : ''}{m.name}</span><span className="muted small">{m.detail}</span>
+              <span>{m.kind === 'agent' && <Icon name="sparkles" style={{ color: 'var(--lp-agent)' }} />}{m.name}</span><span className="muted small">{m.detail}</span>
             </li>
           ))}
         </ul>

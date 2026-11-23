@@ -1,0 +1,252 @@
+/* =====================================================================================
+   Livepage design tokens. The single source of truth for color, type, space, shape,
+   depth and motion. Read DESIGN.md for the why; this file is the what.
+
+   Rules of use
+   - Components use semantic tokens (--lp-text, --lp-surface, --lp-agent…), never raw hex.
+   - The same tokens are injected into sandboxed HTML blocks, so agent-made UI matches the page.
+   - Light is the default. Dark follows the OS, unless <html data-theme="light|dark"> overrides it.
+   ===================================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- Type ---------- */
+  --lp-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --lp-font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Bitstream Charter", "Source Serif Pro", Georgia, serif;
+  --lp-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* A 1.2 modular scale anchored on 16px prose and 14px interface text. */
+  --lp-text-2xs: 11px;   /* labels in caps, kbd */
+  --lp-text-xs: 12px;    /* meta, timestamps, badges */
+  --lp-text-sm: 13px;    /* secondary UI, hints */
+  --lp-text-md: 14px;    /* default UI: buttons, menus, sidebar */
+  --lp-text-base: 16px;  /* prose */
+  --lp-text-lg: 18px;    /* dialog titles, h3 */
+  --lp-text-xl: 22px;    /* h2, section titles */
+  --lp-text-2xl: 28px;   /* h1 inside a page, screen titles */
+  --lp-text-3xl: 40px;   /* the page title */
+
+  --lp-leading-tight: 1.2;
+  --lp-leading-snug: 1.4;
+  --lp-leading-ui: 1.5;
+  --lp-leading-prose: 1.7;
+
+  --lp-weight-regular: 400;
+  --lp-weight-medium: 500;
+  --lp-weight-semibold: 600;
+  --lp-weight-bold: 700;
+
+  --lp-tracking-tight: -0.018em;  /* big headings */
+  --lp-tracking-caps: 0.06em;     /* small caps labels */
+
+  --lp-measure: 720px;            /* the reading column */
+
+  /* ---------- Space (4px grid) ---------- */
+  --lp-space-0-5: 2px;
+  --lp-space-1: 4px;
+  --lp-space-1-5: 6px;
+  --lp-space-2: 8px;
+  --lp-space-2-5: 10px;
+  --lp-space-3: 12px;
+  --lp-space-4: 16px;
+  --lp-space-5: 20px;
+  --lp-space-6: 24px;
+  --lp-space-8: 32px;
+  --lp-space-10: 40px;
+  --lp-space-12: 48px;
+  --lp-space-16: 64px;
+
+  /* ---------- Shape ---------- */
+  --lp-radius-xs: 4px;    /* inline marks, kbd */
+  --lp-radius-sm: 6px;    /* small controls, menu items */
+  --lp-radius-md: 8px;    /* buttons, inputs */
+  --lp-radius-lg: 12px;   /* cards, blocks, popovers */
+  --lp-radius-xl: 16px;   /* dialogs, sheets */
+  --lp-radius-full: 999px;/* people, pills */
+  --lp-radius-agent: 30%; /* agents are squircles, never circles */
+
+  --lp-control-sm: 28px;
+  --lp-control-md: 32px;
+  --lp-control-lg: 40px;
+  --lp-border-width: 1px;
+
+  /* ---------- Motion ---------- */
+  --lp-duration-instant: 80ms;
+  --lp-duration-fast: 140ms;
+  --lp-duration-base: 200ms;
+  --lp-duration-slow: 320ms;
+  --lp-ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --lp-ease-out: cubic-bezier(.16, 1, .3, 1);       /* things arriving */
+  --lp-ease-in: cubic-bezier(.4, 0, 1, 1);          /* things leaving */
+
+  /* ---------- Layers ---------- */
+  --lp-z-sticky: 10;
+  --lp-z-panel: 20;
+  --lp-z-drawer: 30;
+  --lp-z-popover: 40;
+  --lp-z-modal: 50;
+  --lp-z-toast: 60;
+
+  /* ---------- Color: light ---------- */
+  /* Paper neutrals: slightly warm, so long writing sessions feel like paper, not a spreadsheet. */
+  --lp-bg: #fcfbf9;              /* the canvas */
+  --lp-bg-subtle: #f6f5f2;       /* sidebar, secondary areas */
+  --lp-surface: #ffffff;         /* cards, blocks, inputs */
+  --lp-surface-overlay: #ffffff; /* menus, dialogs, popovers */
+  --lp-surface-sunken: #f2f0ec;  /* code, wells */
+  --lp-hover: rgb(55 45 25 / .055);
+  --lp-active: rgb(55 45 25 / .09);
+  --lp-border: #e7e4de;
+  --lp-border-strong: #d4d0c8;
+
+  --lp-text: #1f1d1a;
+  --lp-text-secondary: #5f5a52;
+  --lp-text-tertiary: #8a857c;
+  --lp-text-placeholder: #aaa59c;
+  --lp-text-inverse: #fcfbf9;
+
+  /* Ink: the primary action is the color of the text itself. */
+  --lp-ink: #1f1d1a;
+  --lp-ink-hover: #3a3732;
+  --lp-on-ink: #fcfbf9;
+
+  /* Accent: links, focus, selection, the active thing. One blue, used sparingly. */
+  --lp-accent: #2f5bd3;
+  --lp-accent-hover: #2449b5;
+  --lp-accent-text: #2a52c2;
+  --lp-accent-soft: rgb(47 91 211 / .10);
+  --lp-accent-soft-strong: rgb(47 91 211 / .18);
+  --lp-on-accent: #ffffff;
+  --lp-focus-ring: 0 0 0 2px var(--lp-bg), 0 0 0 4px rgb(47 91 211 / .55);
+  --lp-selection: rgb(47 91 211 / .18);
+
+  /* Agent: anything an AI did, is doing, or is. Violet, and only agents are violet. */
+  --lp-agent: #6e56cf;
+  --lp-agent-strong: #5b43bd;
+  --lp-agent-text: #5b43bd;
+  --lp-agent-soft: rgb(110 86 207 / .10);
+  --lp-agent-soft-strong: rgb(110 86 207 / .18);
+  --lp-agent-gradient: linear-gradient(135deg, #8b6cf6 0%, #6e56cf 55%, #5741b8 100%);
+  --lp-on-agent: #ffffff;
+
+  /* Comments: a highlighter, so amber. */
+  --lp-comment: #e9a700;
+  --lp-comment-soft: rgb(255 196 0 / .26);
+  --lp-comment-strong: rgb(255 196 0 / .52);
+
+  /* Status */
+  --lp-success: #2b8a4a;
+  --lp-success-soft: rgb(43 138 74 / .11);
+  --lp-warning: #b86e00;
+  --lp-warning-soft: rgb(240 140 0 / .13);
+  --lp-danger: #c8323a;
+  --lp-danger-soft: rgb(200 50 58 / .10);
+  --lp-info: #1c7ed6;
+
+  /* Diff (version history) */
+  --lp-diff-add: rgb(43 138 74 / .12);
+  --lp-diff-add-strong: rgb(43 138 74 / .28);
+  --lp-diff-del: rgb(200 50 58 / .10);
+  --lp-diff-del-strong: rgb(200 50 58 / .24);
+
+  /* People: seven hues that hold white initials at AA and stay clear of agent violet. */
+  --lp-person-1: #d4520f;
+  --lp-person-2: #1b6ec2;
+  --lp-person-3: #2b8a3e;
+  --lp-person-4: #0b7d8f;
+  --lp-person-5: #c2255c;
+  --lp-person-6: #b5650a;
+  --lp-person-7: #4f7a12;
+
+  /* Data viz / tags: categorical, never the accent or agent hue. */
+  --lp-cat-1: #1b6ec2; --lp-cat-2: #2b8a3e; --lp-cat-3: #c2255c; --lp-cat-4: #b5650a;
+  --lp-cat-5: #0b7d8f; --lp-cat-6: #d4520f; --lp-cat-7: #4f7a12; --lp-cat-8: #8a6d3b;
+
+  /* Elevation: depth comes from a hairline plus a soft shadow, warm-tinted in light mode. */
+  --lp-shadow-1: 0 1px 2px rgb(40 30 10 / .06);
+  --lp-shadow-2: 0 1px 2px rgb(40 30 10 / .05), 0 6px 16px -4px rgb(40 30 10 / .12);
+  --lp-shadow-3: 0 2px 6px rgb(40 30 10 / .06), 0 18px 48px -12px rgb(40 30 10 / .25);
+  --lp-scrim: rgb(25 20 12 / .32);
+
+  /* Code */
+  --lp-code-bg: #f4f2ee; --lp-code-fg: #24292f; --lp-code-bar: #ece9e3;
+  --lp-inline-code-bg: rgb(55 45 25 / .07); --lp-inline-code-fg: #b0400e;
+  --lp-hl-keyword: #cf222e; --lp-hl-string: #0a3069; --lp-hl-number: #0550ae; --lp-hl-comment: #6e7781;
+  --lp-hl-title: #8250df; --lp-hl-attr: #953800; --lp-hl-tag: #116329; --lp-hl-meta: #6639ba;
+}
+
+/* ---------- Color: dark (OS preference, unless forced light) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --lp-bg: #161514; --lp-bg-subtle: #1b1a18; --lp-surface: #201f1d; --lp-surface-overlay: #252321; --lp-surface-sunken: #121110;
+    --lp-hover: rgb(255 250 240 / .06); --lp-active: rgb(255 250 240 / .10);
+    --lp-border: #302e2b; --lp-border-strong: #45423d;
+    --lp-text: #ecebe7; --lp-text-secondary: #b0aba2; --lp-text-tertiary: #8a857d; --lp-text-placeholder: #67635d; --lp-text-inverse: #161514;
+    --lp-ink: #ecebe7; --lp-ink-hover: #ffffff; --lp-on-ink: #161514;
+    --lp-accent: #7b9cff; --lp-accent-hover: #9bb4ff; --lp-accent-text: #92aeff;
+    --lp-accent-soft: rgb(123 156 255 / .14); --lp-accent-soft-strong: rgb(123 156 255 / .24); --lp-on-accent: #0d1530;
+    --lp-focus-ring: 0 0 0 2px var(--lp-bg), 0 0 0 4px rgb(123 156 255 / .6); --lp-selection: rgb(123 156 255 / .26);
+    --lp-agent: #9d87ff; --lp-agent-strong: #b3a1ff; --lp-agent-text: #b6a6ff;
+    --lp-agent-soft: rgb(157 135 255 / .14); --lp-agent-soft-strong: rgb(157 135 255 / .24);
+    --lp-agent-gradient: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+    --lp-comment: #f0b730; --lp-comment-soft: rgb(240 183 48 / .22); --lp-comment-strong: rgb(240 183 48 / .42);
+    --lp-success: #4cc173; --lp-success-soft: rgb(76 193 115 / .14); --lp-warning: #f0a33a; --lp-warning-soft: rgb(240 163 58 / .15);
+    --lp-danger: #ff6b6f; --lp-danger-soft: rgb(255 107 111 / .14); --lp-info: #5aa9ff;
+    --lp-diff-add: rgb(76 193 115 / .13); --lp-diff-add-strong: rgb(76 193 115 / .30);
+    --lp-diff-del: rgb(255 107 111 / .12); --lp-diff-del-strong: rgb(255 107 111 / .28);
+    --lp-shadow-1: 0 1px 2px rgb(0 0 0 / .4);
+    --lp-shadow-2: 0 0 0 1px rgb(255 255 255 / .04), 0 8px 20px -4px rgb(0 0 0 / .5);
+    --lp-shadow-3: 0 0 0 1px rgb(255 255 255 / .05), 0 24px 56px -12px rgb(0 0 0 / .7);
+    --lp-scrim: rgb(0 0 0 / .55);
+    --lp-code-bg: #1d1c1a; --lp-code-fg: #e6e4df; --lp-code-bar: #252320;
+    --lp-inline-code-bg: rgb(255 250 240 / .08); --lp-inline-code-fg: #ffa36b;
+    --lp-hl-keyword: #ff7b72; --lp-hl-string: #a5d6ff; --lp-hl-number: #79c0ff; --lp-hl-comment: #8b949e;
+    --lp-hl-title: #d2a8ff; --lp-hl-attr: #ffa657; --lp-hl-tag: #7ee787; --lp-hl-meta: #d2a8ff;
+  }
+}
+/* ---------- Color: dark (forced) — keep in sync with the block above ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --lp-bg: #161514; --lp-bg-subtle: #1b1a18; --lp-surface: #201f1d; --lp-surface-overlay: #252321; --lp-surface-sunken: #121110;
+  --lp-hover: rgb(255 250 240 / .06); --lp-active: rgb(255 250 240 / .10);
+  --lp-border: #302e2b; --lp-border-strong: #45423d;
+  --lp-text: #ecebe7; --lp-text-secondary: #b0aba2; --lp-text-tertiary: #8a857d; --lp-text-placeholder: #67635d; --lp-text-inverse: #161514;
+  --lp-ink: #ecebe7; --lp-ink-hover: #ffffff; --lp-on-ink: #161514;
+  --lp-accent: #7b9cff; --lp-accent-hover: #9bb4ff; --lp-accent-text: #92aeff;
+  --lp-accent-soft: rgb(123 156 255 / .14); --lp-accent-soft-strong: rgb(123 156 255 / .24); --lp-on-accent: #0d1530;
+  --lp-focus-ring: 0 0 0 2px var(--lp-bg), 0 0 0 4px rgb(123 156 255 / .6); --lp-selection: rgb(123 156 255 / .26);
+  --lp-agent: #9d87ff; --lp-agent-strong: #b3a1ff; --lp-agent-text: #b6a6ff;
+  --lp-agent-soft: rgb(157 135 255 / .14); --lp-agent-soft-strong: rgb(157 135 255 / .24);
+  --lp-agent-gradient: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+  --lp-comment: #f0b730; --lp-comment-soft: rgb(240 183 48 / .22); --lp-comment-strong: rgb(240 183 48 / .42);
+  --lp-success: #4cc173; --lp-success-soft: rgb(76 193 115 / .14); --lp-warning: #f0a33a; --lp-warning-soft: rgb(240 163 58 / .15);
+  --lp-danger: #ff6b6f; --lp-danger-soft: rgb(255 107 111 / .14); --lp-info: #5aa9ff;
+  --lp-diff-add: rgb(76 193 115 / .13); --lp-diff-add-strong: rgb(76 193 115 / .30);
+  --lp-diff-del: rgb(255 107 111 / .12); --lp-diff-del-strong: rgb(255 107 111 / .28);
+  --lp-shadow-1: 0 1px 2px rgb(0 0 0 / .4);
+  --lp-shadow-2: 0 0 0 1px rgb(255 255 255 / .04), 0 8px 20px -4px rgb(0 0 0 / .5);
+  --lp-shadow-3: 0 0 0 1px rgb(255 255 255 / .05), 0 24px 56px -12px rgb(0 0 0 / .7);
+  --lp-scrim: rgb(0 0 0 / .55);
+  --lp-code-bg: #1d1c1a; --lp-code-fg: #e6e4df; --lp-code-bar: #252320;
+  --lp-inline-code-bg: rgb(255 250 240 / .08); --lp-inline-code-fg: #ffa36b;
+  --lp-hl-keyword: #ff7b72; --lp-hl-string: #a5d6ff; --lp-hl-number: #79c0ff; --lp-hl-comment: #8b949e;
+  --lp-hl-title: #d2a8ff; --lp-hl-attr: #ffa657; --lp-hl-tag: #7ee787; --lp-hl-meta: #d2a8ff;
+}
+
+/* ---------- Legacy aliases ----------
+   Older rules (and work in flight on other branches) use these short names.
+   They map onto the system, so they theme correctly; new code should use --lp-*. */
+:root, :root[data-theme] {
+  --bg: var(--lp-bg); --fg: var(--lp-text); --muted: var(--lp-text-secondary); --line: var(--lp-border);
+  --accent: var(--lp-accent); --card: var(--lp-surface);
+  --code-bg: var(--lp-code-bg); --code-fg: var(--lp-code-fg); --code-bar: var(--lp-code-bar);
+  --inline-code-bg: var(--lp-inline-code-bg); --inline-code-fg: var(--lp-inline-code-fg);
+  --hl-keyword: var(--lp-hl-keyword); --hl-string: var(--lp-hl-string); --hl-number: var(--lp-hl-number); --hl-comment: var(--lp-hl-comment);
+  --hl-title: var(--lp-hl-title); --hl-attr: var(--lp-hl-attr); --hl-tag: var(--lp-hl-tag); --hl-meta: var(--lp-hl-meta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --lp-duration-instant: 0ms; --lp-duration-fast: 0ms; --lp-duration-base: 0ms; --lp-duration-slow: 0ms; }
+}

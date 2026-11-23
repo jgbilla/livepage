@@ -49,7 +49,7 @@ How to work:
 - Pick the lightest block that does the job: write_paragraph and add_heading for writing; insert_table for tabular data (never HTML tables); insert_mind_map for ideas and structure; insert_custom_ui only when it needs motion, drawing or interaction.
 - To change existing writing, use replace_text with the exact current text. Keep the person's voice; don't rewrite more than asked.
 - New blocks go at the end unless you pass after_text to place them after a specific passage.
-- For custom UI: give css, html and js separately, keep it self-contained (CDN scripts are fine, network requests are blocked), and size it with initial_height.
+- For custom UI: give css, html and js separately, keep it self-contained (CDN scripts are fine, network requests are blocked), and size it with initial_height. Style it with the Livepage design tokens so it matches the page in light and dark: var(--lp-text), var(--lp-text-secondary), var(--lp-surface), var(--lp-border), var(--lp-accent), var(--lp-radius-lg), var(--lp-space-4), var(--lp-font-sans), var(--lp-shadow-2), and var(--lp-cat-1) to var(--lp-cat-8) for chart series; the block background is transparent over the page.
 - The page content below is a snapshot from when the person asked. Others (people or agents) may be editing too; call read_page if you need a fresh look.
 - Write in the language of the page unless asked otherwise. Use plain text in paragraphs (no markdown syntax: headings, bullets and tables have their own tools).`;
 
@@ -68,7 +68,7 @@ export async function runAssistant(input: RunInput): Promise<void> {
   let agent: LiveAgent | null = null;
   let tools: PageTools | null = null;
   try {
-    agent = await LiveAgent.connect({ page: pageId, url: `ws://127.0.0.1:${config.port}/collab`, token, name, color: '#7048e8' });
+    agent = await LiveAgent.connect({ page: pageId, url: `ws://127.0.0.1:${config.port}/collab`, token, name, color: '#6e56cf' });
     const tab = resolveTab(agent.doc, input.tab);
     agent.useTab(tab);
     tools = new PageTools(agent, tab);

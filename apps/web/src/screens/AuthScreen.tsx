@@ -27,7 +27,7 @@ export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
-        <h1 className="brand-lg">Livepage</h1>
+        <h1 className="brand-lg"><span className="brand-mark" aria-hidden="true" />Livepage</h1>
         <p className="muted">
           {location.pathname.startsWith('/s/') ? 'Someone shared a page with you. ' : ''}
           {mode === 'login' ? 'Log in to your pages.' : 'Create your account.'}
