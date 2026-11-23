@@ -10,6 +10,7 @@ import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { fragmentName } from '@livepage/schema';
 import { HtmlBlock } from './HtmlBlock';
 import { MindMap } from './MindMap';
+import { CodeBlock } from './CodeBlock';
 type User = { id: string; name: string; color: string };
 
 export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean }) {
@@ -19,7 +20,8 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
     {
       editable: !readOnly,
       extensions: [
-        StarterKit.configure({ undoRedo: false }), // Yjs owns undo history
+        StarterKit.configure({ undoRedo: false, codeBlock: false }), // Yjs owns undo history
+        CodeBlock,
         Collaboration.configure({ document: doc, field: fragmentName(tab) }), // one block tree per tab
         CollaborationCaret.configure({ provider, user: { name: user.name, color: user.color, kind: 'human' } }),
         Placeholder.configure({ placeholder: 'Write, or add a table, a mind map or a live HTML block…' }),
@@ -46,6 +48,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
         <button type="button" onClick={() => editor.chain().focus().toggleBold().run()}><b>B</b></button>
         <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()}><i>I</i></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}>• List</button>
+        <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>Code</button>
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Table</button>
         <button type="button" onClick={() => editor.chain().focus().insertMindMap().run()}>Mind map</button>
         <button type="button" onClick={() => editor.chain().focus().insertHtmlBlock().run()}>✦ HTML block</button>

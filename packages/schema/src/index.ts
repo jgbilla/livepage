@@ -97,7 +97,8 @@ export function htmlCodeText(doc: Y.Doc, blockId: string): Y.Text {
 }
 
 function textOf(el: Y.XmlElement | Y.XmlText): string {
-  if (el instanceof Y.XmlText) return el.toString().replace(/<[^>]+>/g, '');
+  // Plain text from the delta: toString() wraps marks in tags, and stripping those also ate literal "<...>" text.
+  if (el instanceof Y.XmlText) return el.toDelta().map((d: { insert?: unknown }) => (typeof d.insert === 'string' ? d.insert : '')).join('');
   return el.toArray().map((c) => textOf(c as Y.XmlElement | Y.XmlText)).join('');
 }
 
