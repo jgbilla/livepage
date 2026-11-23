@@ -86,7 +86,7 @@ export function CommentsPanel(p: Props) {
       if (r) {
         // The page scrolls the window, or its own half of a split view.
         const y = editor.view.coordsAtPos(r.from).top - 140;
-        const box = editor.view.dom.closest('.wt-split .wt-body');
+        const box = editor.view.dom.closest('.wt-inner .wt-body');
         if (box) box.scrollTo({ top: box.scrollTop + y - box.getBoundingClientRect().top, behavior: 'smooth' });
         else window.scrollTo({ top: y + window.scrollY, behavior: 'smooth' });
       }

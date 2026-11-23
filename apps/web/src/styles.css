@@ -935,7 +935,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 .wt { --wt-strip-h: 38px; --wt-bar-h: 40px; --wt-chrome: var(--wt-strip-h); --wt-sticky: var(--wt-strip-h); }
 .wt.wt-narrow { --wt-chrome: 0px; --wt-sticky: 0px; }
 .wt.wt-narrow.wt-has-bar { --wt-chrome: var(--wt-bar-h); --wt-sticky: var(--wt-bar-h); }
-.wt.wt-split { --wt-sticky: 0px; }
+.wt.wt-inner { --wt-sticky: 0px; }
 .wt [hidden] { display: none !important; }
 .wt-pane { position: relative; min-width: 0; container: main / inline-size; }
 .wt .topbar { top: var(--wt-sticky); }
@@ -978,14 +978,17 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   background: var(--lp-accent-soft); color: var(--lp-accent-text); font-size: var(--lp-text-md); font-weight: var(--lp-weight-semibold);
   animation: lp-fade var(--lp-duration-fast) var(--lp-ease-out); }
 
-/* Split view: two groups side by side, each scrolls on its own. */
-.wt-split { display: flex; height: 100vh; }
-.wt-split .wt-pane { display: flex; flex-direction: column; height: 100vh; }
+/* Wider screens: a fixed app shell. The window never scrolls or rubber-bands; each pane's body
+   scrolls on its own under its tab strip, and side panels sit inside the pane. Split view puts two
+   panes side by side. */
+html, body { overscroll-behavior: none; }
+.wt-inner { display: flex; height: 100vh; }
+.wt-inner .wt-pane { display: flex; flex-direction: column; flex: 1 1 0; height: 100vh; overflow: clip; } /* clip: a panel sliding in must not widen the window */
 .wt-split .wt-pane:nth-of-type(1) { flex: 0 0 calc(var(--wt-ratio, .5) * 100%); }
 .wt-split .wt-pane:nth-of-type(2) { flex: 1 1 0; order: 2; border-left: var(--lp-border-width) solid var(--lp-border); }
-.wt-split .wt-strip-wrap { position: relative; flex: none; }
-.wt-split .wt-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.wt-split .comments, .wt-split .assistant { position: absolute; }
+.wt-inner .wt-strip-wrap { position: relative; flex: none; }
+.wt-inner .wt-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.wt-inner .comments, .wt-inner .assistant { position: absolute; }
 .wt-divider { order: 1; flex: none; width: 7px; margin: 0 -4px 0 -3px; z-index: calc(var(--lp-z-sticky) + 2); cursor: col-resize;
   transition: background var(--lp-duration-fast); }
 .wt-divider:hover, .wt-resizing .wt-divider { background: var(--lp-accent-soft); }
@@ -1060,3 +1063,6 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .pwa-card .primary { flex: none; }
 .pwa-card-close { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0 !important; color: var(--lp-text-tertiary); }
 @media print { .pwa-card { display: none !important; } }
+
+/* Scrolling inside a panel, list or menu stops at its end instead of carrying on into the page behind it. */
+.modal, .menu, .vh-list, .vh-main, .assistant .pad, .assistant-log, .sb-scroll, .switcher-list, .comments-list, .wt-sheet-list { overscroll-behavior: contain; }

@@ -14,6 +14,7 @@
 //   - the page title is cut off (its text is wider than the title field), or
 //   - the top bar wraps onto a second row, or
 //   - the same person shows twice in the presence avatars (they have the page open in two tabs), or
+//   - on wider screens the window itself scrolls (only the open tab's body should), or the app can rubber-band, or
 //   - a side panel (comments, Ask AI) overlaps the top bar instead of sitting under it or covering it
 //     completely. Panel screens are checked after scrolling the page down, where this used to show.
 import { chromium } from 'playwright';
@@ -263,6 +264,11 @@ function measure() {
     if (last && last.right < rr.right - padR - 24) problems.push(`${name} scrolls ${Math.round(rr.right - padR - last.right)}px past its last tab into empty space`);
     row.scrollLeft = was;
   }
+  // A fixed app shell on wider screens: the window never scrolls, so the tab strip and top bar can't
+  // slide away or rubber-band and leave an empty band above them. Nowhere does the whole app bounce.
+  const root = document.scrollingElement ?? document.documentElement;
+  if (document.querySelector('.wt-inner') && root.scrollHeight > root.clientHeight) problems.push(`the whole window scrolls ${root.scrollHeight - root.clientHeight}px (only the page under the tab strip should)`);
+  if (document.querySelector('.wt') && getComputedStyle(document.documentElement).overscrollBehaviorY !== 'none') problems.push(`the whole app can rubber-band (html overscroll-behavior-y: ${getComputedStyle(document.documentElement).overscrollBehaviorY})`);
   // Open workspace tabs: one row.
   for (const strip of document.querySelectorAll('.wt-strip')) {
     const h = strip.getBoundingClientRect().height;
@@ -292,7 +298,11 @@ for (const vp of VIEWPORTS) {
       await screen.go(page, state, vp);
       await page.waitForSelector(screen.ready, { timeout: 15000 });
       await page.waitForTimeout(screen.name === 'graph' ? 1500 : 700);
-      if (screen.scroll) { await page.evaluate(() => window.scrollBy(0, 700)); await page.waitForTimeout(200); }
+      if (screen.scroll) {
+        // Wider screens scroll the open tab's body; phones scroll the window.
+        await page.evaluate(() => (document.querySelector('.wt-inner .wt-focused .wt-body') ?? window).scrollBy(0, 700));
+        await page.waitForTimeout(200);
+      }
       const problems = await page.evaluate(measure);
       for (const p of problems) failures.push(`${vp.name} ${screen.name}: ${p}`);
       if (!NO_SHOTS) await page.screenshot({ path: join(OUT, `${screen.name}-${vp.name}.png`) });
