@@ -1,0 +1,47 @@
+# One-command self-hosting:  docker compose up --build
+# Web app:   http://localhost:5173
+# Sandbox:   http://localhost:5174   (separate origin for HTML blocks, keep it that way)
+# Collab:    ws://localhost:1234
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: livepage
+      POSTGRES_PASSWORD: livepage
+      POSTGRES_DB: livepage
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U livepage"]
+      interval: 2s
+      retries: 20
+
+  server:
+    build: .
+    command: pnpm --filter @livepage/server start
+    environment:
+      DATABASE_URL: postgres://livepage:livepage@db:5432/livepage
+      SERVER_PORT: "1234"
+      AGENT_TOKEN: ${AGENT_TOKEN:-dev-agent-token}
+    ports: ["1234:1234"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build:
+      context: .
+      args:
+        VITE_COLLAB_URL: ${VITE_COLLAB_URL:-ws://localhost:1234}
+        VITE_SANDBOX_URL: ${VITE_SANDBOX_URL:-http://localhost:5174}
+    command: pnpm --filter @livepage/web preview --host 0.0.0.0 --port 5173
+    ports: ["5173:5173"]
+
+  sandbox:
+    build: .
+    command: pnpm --filter @livepage/sandbox start
+    environment:
+      SANDBOX_PORT: "5174"
+    ports: ["5174:5174"]
+
+volumes:
+  pgdata:

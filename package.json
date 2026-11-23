@@ -1,0 +1,14 @@
+{
+  "name": "livepage",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Open-source, self-hostable writing canvas where people and AI agents edit one live page together, with sandboxed HTML/JS blocks.",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "agent:demo": "pnpm --filter @livepage/agent demo",
+    "agent:mcp": "pnpm --filter @livepage/agent mcp"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@livepage/sandbox",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "echo 'nothing to build'",
+    "typecheck": "echo 'plain js'"
+  }
+}

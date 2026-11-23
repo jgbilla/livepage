@@ -1,0 +1,22 @@
+{
+  "name": "@livepage/agent",
+  "private": true,
+  "type": "module",
+  "bin": { "livepage-mcp": "src/mcp.ts" },
+  "scripts": {
+    "demo": "tsx src/demo.ts",
+    "mcp": "tsx src/mcp.ts",
+    "build": "echo 'run with tsx'",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hocuspocus/provider": "^4.9.0",
+    "@livepage/schema": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "tsx": "^4.23.15",
+    "ws": "^8.23.0",
+    "yjs": "^13.6.33",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": { "@types/node": "^22.10.0", "@types/ws": "^8.18.0", "typescript": "^5.9.3" }
+}

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>block</title></head>
+<body>
+<script>
+  // Waits for the parent page to send block code, then replaces this document with it.
+  // A small reporter is appended so the block can tell the parent its height.
+  const REPORTER = `<script>(function(){
+    function send(){ var b=document.body; if(!b) return; parent.postMessage({ type: 'livepage:height', height: Math.ceil(Math.max(b.scrollHeight, b.getBoundingClientRect().height)) }, '*'); }
+    new ResizeObserver(send).observe(document.body);
+    addEventListener('load', send); send();
+    addEventListener('error', function(e){ parent.postMessage({ type: 'livepage:error', message: String(e.message) }, '*'); });
+  })();<\/script>`;
+  addEventListener('message', function (event) {
+    if (event.source !== parent || !event.data || event.data.type !== 'livepage:render') return;
+    const code = String(event.data.code || '');
+    document.open();
+    document.write('<!doctype html><meta charset="utf-8"><style>html,body{margin:0}body{display:flow-root}</style>' + code + REPORTER);
+    document.close();
+  }, { once: true });
+  parent.postMessage({ type: 'livepage:ready' }, '*');
+</script>
+</body>
+</html>
