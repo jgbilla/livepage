@@ -233,11 +233,11 @@ An agent is a **participant**, not a feature. Three ways to connect, from riches
 | **Local MCP server** (stdio) | Yes (uses the live client) | Clients that only run local servers | `packages/agent/src/mcp.ts` |
 | **HTTP API** | No caret, edits still appear live | Scripts, webhooks, any language | `apps/server/src/agent-api.ts` |
 
-MCP tools today (same on both): `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`.
+MCP tools today (same on both): `list_pages`, `read_page`, `get_outline`, `read_blocks`, `replace_text`, `replace_blocks`, `insert_blocks`, `delete_blocks`, `move_blocks`, `set_table_cell`, `add_table_row`, `delete_table_row`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`.
 
 **Choosing the output (from OpenIntelligentUI).** For each request the agent picks the lightest form that works: plain text, then a native component (table, mind map, later drawing or database), and custom UI only for motion or interaction. The MCP server's instructions spell this out for any model that connects.
 
-Planned tools: `insert_after(block_id, ...)`, `replace_text(range)`, `comment(anchor, body)`, `suggest_edit(range, text)` (shown as a suggestion you accept or reject), `list_pages`, `search`, `query_database`.
+Planned tools: `suggest_edit(range, text)` (shown as a suggestion you accept or reject), `list_pages`, `search`, `query_database`.
 
 **No model is built into the server.** That keeps it model-agnostic and means a self-hoster never has to put an AI key on the server. Later, an optional "Ask AI" button in the editor can call any OpenAI-compatible or Anthropic endpoint the user configures, and it would join the page through the same live client.
 

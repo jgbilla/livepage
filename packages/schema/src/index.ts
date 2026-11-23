@@ -142,7 +142,9 @@ export function listBlocks(doc: Y.Doc, tab?: string): BlockRow[] {
     return fragment(doc, tabId)
     .toArray()
     .map((node, position) => {
-      const fallback = `${tabId}:pos_${position}`;
+      // Stable id (see blocks.ts): the id Yjs gave the node, so it survives edits around it.
+      const yid = (node as Y.XmlElement | Y.XmlText)._item?.id;
+      const fallback = yid ? `b_${yid.client.toString(36)}_${yid.clock.toString(36)}` : `${tabId}:pos_${position}`;
       if (node instanceof Y.XmlText) {
         return { id: fallback, tab: tabId, position, type: 'text', text: node.toString(), attrs: {} };
       }
@@ -690,3 +692,4 @@ export * from './walk.ts';
 export * from './markdown.ts';
 export * from './html.ts';
 export * from './template.ts';
+export * from './blocks.ts';

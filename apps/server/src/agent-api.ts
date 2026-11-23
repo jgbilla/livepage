@@ -21,6 +21,16 @@
 //   DELETE /api/pages/:page/footnotes/:id
 // Writes go to the main tab unless ?tab=<id or title> is given.
 //
+// Targeted edits: change only what needs changing instead of rewriting a page. Block ids are stable (see schema/blocks.ts).
+//   GET    /api/pages/:page/outline?tab=            -> { tabs: [{ id, title, blocks, headings: [{ id, level, text, blocks }] }] }
+//   GET    /api/pages/:page/blocks?tab=&section=<heading id>&from=<block id>&limit=  -> { blocks: [{ id, tab, position, type, markdown }], more }
+//   POST   /api/pages/:page/blocks      { markdown, before? | after? | at?: "start"|"end" } -> { ids }    (insert)
+//   PUT    /api/pages/:page/blocks/:id  { markdown, through? }                -> { ids }    (replace a block or a run of blocks)
+//   DELETE /api/pages/:page/blocks/:id?through=<block id>                     -> { deleted }
+//   POST   /api/pages/:page/move        { block_id, through?, before? | after? | at?, tab? } -> { ids }
+//   POST   /api/pages/:page/replace-text { find, replace, block_id?, occurrence?, all?, match_case? } -> { replaced, blocks }
+//   PATCH  /api/pages/:page/tables/:id  { op: "set_cell", row, column, text } | { op: "add_row", cells, row? } | { op: "delete_row", row }
+//
 // Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
 //   GET    /api/pages?path=a/b&tag=x&tag=y&match=any|all -> { pages (with folder_id, path, tags), folders, tags, views }
 //   POST   /api/pages          { title, path? | folder_id?, tags? } -> { page }
@@ -62,6 +72,7 @@ import {
   appendHeading, appendParagraph, htmlSections, insertHtmlBlock, insertMindMap, insertTable, listBlocks, pageAsMarkdown,
   addTab, listTabs, pendingActions, resolveTab, setHtmlCode, updateAction,
   insertFootnote, listFootnotes, removeFootnote, updateFootnote, type FootnoteInput,
+  deleteBlocks, deleteTableRow, insertBlocks, insertTableRow, moveBlocks, pageOutline, readBlocks, replaceBlocks, replaceText, setTableCell,
 } from '@livepage/schema';
 
 export const MAX_BODY = 512 * 1024;
@@ -112,7 +123,7 @@ export type ContentCall = {
 
 /** Content operations on one page. The caller has already checked the principal can read it. */
 export async function handleContent({ req, res, hp, url, page, collection, id, who, writable }: ContentCall): Promise<void> {
-  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs' || collection === 'footnotes');
+  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs' || collection === 'footnotes' || collection === 'outline' || collection === 'blocks');
   if (!isRead && !writable) return send(res, 403, { error: 'read-only access to this page' });
   try {
     const body = req.method === 'GET' ? {} : await readJson(req);
@@ -140,6 +151,35 @@ export async function handleContent({ req, res, hp, url, page, collection, id, w
         } else if (req.method === 'POST' && collection === 'mind-maps') {
           if (!body.root || typeof body.root.text !== 'string') throw new Error('root.text is required');
           result = { id: insertMindMap(doc, body.root, { title: body.title, tab }) };
+        } else if (req.method === 'GET' && collection === 'outline') {
+          result = { tabs: pageOutline(doc, url.searchParams.has('tab') ? tab : undefined) };
+        } else if (req.method === 'GET' && collection === 'blocks') {
+          const q = url.searchParams;
+          result = readBlocks(doc, {
+            tab: q.has('tab') ? tab : undefined, section: q.get('section') ?? undefined, from: q.get('from') ?? id,
+            limit: Number(q.get('limit')) || undefined,
+          });
+        } else if (req.method === 'POST' && collection === 'blocks' && !id) {
+          result = insertBlocks(doc, str(body.markdown), { before: opt(body.before), after: opt(body.after), at: body.at === 'start' ? 'start' : 'end', tab });
+        } else if (req.method === 'PUT' && collection === 'blocks' && id) {
+          result = replaceBlocks(doc, id, str(body.markdown), opt(body.through));
+        } else if (req.method === 'DELETE' && collection === 'blocks' && id) {
+          result = { deleted: deleteBlocks(doc, id, url.searchParams.get('through')) };
+        } else if (req.method === 'POST' && collection === 'move') {
+          result = moveBlocks(doc, str(body.block_id), {
+            before: opt(body.before), after: opt(body.after), at: body.at === 'start' ? 'start' : 'end',
+            tab: opt(body.tab) ? resolveTab(doc, body.tab) : undefined,
+          }, opt(body.through));
+        } else if (req.method === 'POST' && collection === 'replace-text') {
+          result = replaceText(doc, str(body.find), str(body.replace), {
+            blockId: opt(body.block_id), tab: url.searchParams.has('tab') ? tab : undefined,
+            occurrence: Number(body.occurrence) || undefined, all: body.all === true, matchCase: body.match_case !== false,
+          });
+        } else if (req.method === 'PATCH' && collection === 'tables' && id) {
+          if (body.op === 'set_cell') setTableCell(doc, id, Number(body.row), Number(body.column), str(body.text));
+          else if (body.op === 'add_row') result = { row: insertTableRow(doc, id, Array.isArray(body.cells) ? body.cells.map(String) : [], Number(body.row) || null) };
+          else if (body.op === 'delete_row') deleteTableRow(doc, id, Number(body.row));
+          else throw new Error('op must be set_cell, add_row or delete_row');
         } else if (req.method === 'GET' && collection === 'tabs') {
           result = { tabs: listTabs(doc) };
         } else if (req.method === 'POST' && collection === 'tabs') {

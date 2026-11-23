@@ -3,6 +3,10 @@
 //
 //   LIVEPAGE_URL=wss://<your app>/collab AGENT_TOKEN=lp_... pnpm agent:docs            # creates a new page
 //   LIVEPAGE_URL=wss://<your app>/collab AGENT_TOKEN=lp_... pnpm agent:docs p_xxxx     # writes into an existing (empty) page
+//
+// This writes the whole page, so it is for the first version only. To update the documentation page afterwards,
+// change just the blocks or words that are out of date with the targeted edit tools (get_outline, read_blocks,
+// replace_text, replace_blocks, insert_blocks, set_table_cell...) rather than running this again.
 import * as Y from 'yjs';
 import { fragment, META, renameTab } from '@livepage/schema';
 import { LiveAgent } from './client.ts';
@@ -365,7 +369,14 @@ table(ag, [
   ['get_backlinks', 'Pages and tabs that link to a page'],
   ['search_pages', 'Full-text search across every page you can open, with snippets'],
   ['get_link_graph', 'Every page you can open and the links between them'],
-  ['read_page', 'The whole page as markdown, every tab, with block and node ids'],
+  ['read_page', 'The whole page as markdown, every tab, with node and footnote ids'],
+  ['get_outline', 'Just the structure: tabs and headings with block ids and section sizes'],
+  ['read_blocks', 'Blocks with their ids: the whole page, one tab, one section or a window from a block'],
+  ['replace_text', 'Find and replace words in place; formatting, links and footnotes stay'],
+  ['replace_blocks', 'Rewrite one block or a run of blocks (a section) with Markdown'],
+  ['insert_blocks', 'New Markdown before or after a block, or at the start or end of a tab'],
+  ['delete_blocks / move_blocks', 'Remove or reorder a block or a run of blocks, also across tabs'],
+  ['set_table_cell / add_table_row / delete_table_row', 'Change a table without resending it'],
   ['write_paragraph / add_heading', 'Append text; paragraphs are typed out live. Link with [[p_id]] or [[p_id#tab_id]]'],
   ['insert_table', 'A native, editable table'],
   ['insert_mind_map / add_mind_map_node', 'A native mind map, then grow it node by node'],
@@ -375,6 +386,9 @@ table(ag, [
   ['add_tab', 'Create a tab; every writing tool takes an optional tab'],
 ]);
 write(ag, `
+### Small edits, not rewrites
+An agent never has to rewrite a page to change it. Every block has a stable id that stays valid while people and agents edit around it. To fix a sentence, an agent calls \`replace_text\`. To redo a section, it calls \`get_outline\`, reads that section with \`read_blocks\`, and sends new Markdown for those blocks with \`replace_blocks\`. Everything else on the page is left alone, so the edit costs a fraction of the tokens, comments on the rest of the page stay put, and History shows exactly what changed.
+
 ## HTTP API
 For scripts in any language. Send the token as \`Authorization: Bearer lp_...\`. Add \`?tab=<id or title>\` to write into a tab.
 `);
@@ -383,6 +397,14 @@ table(ag, [
   ['GET /api/pages', 'List your pages'],
   ['POST /api/pages', 'Create a page ({ "title" })'],
   ['GET /api/pages/<id>/content', 'Page as markdown, plus tabs and blocks'],
+  ['GET /api/pages/<id>/outline', 'Tabs and headings with block ids and section sizes'],
+  ['GET /api/pages/<id>/blocks', 'Blocks with ids and Markdown (?section=<heading id>, ?from=<block id>, ?limit=)'],
+  ['POST /api/pages/<id>/blocks', 'Insert Markdown ({ "markdown", "before" or "after": block id })'],
+  ['PUT /api/pages/<id>/blocks/<block id>', 'Replace a block, or a run with { "through": block id }'],
+  ['DELETE /api/pages/<id>/blocks/<block id>', 'Delete a block, or a run with ?through=<block id>'],
+  ['POST /api/pages/<id>/move', 'Move blocks ({ "block_id", "through", "before" or "after" })'],
+  ['POST /api/pages/<id>/replace-text', 'Find and replace in place ({ "find", "replace", "all" })'],
+  ['PATCH /api/pages/<id>/tables/<block id>', 'Table edits ({ "op": "set_cell", "row", "column", "text" }, "add_row", "delete_row")'],
   ['POST /api/pages/<id>/paragraphs', 'Append a paragraph ({ "text" })'],
   ['POST /api/pages/<id>/headings', 'Append a heading'],
   ['POST /api/pages/<id>/tables', 'Append a table ({ "rows": [[...]] })'],

@@ -135,6 +135,83 @@ test('an agent writes through the HTTP API and MCP, and the page updates live', 
   await expect(page.locator('.ProseMirror h2')).toContainText('Heading from MCP');
 });
 
+test('an agent edits only what needs changing: words, one block, a table cell', async ({ page }) => {
+  const pageId = await newPage(page.request, 'Targeted edits');
+  const token = await agentToken(page.request);
+  const auth = { authorization: `Bearer ${token}` };
+  const seed = await page.request.post(`/api/pages/${pageId}/blocks`, {
+    headers: auth,
+    data: { markdown: '## Intro\n\nLivepage has **three** kinds of block.\n\n## Tools\n\n| Tool | Does |\n| --- | --- |\n| read | Reads |\n\nLast words.' },
+  });
+  expect(seed.ok(), await seed.text()).toBeTruthy();
+  await openPage(page, pageId);
+  const editor = page.locator('.ProseMirror');
+  await expect(editor).toContainText('Last words.');
+
+  // Hosted MCP session
+  let n = 0;
+  let session: string | undefined;
+  const rpc = async (method: string, params?: object, notify = false) => {
+    const res = await page.request.post('/mcp', {
+      headers: { ...auth, accept: 'application/json, text/event-stream', ...(session ? { 'mcp-session-id': session, 'mcp-protocol-version': '2025-06-18' } : {}) },
+      data: { jsonrpc: '2.0', ...(notify ? {} : { id: ++n }), method, ...(params ? { params } : {}) },
+    });
+    expect(res.status(), await res.text()).toBeLessThan(300);
+    session ??= res.headers()['mcp-session-id'];
+    const raw = await res.text();
+    const data = raw.trim().startsWith('{') ? raw : raw.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5)).pop() ?? '';
+    return data ? JSON.parse(data) : null;
+  };
+  const tool = async (name: string, args: object): Promise<string> => {
+    const r = await rpc('tools/call', { name, arguments: { page: pageId, ...args } });
+    const out = r?.result?.content?.[0]?.text ?? '';
+    expect(out.startsWith('error:'), `${name}: ${out}`).toBe(false);
+    return out;
+  };
+  await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke-test', version: '1' } });
+  await rpc('notifications/initialized', undefined, true);
+
+  // Find the place without reading the page: outline, then one section.
+  const outline = await tool('get_outline', {});
+  const tools = outline.match(/## Tools {2}\[(b_\w+)\]/)![1];
+  const section = await tool('read_blocks', { section: tools });
+  expect(section).not.toContain('three');
+  const table = section.match(/\[(b_\w+) table\]/)![1];
+  const last = section.match(/\[(b_\w+) paragraph\]\nLast words\./)![1];
+
+  // The person keeps writing above; the ids the agent holds stay good.
+  await editor.locator('h2', { hasText: 'Intro' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Typed by a person meanwhile.');
+
+  await tool('replace_text', { find: 'three', replace: 'four' });
+  await expect(editor.locator('strong')).toHaveText('four'); // edited in place: still bold
+  await tool('set_table_cell', { block_id: table, row: 2, column: 2, text: 'Reads one section' });
+  await tool('add_table_row', { block_id: table, cells: ['replace_text', 'Changes words in place'] });
+  await expect(editor.locator('table tr')).toHaveCount(3);
+  await expect(editor.locator('table')).toContainText('Reads one section');
+  await tool('replace_blocks', { block_id: last, markdown: 'New last words.\n\n- one\n- two' });
+  await tool('insert_blocks', { before: tools, markdown: 'Inserted before Tools.' });
+  await expect(editor.locator('li')).toHaveCount(2);
+
+  await expect.poll(async () => (await markdown(page.request, pageId)).trim()).toBe([ // the editor keeps an empty paragraph after a list
+    '## Intro', 'Typed by a person meanwhile.', 'Livepage has four kinds of block.', 'Inserted before Tools.', '## Tools',
+    '| Tool | Does |\n| --- | --- |\n| read | Reads one section |\n| replace_text | Changes words in place |', 'New last words.', 'onetwo',
+  ].join('\n\n'));
+
+  // Move the Tools section to the top, then delete the inserted paragraph, over the HTTP API.
+  const blocks = (await (await page.request.get(`/api/pages/${pageId}/blocks`, { headers: auth })).json()).blocks as { id: string; markdown: string }[];
+  const id = (text: string) => blocks.find((b) => b.markdown.startsWith(text))!.id;
+  const move = await page.request.post(`/api/pages/${pageId}/move`, { headers: auth, data: { block_id: id('## Tools'), through: id('| Tool'), before: id('## Intro') } });
+  expect(move.ok(), await move.text()).toBeTruthy();
+  const del = await page.request.delete(`/api/pages/${pageId}/blocks/${id('Inserted before')}`, { headers: auth });
+  expect(del.ok(), await del.text()).toBeTruthy();
+  await expect(editor.locator('h2').first()).toHaveText('Tools');
+  await expect(editor).not.toContainText('Inserted before Tools.');
+  await expect(editor).toContainText('Typed by a person meanwhile.');
+});
+
 test('comments: comment on the page and see it listed', async ({ page }) => {
   const pageId = await newPage(page.request, 'Comments page');
   await page.goto(`/p/${pageId}?comment=`);
