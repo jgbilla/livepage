@@ -13,13 +13,15 @@ Render's free plan sleeps after 15 minutes without visitors, so the first visit 
 
 1. Sign up at [render.com](https://render.com) with your GitHub account.
 2. Click **New > Blueprint**, pick the `livepage` repository, and confirm. Render reads `render.yaml` and creates two services: `livepage` (the app) and `livepage-sandbox` (where HTML blocks run, on a separate domain for safety).
-3. When Render asks for `DATABASE_URL`, paste the Neon connection string.
+3. When Render asks for `DATABASE_URL`, paste the Neon connection string (the pooled one, with `-pooler` in the host). For Google sign-in, also paste `NEON_AUTH_BASE_URL` (from `.env.local` after `neon deploy`, or Neon Console > Auth); leave it empty to skip.
 4. Click **Apply** and wait for both services to show **Live** (the first build takes a few minutes).
 5. Open the `livepage` service and click its URL (`https://livepage-xxxx.onrender.com`). Sign up. That's your app.
 
 Every push to `main` redeploys automatically.
 
 ## 3. Optional
+
+- **Google sign-in (Neon Auth):** add your app's address as a trusted domain, or Neon Auth refuses to redirect back: `neon neon-auth domain add https://livepage-xxxx.onrender.com` (or Neon Console > Auth > Domains). Neon's shared Google credentials are for testing; for real users add your own Google OAuth app in Neon Console > Auth.
 
 - **Your own domain:** in the `livepage` service, **Settings > Custom Domains**, add e.g. `write.yourdomain.com` and create the DNS record Render shows. Give the sandbox a domain that is **not** under the same main domain (or keep its `onrender.com` address), so HTML blocks can never reach the app's cookies. If you change domains, set `SANDBOX_URL` on the app and `SANDBOX_FRAME_ANCESTORS` on the sandbox to the new `https://` addresses.
 - **Close sign-ups** once your people have accounts: add `SIGNUP_OPEN=0` to the `livepage` service's environment.

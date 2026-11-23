@@ -18,4 +18,7 @@ export const config = {
   trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY === '1' : production,
   /** Set SIGNUP_OPEN=0 to stop new sign-ups (people can still join through share links if they already have accounts). */
   signupOpen: env.SIGNUP_OPEN !== '0',
+  /** Neon Auth (Managed Better Auth). `neon deploy` writes these. When set, the app offers "Continue with Google". */
+  neonAuthUrl: env.NEON_AUTH_BASE_URL?.replace(/\/$/, '') || null,
+  neonAuthJwksUrl: env.NEON_AUTH_JWKS_URL || (env.NEON_AUTH_BASE_URL ? `${env.NEON_AUTH_BASE_URL.replace(/\/$/, '')}/.well-known/jwks.json` : null),
 };

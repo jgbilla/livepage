@@ -10,7 +10,9 @@ import { staticHandler } from './static.ts';
 import { config } from './config.ts';
 
 const db = await connect(process.env.DATABASE_URL);
-const serveStatic = config.webDist ? staticHandler(config.webDist, config.sandboxUrl) : null;
+const serveStatic = config.webDist
+  ? staticHandler(config.webDist, config.sandboxUrl, config.neonAuthUrl ? new URL(config.neonAuthUrl).origin : null)
+  : null;
 
 export type Context = { user: { id: string; name: string; kind: 'human' | 'agent' }; role: Role };
 
