@@ -6,7 +6,11 @@ import { Icon } from '../design/Icon';
 type ToolStep = { id: string; name: string; status: 'running' | 'done' | 'error'; note?: string };
 type Turn = { role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string; status?: string };
 type Agent = { id: string; name: string; online: boolean };
-type AgentReq = { id: string; status: 'pending' | 'working' | 'done' | 'cancelled'; progress: string; reply: string; sig: string; agent_online: boolean; agent_name: string };
+type AgentReq = {
+  id: string; status: 'pending' | 'working' | 'done' | 'cancelled'; progress: string; reply: string; sig: string; agent_online: boolean; agent_name: string;
+  /** queued: waiting for a poll; delivered: a poll took it but the agent hasn't confirmed; working: confirmed. */
+  delivery?: 'queued' | 'delivered' | 'working' | 'finished';
+};
 const BUILTIN = 'builtin';
 const loadTarget = () => { try { return localStorage.getItem('livepage.askTarget') || BUILTIN; } catch { return BUILTIN; } };
 const saveTarget = (v: string) => { try { localStorage.setItem('livepage.askTarget', v); } catch { /* private mode */ } };
@@ -70,10 +74,13 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
 
   /** Hand the request to a connected agent (Claude Code, Cursor…) and follow it until it answers. */
   const askAgent = async (a: Agent, prompt: string, sel: string, history: { role: string; text: string }[], ac: AbortController) => {
+    // Only say the agent is working once it has confirmed it got the request (or replied).
     const statusFor = (r: AgentReq) =>
-      r.status === 'pending'
-        ? (r.agent_online ? `Waiting for ${a.name} to pick it up…` : `${a.name} isn't listening right now. Ask it to “listen for Livepage requests”; this request waits for it.`)
-        : r.status === 'working' ? (r.progress ? `${a.name}: ${r.progress}` : `${a.name} is working on it…`) : '';
+      r.status === 'working' ? (r.progress ? `${a.name}: ${r.progress}` : `${a.name} is working on it…`)
+        : r.status !== 'pending' ? ''
+        : r.delivery === 'delivered' ? `Sent to ${a.name}, waiting for it to confirm…`
+        : r.agent_online ? `Waiting for ${a.name} to pick it up…`
+        : `${a.name} isn't listening right now. Ask it to “listen for Livepage requests”; this request waits for it.`;
     let { request: r } = await api<{ request: AgentReq }>(`/pages/${pageId}/agent-requests`, { body: { tokenId: a.id, prompt, tab, selection: sel, history } });
     reqRef.current = r.id;
     patchLast((t) => ({ ...t, model: a.name, status: statusFor(r) }));

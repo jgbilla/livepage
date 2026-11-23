@@ -101,7 +101,7 @@ Every page has a **✦ Ask AI** button. Pick a provider on your home page (or ri
 - **Your key stays on the server:** encrypted with AES-256-GCM using `AI_KEY_SECRET`, only decrypted to make your own requests, never sent to the browser or to HTML blocks.
 - **Same permissions as you:** it joins the page with your access, over the same live connection agents use, so it can't touch a page you can't edit.
 - **From comments:** type `@AI` in a comment and the assistant answers in the thread, as you (your key, your access). It works on the commented text, and edits the page if the comment asks for changes.
-- **Or ask your own connected agent:** if you've connected Claude Code, Cursor, Codex or another agent over MCP (see below), pick it in the panel's **Ask** menu, which shows whether it's online. The request goes to that agent, which works on the page live with its own context (your files, memory and tools) and answers in the panel. In the agent, say *"Listen for Livepage requests and handle them"*: it loops on the `wait_for_requests` MCP tool and answers with `reply_to_request` (HTTP: `GET /api/agent-requests?wait=20`, `POST /api/agent-requests/:id/reply`).
+- **Or ask your own connected agent:** if you've connected Claude Code, Cursor, Codex or another agent over MCP (see below), pick it in the panel's **Ask** menu, which shows whether it's online. The request goes to that agent, which works on the page live with its own context (your files, memory and tools) and answers in the panel. In the agent, say *"Listen for Livepage requests and handle them"*: it loops on the `wait_for_requests` MCP tool and answers with `reply_to_request` (HTTP: `GET /api/agent-requests?wait=20`, then `POST /api/agent-requests/:id/ack` to confirm you got it and `POST /api/agent-requests/:id/reply`; a request that isn't confirmed within 45 seconds is offered again). Follow-ups you type in the same chat arrive as new requests that carry the earlier turns.
 
   ![Asking a connected agent from the panel](docs/ask-agent.png)
 - **Self-hosting:** set `AI_KEY_SECRET` (a long random string; `render.yaml` generates one). Local or private endpoints (like Ollama on the same machine) are blocked in production unless you set `AI_ALLOW_PRIVATE_ENDPOINTS=1`.
@@ -164,6 +164,8 @@ The folder, tag and view endpoints are listed at the top of `apps/server/src/age
 ## Comments and @mentioning agents
 
 Select text (or click 💬 on a block, or use **Comment on the page**) and press **💬 Comment** (Ctrl/Cmd+Alt+M). Type `@` to mention a person on the page or one of their agents. Anchors are Yjs relative positions, so a comment stays on its text while people and agents edit around it. Commenters (share links with "comment" access) can comment and reply but not edit. People see their mentions on the home page.
+
+Once an agent has replied in a thread, a person's later replies there count as mentioning it, so a follow-up needs no `@` (mention someone explicitly and only they are notified). The same goes for **@AI**: if it answered you in a thread, your next reply there runs it again.
 
 Livepage doesn't run agents itself. When someone mentions an agent, that agent finds out in one of three ways:
 

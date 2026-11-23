@@ -13,8 +13,16 @@
 //     GET    /api/agent-requests/:id?wait=25            -> { request } (returns early when it changes)
 //     DELETE /api/agent-requests/:id                    -> cancel
 //   Agent (Bearer lp_ token)
-//     GET    /api/agent-requests?wait=20                -> { requests } pending for this token, now claimed
+//     GET    /api/agent-requests?wait=20                -> { requests } pending for this token, now delivered
+//     POST   /api/agent-requests/:id/ack                -> confirms the agent received it (status working)
 //     POST   /api/agent-requests/:id/reply              { text, done? }  (done=false: progress note)
+//
+// Delivery is a lease, not a hand-off. A long poll can outlive whoever started it (the agent's turn
+// ended, its tool call timed out, the network dropped), and if that poll claimed the request for good,
+// the request would sit at "working" forever while nobody works on it. So a poll only *delivers* a
+// request (claimed_at, still pending); the agent confirms it with ack (or any reply or progress note),
+// which moves it to working. A delivered request nobody confirms within LEASE_MS goes back in the
+// queue for the agent's next poll. That's how a follow-up in the same Ask chat always reaches it.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Db } from './db.ts';
 import { randomId, type Principal } from './auth.ts';
@@ -23,6 +31,7 @@ import { canEdit, roleFor } from './pages.ts';
 
 const ONLINE_MS = 2 * 60_000;
 const MAX_WAIT = 30_000;
+const LEASE_MS = 45_000; // a delivered but unconfirmed request is offered again after this
 const LIMITS = { prompt: 8000, selection: 8000, reply: 20_000, progress: 300, pendingPerToken: 20 };
 
 export type AgentRequest = {
@@ -75,6 +84,19 @@ async function getRequest(db: Db, id: string): Promise<(AgentRequest & { user_id
   return row ?? null;
 }
 
+/** Where a request is: queued (not picked up), delivered (a poll took it, the agent hasn't confirmed),
+ *  working (the agent confirmed or replied), or finished. Lease expiry turns delivered back into queued. */
+function delivery(r: AgentRequest): 'queued' | 'delivered' | 'working' | 'finished' {
+  if (r.status === 'done' || r.status === 'cancelled') return 'finished';
+  if (r.status === 'working') return 'working';
+  return r.claimed_at && Date.now() - new Date(r.claimed_at).getTime() < LEASE_MS ? 'delivered' : 'queued';
+}
+const signature = (r: AgentRequest) => `${r.status}|${delivery(r)}|${r.progress}|${r.reply.length}`;
+function forPerson(r: AgentRequest & { user_id?: string }) {
+  const { user_id: _u, history: _h, ...rest } = r;
+  return { ...rest, delivery: delivery(r), sig: signature(r), agent_online: isOnline(r.token_id) };
+}
+
 /** People: list your agents with online status. */
 export async function listAgents(db: Db, userId: string) {
   const rows = await db.query('select id, name, last_used_at from api_tokens where user_id = $1 order by created_at desc', [userId]);
@@ -95,8 +117,10 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     if (who.kind !== 'agent' || !who.tokenId) { send(res, 403, { error: 'Use a personal agent token (lp_...).' }); return true; }
     const tokenId = who.tokenId;
     const claim = () => db.query(
-      `update agent_requests set status = 'working', claimed_at = now()
-        where token_id = $1 and status = 'pending' returning id`, [tokenId]);
+      `update agent_requests set claimed_at = now()
+        where token_id = $1 and status = 'pending'
+          and (claimed_at is null or claimed_at < now() - ($2::int * interval '1 millisecond'))
+        returning id`, [tokenId, LEASE_MS]);
     listening.set(tokenId, (listening.get(tokenId) ?? 0) + 1);
     try {
       let ids = (await claim()).map((r) => r.id as string);
@@ -106,12 +130,30 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
         if (!res.writableEnded && !res.destroyed) ids = (await claim()).map((r) => r.id as string);
       }
       lastSeen.set(tokenId, Date.now());
-      for (const id of ids) wake(`req:${id}`);
+      for (const id of ids) {
+        wake(`req:${id}`);
+        // If this delivery is never confirmed, offer it again: wake this token's next poll and the person's panel.
+        setTimeout(() => { wake(`token:${tokenId}`); wake(`req:${id}`); }, LEASE_MS + 1000).unref?.();
+      }
       const requests = ids.length ? await db.query(`select ${COLS} from ${FROM} where r.id = any($1) order by r.created_at`, [ids]) : [];
       if (!res.writableEnded && !res.destroyed) send(res, 200, { requests });
     } finally {
       listening.set(tokenId, (listening.get(tokenId) ?? 1) - 1);
     }
+    return true;
+  }
+
+  const ack = path.match(/^\/api\/agent-requests\/(ar_[\w-]+)\/ack$/);
+  if (ack && method === 'POST') {
+    if (who.kind !== 'agent' || !who.tokenId) { send(res, 403, { error: 'Use a personal agent token (lp_...).' }); return true; }
+    const r = await getRequest(db, ack[1]);
+    if (!r || r.token_id !== who.tokenId) { send(res, 404, { error: 'Request not found.' }); return true; }
+    if (r.status === 'cancelled') { send(res, 409, { error: 'The person cancelled this request. Stop working on it.' }); return true; }
+    if (r.status === 'pending') {
+      await db.query(`update agent_requests set status = 'working', claimed_at = coalesce(claimed_at, now()) where id = $1 and status = 'pending'`, [r.id]);
+      wake(`req:${r.id}`);
+    }
+    send(res, 200, { ok: true });
     return true;
   }
 
@@ -121,12 +163,13 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     const r = await getRequest(db, reply[1]);
     if (!r || r.token_id !== who.tokenId) { send(res, 404, { error: 'Request not found.' }); return true; }
     if (r.status === 'cancelled') { send(res, 409, { error: 'The person cancelled this request. Stop working on it.' }); return true; }
+    if (r.status === 'done') { send(res, 409, { error: 'This request is already answered. Wait for the next one with wait_for_requests.' }); return true; }
     const b = await readJson(req);
     const text = String(b.text ?? '').trim();
     if (b.done === false) {
-      await db.query(`update agent_requests set progress = $2, status = 'working' where id = $1`, [r.id, text.slice(0, LIMITS.progress)]);
+      await db.query(`update agent_requests set progress = $2, status = 'working', claimed_at = coalesce(claimed_at, now()) where id = $1`, [r.id, text.slice(0, LIMITS.progress)]);
     } else {
-      await db.query(`update agent_requests set reply = $2, status = 'done', done_at = now() where id = $1`, [r.id, text.slice(0, LIMITS.reply)]);
+      await db.query(`update agent_requests set reply = $2, status = 'done', claimed_at = coalesce(claimed_at, now()), done_at = now() where id = $1`, [r.id, text.slice(0, LIMITS.reply)]);
     }
     wake(`req:${r.id}`);
     send(res, 200, { ok: true });
@@ -149,15 +192,14 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     }
     if (method === 'GET') {
       const since = url.searchParams.get('since') ?? '';
-      const sig = (x: AgentRequest) => `${x.status}|${x.progress}|${x.reply.length}`;
+      const sig = signature;
       const ms = waitMs(url);
       if (ms && sig(r) === since && (r.status === 'pending' || r.status === 'working')) {
         await wait(`req:${r.id}`, ms, closeSignal(req, res));
         r = (await getRequest(db, r.id)) ?? r;
       }
       if (!res.writableEnded && !res.destroyed) {
-        const { user_id: _u, history: _h, ...rest } = r;
-        send(res, 200, { request: { ...rest, sig: sig(r), agent_online: isOnline(r.token_id) } });
+        send(res, 200, { request: forPerson(r) });
       }
       return true;
     }
@@ -187,7 +229,5 @@ export async function createAgentRequest(req: IncomingMessage, res: ServerRespon
     [id, who.id, token.id, pageId, tab, prompt.slice(0, LIMITS.prompt), String(b.selection ?? '').slice(0, LIMITS.selection), JSON.stringify(history)],
   );
   wake(`token:${token.id}`);
-  const r = (await getRequest(db, id))!;
-  const { user_id: _u, history: _h, ...rest } = r;
-  send(res, 201, { request: { ...rest, sig: `${r.status}|${r.progress}|0`, agent_online: isOnline(token.id) } });
+  send(res, 201, { request: forPerson((await getRequest(db, id))!) });
 }
