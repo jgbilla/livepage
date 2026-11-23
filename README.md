@@ -64,6 +64,13 @@ The agent joins the page, types with its own caret, adds a table and a mind map,
 
 ![The agent typing with its own caret](docs/agent-typing.png)
 
+## Tests
+
+- `pnpm test` runs the unit tests (Node's built-in test runner).
+- `pnpm test:e2e` runs the browser smoke tests in `e2e/`: sign-up, writing and saving, two browsers editing live, an agent writing through the HTTP API and MCP, comments, footnotes, the `/` menu and tabs. It starts `pnpm dev:memory` for you unless the app is already running on port 5173. Run `pnpm exec playwright install chromium` once first.
+
+Every pull request and push to main runs all of these on GitHub (`.github/workflows/ci.yml`): typecheck, unit tests and build, then the smoke tests and the layout check against the production build and a real Postgres. A failed run attaches its screenshots and server log under Summary > Artifacts.
+
 ## Self-host with Docker
 
 ```bash
