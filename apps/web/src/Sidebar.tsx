@@ -1,7 +1,7 @@
 // Obsidian-style sidebar: a Today button, your folder tree (drag pages and folders to move
 // them), saved tag views and all tags. Folders are yours alone; pages shared with you show
 // up at the top level until you file them somewhere.
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { Suspense, createContext, lazy, useContext, useEffect, useMemo, useState } from 'react';
 import { api, type Me } from './api';
 import { Link, navigate, useLocation } from './router';
 import {
@@ -10,7 +10,7 @@ import {
 } from './workspace';
 import { ViewDialog } from './screens/ViewDialog';
 import { shortcutLabel, SwitcherProvider, useOpenSwitcher } from './QuickSwitcher';
-import { ImportDialog } from './screens/ImportDialog';
+const ImportDialog = lazy(() => import('./screens/ImportDialog').then((m) => ({ default: m.ImportDialog })));
 
 // ---------- layout + open/closed state ----------
 
@@ -252,7 +252,7 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <button type="button" className="ghost" onClick={onLogout}>Log out</button>
         </span>
       </div>
-      {importing && <ImportDialog onClose={() => setImporting(false)} />}
+      {importing && <Suspense fallback={null}><ImportDialog onClose={() => setImporting(false)} /></Suspense>}
       {viewDialog && <ViewDialog view={viewDialog === 'new' ? null : viewDialog} tags={ws?.tags ?? []} onClose={(saved) => {
         setViewDialog(null);
         if (saved) navigate(`/view/${saved.id}`);

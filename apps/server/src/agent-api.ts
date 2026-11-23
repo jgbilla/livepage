@@ -54,6 +54,7 @@
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
 // For a live cursor and typing animation, agents use the WebSocket client in packages/agent instead.
+import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Hocuspocus } from '@hocuspocus/server';
 import * as Y from 'yjs';
@@ -80,8 +81,21 @@ export async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<an
 }
 
 export function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
-  res.end(body === null ? '' : JSON.stringify(body));
+  const json = body === null ? '' : JSON.stringify(body);
+  const out: Record<string, string | string[]> = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers };
+  // Page lists, search results and comments can be large; compress them (fast settings).
+  const accept = String(res.req?.headers['accept-encoding'] ?? '');
+  if (json.length > 1400 && /\b(br|gzip)\b/.test(accept)) {
+    const br = /\bbr\b/.test(accept);
+    const data = br
+      ? brotliCompressSync(json, { params: { [zlib.BROTLI_PARAM_QUALITY]: 4 } })
+      : gzipSync(json, { level: 6 });
+    res.writeHead(status, { ...out, 'Content-Encoding': br ? 'br' : 'gzip', Vary: 'Accept-Encoding', 'Content-Length': String(data.length) });
+    res.end(data);
+    return;
+  }
+  res.writeHead(status, out);
+  res.end(json);
 }
 
 export type ContentCall = {

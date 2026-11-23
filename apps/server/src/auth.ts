@@ -59,6 +59,7 @@ export async function createSession(db: Db, userId: string): Promise<string> {
 }
 
 export async function destroySession(db: Db, raw: string) {
+  sessionCache.delete(sha256(raw));
   await db.query('delete from sessions where id_hash = $1', [sha256(raw)]);
 }
 
@@ -77,13 +78,26 @@ export function readCookie(header: string | null | undefined, name = SESSION_COO
   return null;
 }
 
+// Every API call and every live connection checks the session. Remembering a valid session for
+// a short while saves a database round trip on each of them (opening a page makes several).
+// Signing out removes the entry at once; only valid sessions are remembered.
+const SESSION_CACHE_MS = 30_000;
+const sessionCache = new Map<string, { user: User; until: number }>();
+
 export async function userFromSession(db: Db, raw: string | null): Promise<User | null> {
   if (!raw) return null;
+  const hash = sha256(raw);
+  const hit = sessionCache.get(hash);
+  if (hit && hit.until > Date.now()) return hit.user;
   const [row] = await db.query(
-    'select u.id, u.email, u.name from sessions s join users u on u.id = s.user_id where s.id_hash = $1 and s.expires_at > now()',
-    [sha256(raw)],
+    'select u.id, u.email, u.name, s.expires_at from sessions s join users u on u.id = s.user_id where s.id_hash = $1 and s.expires_at > now()',
+    [hash],
   );
-  return row ?? null;
+  if (!row) { sessionCache.delete(hash); return null; }
+  const user: User = { id: row.id, email: row.email, name: row.name };
+  if (sessionCache.size > 10_000) sessionCache.clear();
+  sessionCache.set(hash, { user, until: Math.min(Date.now() + SESSION_CACHE_MS, new Date(row.expires_at).getTime()) });
+  return user;
 }
 
 // ---- API tokens: how agents act on a person's behalf ----
