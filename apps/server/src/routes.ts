@@ -14,7 +14,7 @@ import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
-const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
+const CONTENT = new Set(['footnotes', 'content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
 const SHARE_ROLES = new Set(['editor', 'commenter', 'viewer']);
 
 // Tiny in-memory rate limit for login/signup (per IP). Good enough for one server instance.

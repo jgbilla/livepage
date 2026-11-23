@@ -44,12 +44,14 @@ Pick the lightest block that does the job:
   they stream in that order so people see the block take shape. Controls that only change the view should
   run locally in js. To get input back from people, call livepage.send('action_name', {values}) from js,
   then poll get_block_actions and answer each with resolve_block_action.
+Cite sources with footnotes: write the sentence first, then add_footnote with after_text set to the words the
+citation belongs to, plus url, title and author. Footnotes number themselves and list at the bottom of the tab.
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
 Use list_pages to find page ids, and call read_page first to see what is there.`,
     },
   );
 
-  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code.',
+  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code, footnotes are [^n] with definitions (and ids) at the end of each tab.',
     { page }, async ({ page: p }) => text((await agentFor(p)).read() || '(empty page)'));
 
   server.tool('list_pages', 'List the pages this agent token can open (id, title, your role).', {}, async () => {
@@ -72,6 +74,34 @@ Use list_pages to find page ids, and call read_page first to see what is there.`
   server.tool('insert_table', 'Append a native table (editable by everyone). First row is the header.',
     { page, tab, rows: z.array(z.array(z.string())).min(1) },
     async ({ page: p, tab: tb, rows }) => { (await agentFor(p, tb)).addTable(rows); return text('ok'); });
+
+  const cite = {
+    note: z.string().max(4000).optional().describe('Footnote text, e.g. a remark or a quote. Optional when it is only a citation.'),
+    url: z.string().max(2048).optional().describe('Source link (http/https).'),
+    title: z.string().max(500).optional().describe('Source title.'),
+    author: z.string().max(500).optional().describe('Source author(s) or publisher.'),
+  };
+
+  server.tool('add_footnote',
+    'Add a footnote (the way to cite a source). The marker goes right after after_text, matched exactly in the tab; omit after_text to put it at the end of the last paragraph. Returns the footnote id and number.',
+    {
+      page, tab,
+      after_text: z.string().max(500).optional().describe('Exact words in the page the footnote follows, e.g. the end of the cited sentence.'),
+      last: z.boolean().default(false).describe('Use the last match of after_text instead of the first.'),
+      ...cite,
+    },
+    async ({ page: p, tab: tb, after_text, last, ...c }) => {
+      const r = (await agentFor(p, tb)).addFootnote({ ...c, afterText: after_text, last });
+      return text(`added footnote ${r.n} (${r.id})`);
+    });
+
+  server.tool('update_footnote', 'Change a footnote\'s text or citation (ids come from read_page). Fields left out stay as they are.',
+    { page, footnote_id: z.string(), ...cite },
+    async ({ page: p, footnote_id, ...c }) => { (await agentFor(p)).editFootnote(footnote_id, c); return text('ok'); });
+
+  server.tool('remove_footnote', 'Delete a footnote and its marker.',
+    { page, footnote_id: z.string() },
+    async ({ page: p, footnote_id }) => { (await agentFor(p)).removeFootnote(footnote_id); return text('ok'); });
 
   type Tree = { text: string; children?: Tree[] };
   const tree: z.ZodType<Tree> = z.lazy(() => z.object({ text: z.string(), children: z.array(tree).optional() }));

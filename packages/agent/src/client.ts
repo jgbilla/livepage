@@ -7,7 +7,8 @@ import * as Y from 'yjs';
 import {
   actionsMap, addMindNode, appendHeading, fragment, htmlCodeText, htmlSections, insertHtmlBlock, insertMindMap, insertTable,
   addTab, listBlocks, listTabs, makeParagraph, resolveTab, pageAsMarkdown, pendingActions, removeMindNode, setHtmlBlockStatus, setHtmlCode,
-  setMindNodeText, updateAction, type BlockAction, type HtmlParts, type MindTree,
+  setMindNodeText, updateAction, insertFootnote, updateFootnote, removeFootnote, listFootnotes,
+  type BlockAction, type FootnoteInput, type HtmlParts, type MindTree,
 } from '@livepage/schema';
 
 export type AgentOptions = { url?: string; page: string; name?: string; color?: string; token?: string };
@@ -133,6 +134,14 @@ export class LiveAgent {
   addMindNode(blockId: string, parentNodeId: string, text: string) { return addMindNode(this.doc, blockId, parentNodeId, text); }
   editMindNode(blockId: string, nodeId: string, text: string) { setMindNodeText(this.doc, blockId, nodeId, text); }
   removeMindNode(blockId: string, nodeId: string) { removeMindNode(this.doc, blockId, nodeId); }
+
+  // ---- Footnotes (how agents cite sources) ----
+
+  /** Add a footnote after `afterText` (or at the end of the last paragraph). Returns its id and number. */
+  addFootnote(input: FootnoteInput & { afterText?: string; last?: boolean }) { return insertFootnote(this.doc, { ...input, tab: this.tab }); }
+  editFootnote(id: string, patch: FootnoteInput) { updateFootnote(this.doc, id, patch); }
+  removeFootnote(id: string) { removeFootnote(this.doc, id); }
+  footnotes() { return listFootnotes(this.doc, this.tab); }
 
   // ---- Host bridge: actions people send from block controls ----
 

@@ -9,6 +9,8 @@
 //   - Map "comments"          commentId -> Y.Map (anchor, author, body, resolved)  [see SPEC.md, not wired in the UI yet]
 //   - Map "meta"              title, icon, etc.
 //   - Map "actions"           actionId -> BlockAction: values a user sent from an HTML block's controls to the agent
+//   Footnotes are inline `footnote` nodes inside the text; the note and its citation are the node's attributes,
+//   so a footnote moves, copies and deletes with its marker. They are numbered per tab, in reading order.
 import * as Y from 'yjs';
 
 export const FRAGMENT = 'default';
@@ -96,14 +98,21 @@ export function htmlCodeText(doc: Y.Doc, blockId: string): Y.Text {
   return text;
 }
 
-function textOf(el: Y.XmlElement | Y.XmlText): string {
+/** Footnote id -> its number, for rendering `[^n]` markers in text. */
+type FootnoteNumbers = Map<string, number>;
+
+function textOf(el: Y.XmlElement | Y.XmlText, fn?: FootnoteNumbers): string {
   if (el instanceof Y.XmlText) return el.toString().replace(/<[^>]+>/g, '');
-  return el.toArray().map((c) => textOf(c as Y.XmlElement | Y.XmlText)).join('');
+  if (el.nodeName === FOOTNOTE_NODE) {
+    const n = fn?.get(String(el.getAttribute('id') ?? ''));
+    return n ? `[^${n}]` : '';
+  }
+  return el.toArray().map((c) => textOf(c as Y.XmlElement | Y.XmlText, fn)).join('');
 }
 
-function tableAsMarkdown(table: Y.XmlElement): string {
+function tableAsMarkdown(table: Y.XmlElement, fn?: FootnoteNumbers): string {
   const rows = table.toArray().map((row) =>
-    (row as Y.XmlElement).toArray().map((cell) => textOf(cell as Y.XmlElement).replace(/\|/g, '\\|')));
+    (row as Y.XmlElement).toArray().map((cell) => textOf(cell as Y.XmlElement, fn).replace(/\|/g, '\\|')));
   if (!rows.length) return '';
   const line = (r: string[]) => `| ${r.join(' | ')} |`;
   return [line(rows[0]), line(rows[0].map(() => '---')), ...rows.slice(1).map(line)].join('\n');
@@ -122,7 +131,9 @@ export type BlockRow = {
  *  Used for the Postgres `blocks` projection and for agents reading the page. */
 export function listBlocks(doc: Y.Doc, tab?: string): BlockRow[] {
   const tabs = tab ? [tab] : listTabs(doc).map((t) => t.id);
-  return tabs.flatMap((tabId) => fragment(doc, tabId)
+  return tabs.flatMap((tabId) => {
+    const fn = footnoteNumbers(doc, tabId);
+    return fragment(doc, tabId)
     .toArray()
     .map((node, position) => {
       const fallback = `${tabId}:pos_${position}`;
@@ -136,10 +147,11 @@ export function listBlocks(doc: Y.Doc, tab?: string): BlockRow[] {
       const text =
         type === HTML_NODE ? (htmlCodeMap(doc).get(id)?.toString() ?? '')
         : type === MIND_NODE ? mindMapAsOutline(doc, id)
-        : type === 'table' ? tableAsMarkdown(el)
-        : textOf(el);
+        : type === 'table' ? tableAsMarkdown(el, fn)
+        : textOf(el, fn);
       return { id, tab: tabId, position, type, text, attrs };
-    }));
+    });
+  });
 }
 
 function blockAsMarkdown(b: BlockRow): string {
@@ -149,10 +161,18 @@ function blockAsMarkdown(b: BlockRow): string {
   return b.text;
 }
 
-/** A compact, model-friendly rendering of the page. With several tabs, each tab is a <tab> section. */
-export function pageAsMarkdown(doc: Y.Doc): string {
+/**
+ * A compact, model-friendly rendering of the page. With several tabs, each tab is a <tab> section.
+ * Footnotes render as standard markdown footnotes ([^1] in the text, definitions at the end of each tab).
+ * `ids` (default true) tags each definition with its footnote id so agents can edit it; pass false for export.
+ */
+export function pageAsMarkdown(doc: Y.Doc, opts: { ids?: boolean } = {}): string {
   const tabs = listTabs(doc);
-  const render = (tab: string) => listBlocks(doc, tab).map(blockAsMarkdown).join('\n\n');
+  const render = (tab: string) => {
+    const body = listBlocks(doc, tab).map(blockAsMarkdown).join('\n\n');
+    const notes = listFootnotes(doc, tab).map((f) => footnoteAsMarkdown(f, opts.ids ?? true)).join('\n');
+    return notes ? `${body}\n\n${notes}` : body;
+  };
   if (tabs.length === 1) return render(tabs[0].id);
   return tabs.map((t) => `<tab id="${t.id}" title="${t.title}">\n${render(t.id)}\n</tab>`).join('\n\n');
 }
@@ -412,4 +432,180 @@ export function mindMapAsOutline(doc: Y.Doc, blockId: string): string {
   };
   walk(null, 0);
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Footnotes, which is how pages cite sources.
+//   tree:  footnote { id, note, url, title, author } -- an inline atom inside paragraphs, headings, list items, cells.
+// Numbers are not stored: a footnote's number is its place among the tab's footnotes in reading order.
+
+export const FOOTNOTE_NODE = 'footnote';
+
+export type Citation = { url?: string; title?: string; author?: string };
+export type FootnoteInput = Citation & { note?: string };
+export type Footnote = { id: string; n: number; note: string; url: string; title: string; author: string };
+
+function footnoteElements(doc: Y.Doc, tab: string): Y.XmlElement[] {
+  const out: Y.XmlElement[] = [];
+  const walk = (node: Y.XmlElement | Y.XmlFragment) => {
+    for (const c of node.toArray()) {
+      if (!(c instanceof Y.XmlElement)) continue;
+      if (c.nodeName === FOOTNOTE_NODE) out.push(c);
+      else walk(c);
+    }
+  };
+  walk(fragment(doc, tab));
+  return out;
+}
+
+const attr = (el: Y.XmlElement, k: string) => String(el.getAttribute(k) ?? '');
+
+/** The footnotes of one tab, numbered in reading order. */
+export function listFootnotes(doc: Y.Doc, tab: string = MAIN_TAB): Footnote[] {
+  return footnoteElements(doc, tab).map((el, i) => ({
+    id: attr(el, 'id'), n: i + 1, note: attr(el, 'note'), url: attr(el, 'url'), title: attr(el, 'title'), author: attr(el, 'author'),
+  }));
+}
+
+function footnoteNumbers(doc: Y.Doc, tab: string): FootnoteNumbers {
+  return new Map(listFootnotes(doc, tab).map((f) => [f.id, f.n]));
+}
+
+/** Only http(s) and mailto links are kept, so a citation can never carry a javascript: URL. */
+export function safeUrl(url: unknown): string {
+  const u = typeof url === 'string' ? url.trim() : '';
+  return /^(https?:\/\/|mailto:)/i.test(u) ? u.slice(0, 2048) : '';
+}
+
+/** "Author, Title, URL" with whatever parts are present. */
+export function citationText(c: Citation): string {
+  return [c.author, c.title ? `“${c.title}”` : '', c.url].map((x) => (x ?? '').trim()).filter(Boolean).join(', ');
+}
+
+export function footnoteAsMarkdown(f: Footnote, ids: boolean): string {
+  const cite = [f.author, f.title ? `*${f.title}*` : '', f.url ? `<${f.url}>` : ''].filter(Boolean).join(', ');
+  const body = [f.note.trim(), cite].filter(Boolean).join(' — ') || '(empty)';
+  return `[^${f.n}]: ${body}${ids ? ` <!-- footnote ${f.id} -->` : ''}`;
+}
+
+function cleanFootnote(input: FootnoteInput): Required<FootnoteInput> {
+  const s = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  return { note: s(input.note, 4000), url: safeUrl(input.url), title: s(input.title, 500), author: s(input.author, 500) };
+}
+
+export function makeFootnote(input: FootnoteInput): { el: Y.XmlElement; id: string } {
+  const id = newId('fn');
+  const el = new Y.XmlElement(FOOTNOTE_NODE);
+  el.setAttribute('id', id);
+  for (const [k, v] of Object.entries(cleanFootnote(input))) el.setAttribute(k, v);
+  return { el, id };
+}
+
+/** Text-holding elements in reading order (paragraphs, headings, ...; never inside HTML blocks or mind maps). */
+function textElements(doc: Y.Doc, tab: string): Y.XmlElement[] {
+  const out: Y.XmlElement[] = [];
+  const walk = (node: Y.XmlElement | Y.XmlFragment) => {
+    for (const c of node.toArray()) {
+      if (!(c instanceof Y.XmlElement) || c.nodeName === HTML_NODE || c.nodeName === MIND_NODE) continue;
+      if (c.toArray().some((k) => k instanceof Y.XmlText)) out.push(c);
+      walk(c);
+    }
+  };
+  walk(fragment(doc, tab));
+  return out;
+}
+
+/**
+ * Add a footnote. The marker goes right after the first occurrence of `afterText` in the tab
+ * (searching from the end when `last` is set), or at the end of the last paragraph when `afterText` is omitted.
+ * Returns the footnote id and its number.
+ */
+export function insertFootnote(
+  doc: Y.Doc,
+  input: FootnoteInput & { afterText?: string; last?: boolean; tab?: string },
+): { id: string; n: number } {
+  const tab = input.tab ?? MAIN_TAB;
+  let made: { el: Y.XmlElement; id: string } | null = null;
+  doc.transact(() => {
+    const els = textElements(doc, tab);
+    const needle = input.afterText?.trim();
+    if (!needle) {
+      let host = els.filter((e) => e.nodeName === 'paragraph').pop() ?? els.pop();
+      if (!host) {
+        host = makeParagraph().el;
+        const f = fragment(doc, tab);
+        f.insert(f.length, [host]);
+      }
+      made = makeFootnote(input);
+      host.insert(host.length, [made.el]);
+      return;
+    }
+    const order = input.last ? [...els].reverse() : els;
+    for (const el of order) {
+      const kids = el.toArray();
+      const idxs = kids.map((_, i) => i);
+      for (const i of input.last ? idxs.reverse() : idxs) {
+        const t = kids[i];
+        if (!(t instanceof Y.XmlText)) continue;
+        const delta = t.toDelta() as { insert: unknown; attributes?: Record<string, unknown> }[];
+        const plain = delta.map((op) => (typeof op.insert === 'string' ? op.insert : '\ufffc')).join('');
+        const at = input.last ? plain.lastIndexOf(needle) : plain.indexOf(needle);
+        if (at < 0) continue;
+        const cut = at + needle.length;
+        made = makeFootnote(input);
+        // Split the text node at the cut, keeping formatting on the part that moves after the marker.
+        const rest: { insert: string; attributes?: Record<string, unknown> }[] = [];
+        let off = 0;
+        for (const op of delta) {
+          if (typeof op.insert !== 'string') { off += 1; continue; }
+          const end = off + op.insert.length;
+          if (end > cut) rest.push({ insert: op.insert.slice(Math.max(0, cut - off)), attributes: op.attributes });
+          off = end;
+        }
+        const tail = t.length - cut;
+        const parts: (Y.XmlElement | Y.XmlText)[] = [made.el];
+        if (tail > 0) {
+          t.delete(cut, tail);
+          const nt = new Y.XmlText();
+          parts.push(nt);
+          el.insert(i + 1, parts);
+          nt.applyDelta(rest);
+        } else {
+          el.insert(i + 1, parts);
+        }
+        return;
+      }
+    }
+    throw new Error(`text not found in tab: "${needle.slice(0, 80)}"`);
+  });
+  const id = (made as { id: string } | null)!.id;
+  const n = listFootnotes(doc, tab).find((f) => f.id === id)?.n ?? 0;
+  return { id, n };
+}
+
+function findFootnote(doc: Y.Doc, id: string): Y.XmlElement | null {
+  for (const t of listTabs(doc)) {
+    const hit = footnoteElements(doc, t.id).find((el) => el.getAttribute('id') === id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Change a footnote's note or citation. Fields left out stay as they are. */
+export function updateFootnote(doc: Y.Doc, id: string, patch: FootnoteInput): void {
+  const el = findFootnote(doc, id);
+  if (!el) throw new Error(`no footnote ${id}`);
+  const clean = cleanFootnote(patch);
+  doc.transact(() => {
+    for (const k of Object.keys(clean) as (keyof FootnoteInput)[]) if (patch[k] !== undefined) el.setAttribute(k, clean[k]);
+  });
+}
+
+/** Delete a footnote marker (and so its note). */
+export function removeFootnote(doc: Y.Doc, id: string): void {
+  const el = findFootnote(doc, id);
+  if (!el) throw new Error(`no footnote ${id}`);
+  const parent = el.parent as Y.XmlElement;
+  const i = parent.toArray().indexOf(el);
+  parent.delete(i, 1);
 }
