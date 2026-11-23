@@ -92,6 +92,7 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
   const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || pageColumnWidth() >= 1100);
   const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
   const [openComments, setOpenComments] = useState(0);
+  const openAskAi = useCallback(() => { setAsking(true); setCommentsOpen(false); }, []);
   const startComment = useCallback((a: CommentAnchor) => { setPendingComment(a); setCommentsOpen(true); setAsking(false); }, []);
 
   const selectTab = useCallback((id: string) => {
@@ -169,7 +170,8 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
         <TagEditor pageId={pageId} initial={info.tags} readOnly={readOnly} />
         <TabBar doc={doc} active={tab} onSelect={selectTab} peers={uniquePeers(peers, true)} readOnly={readOnly} synced={synced} />
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId}
-          comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor} />
+          comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor}
+          onAskAi={readOnly ? undefined : openAskAi} />
         <Backlinks pageId={pageId} tab={tab} />
       </main>
       {asking && <Suspense fallback={null}><AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} /></Suspense>}

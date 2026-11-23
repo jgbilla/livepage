@@ -24,8 +24,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.65 ui-sa
 .peer-more { background: var(--line); color: var(--fg); font-weight: 600; }
 .name-input { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px; padding: 4px 8px; }
 .page { max-width: 760px; margin: 0 auto; padding: 24px 16px 200px; }
-.toolbar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-.toolbar button, .html-block-bar button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
+.html-block-bar button { border: 1px solid var(--line); background: var(--card); color: var(--fg);
   border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 14px; white-space: nowrap; }
 .editor .ProseMirror { outline: none; min-height: 60vh; }
 .editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); float: left; height: 0; pointer-events: none; }
@@ -413,8 +412,44 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
 .comments-toggle { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 14px; }
 .comments-toggle.on { border-color: var(--fg); }
 .editor-wrap { position: relative; }
-.comment-bubble { position: absolute; z-index: 5; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px;
-  padding: 4px 10px; font-size: 13px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; }
+/* Floating menu over selected text (bold, italic, link, comment, footnote, Ask AI) */
+.selection-menu { position: absolute; z-index: 20; display: flex; align-items: center; gap: 2px; padding: 3px; max-width: 100%;
+  background: var(--card); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 6px 20px rgba(0,0,0,.14); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.selection-menu::-webkit-scrollbar { display: none; }
+.selection-menu button { flex: none; border: 0; background: transparent; color: var(--fg); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 13px; cursor: pointer; min-height: 30px; }
+.selection-menu button:hover, .selection-menu button.on { background: var(--line); }
+.selection-menu button.ask { color: #7048e8; }
+.selection-menu code { font-size: 12px; }
+.selection-menu .sep { width: 1px; align-self: stretch; margin: 3px 2px; background: var(--line); }
+.selection-link { display: flex; gap: 4px; }
+.selection-link input { width: min(240px, 60vw); border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); padding: 4px 8px; font: inherit; font-size: 16px; }
+/* The "/" menu */
+.slash-menu { position: fixed; z-index: 60; overflow-y: auto; overscroll-behavior: contain; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 8px 30px #0002; padding: 4px; }
+.slash-group { padding: 8px 8px 2px; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+.slash-item { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; color: var(--fg); text-align: left;
+  padding: 5px 8px; border-radius: 6px; cursor: pointer; font: inherit; min-height: 40px; }
+.slash-item.active { background: var(--line); }
+.slash-icon { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); font-size: 13px; font-weight: 600; }
+.slash-text { display: flex; flex-direction: column; min-width: 0; }
+.slash-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-empty { padding: 8px; }
+/* Touch screens: "+" opens the "/" menu */
+.insert-fab { display: none; position: fixed; right: 16px; z-index: 30; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); font-size: 26px; line-height: 1; box-shadow: 0 6px 18px rgba(0,0,0,.18); cursor: pointer; }
+@media (pointer: coarse) { .insert-fab { display: block; } }
+body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { display: none; }
+/* To-do lists */
+.editor ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
+.editor ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
+.editor ul[data-type="taskList"] li > label { flex: none; display: flex; align-items: center; height: 1.7em; }
+.editor ul[data-type="taskList"] li > div > p { margin: 0; line-height: 1.7; }
+.editor ul[data-type="taskList"] li > label input { width: 16px; height: 16px; }
+.editor ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.editor ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--muted); text-decoration: line-through; }
+.editor .ProseMirror p.is-empty:not(.is-editor-empty)::before { content: attr(data-placeholder); color: var(--muted); float: left; height: 0; pointer-events: none; }
 .comment-anchor { background: rgba(255, 196, 0, .28); border-bottom: 2px solid rgba(230, 160, 0, .8); cursor: pointer; }
 .comment-anchor.comment-active { background: rgba(255, 196, 0, .55); }
 .has-comment { box-shadow: 0 0 0 2px rgba(230, 160, 0, .7); }
@@ -513,13 +548,8 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
   .page-topbar .comments-toggle { padding: 4px 8px; }
   .page-topbar button.primary { padding: 6px 12px; }
   .page-topbar .page-menu > button { padding: 4px 6px; }
-  /* Formatting toolbar: one row that scrolls sideways, sticky under the top bar while you write. */
-  .toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; position: sticky; top: var(--topbar-h); z-index: 8;
-    background: var(--bg); margin: 0 -16px 12px; padding: 6px 16px; scroll-padding: 0 16px; }
-  .toolbar::-webkit-scrollbar { display: none; }
-  .toolbar button { flex: none; padding: 5px 10px; }
-  /* Tabs and toolbar scroll sideways; fade the right edge so it is clear there is more. */
-  .tabbar-multi, .toolbar { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  /* Tabs scroll sideways; fade the right edge so it is clear there is more. */
+  .tabbar-multi { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 }
 /* Wide page column: the comments or Ask AI panel docks beside the page instead of covering it.
    cqw is the page column's width, so a docked sidebar is taken into account. */
@@ -535,13 +565,12 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
 @container main (max-width: 360px) {
   .page-topbar { gap: 4px; padding: 8px 8px; }
   .page { padding-left: 12px; padding-right: 12px; }
-  .toolbar { margin: 0 -12px 12px; padding: 6px 12px; }
 }
 /* PDF export: print only the page */
 @media print {
   :root { --bg: #fff; --fg: #000; --card: #fff; --line: #ccc; }
-  .sidebar, .sidebar-scrim, .topbar, .toolbar, .tag-row input, .tag-row button, .tabbar button:not(.tab-title), .backlinks, .html-block-bar, .code-area,
-  .collaboration-carets__caret, .link-menu, .mm-hint, .mm-node button { display: none !important; }
+  .sidebar, .sidebar-scrim, .topbar, .tag-row input, .tag-row button, .tabbar button:not(.tab-title), .backlinks, .html-block-bar, .code-area,
+  .collaboration-carets__caret, .link-menu, .slash-menu, .selection-menu, .insert-fab, .mm-hint, .mm-node button { display: none !important; }
   .layout, .layout-main, .shell { display: block !important; height: auto !important; overflow: visible !important; }
   .page { max-width: none; padding: 0; }
   .editor .ProseMirror { min-height: 0; }
