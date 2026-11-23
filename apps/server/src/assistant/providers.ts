@@ -131,6 +131,9 @@ async function openaiTurn(rt: AiRuntime, { system, messages, tools, signal, hand
     method: 'POST',
     headers,
     signal,
+    // The endpoint was checked to be public. A redirect could point anywhere (an internal
+    // address, or another host that would receive the API key), so it is an error.
+    redirect: 'error',
     body: JSON.stringify({
       model: rt.model,
       stream: true,
@@ -219,7 +222,7 @@ export async function listModels(rt: AiRuntime): Promise<string[]> {
       return ids;
     } catch (e) { throw anthropicError(e); }
   }
-  const res = await fetch(`${rt.baseUrl}/models`, { headers: rt.apiKey ? { authorization: `Bearer ${rt.apiKey}` } : {}, signal: AbortSignal.timeout(15_000) })
+  const res = await fetch(`${rt.baseUrl}/models`, { headers: rt.apiKey ? { authorization: `Bearer ${rt.apiKey}` } : {}, redirect: 'error', signal: AbortSignal.timeout(15_000) })
     .catch((e) => { throw new AiError(502, `Could not reach ${rt.baseUrl} (${(e as Error).message}).`); });
   if (res.status === 401 || res.status === 403) throw new AiError(401, `${rt.provider.label} rejected the API key.`);
   if (!res.ok) throw new AiError(502, `${rt.provider.label} error ${res.status} listing models.`);

@@ -21,10 +21,12 @@ export type RenderOptions = {
 export function pageToHtml(doc: Y.Doc, opts: RenderOptions = {}): { tabs: RenderedTab[]; blocks: RenderedBlock[] } {
   const blocks: RenderedBlock[] = [];
   const tabs = listTabs(doc).map((t) => {
-    const ctx: Ctx = { doc, opts, blocks, notes: [], tab: t.id };
+    // Tab ids come from the shared document, which any editor can write to directly, so they are
+    // escaped like any other text before they go into an id or href.
+    const ctx: Ctx = { doc, opts, blocks, notes: [], tab: escapeHtml(String(t.id)) };
     const body = (fragment(doc, t.id).toArray() as Y.XmlElement[]).map((n) => block(n, ctx)).join('\n');
     const notes = ctx.notes.length
-      ? `<section class="footnotes"><ol>${ctx.notes.map((n, i) => `<li id="fn-${t.id}-${i + 1}">${n} <a href="#fnref-${t.id}-${i + 1}" class="back" aria-label="Back to text">↩</a></li>`).join('')}</ol></section>`
+      ? `<section class="footnotes"><ol>${ctx.notes.map((n, i) => `<li id="fn-${ctx.tab}-${i + 1}">${n} <a href="#fnref-${ctx.tab}-${i + 1}" class="back" aria-label="Back to text">↩</a></li>`).join('')}</ol></section>`
       : '';
     return { id: t.id, title: t.title, html: body + notes };
   });
