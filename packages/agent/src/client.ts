@@ -8,7 +8,9 @@ import {
   actionsMap, addMindNode, appendHeading, fragment, htmlCodeText, htmlSections, insertHtmlBlock, insertMindMap, insertTable,
   addTab, listBlocks, listTabs, makeParagraph, resolveTab, pageAsMarkdown, pendingActions, removeMindNode, setHtmlBlockStatus, setHtmlCode,
   setMindNodeText, splitLinks, makeLink, updateAction, insertFootnote, updateFootnote, removeFootnote, listFootnotes,
-  type BlockAction, type FootnoteInput, type HtmlParts, type MindTree,
+  blockIdOf, blocksAsText, deleteBlocks, deleteTableRow, findBlock, hitsToReplace, insertBlocks, insertTableRow, marksAt, moveBlocks,
+  outlineAsText, pageOutline, readBlocks, replaceBlocks, setTableCell,
+  type BlockAction, type FootnoteInput, type HtmlParts, type MindTree, type ReadBlocksOptions, type ReplaceOptions, type Where,
 } from '@livepage/schema';
 
 export type AgentOptions = { url?: string; page: string; name?: string; color?: string; token?: string };
@@ -93,6 +95,103 @@ export class LiveAgent {
   }
 
   addHeading(content: string, level = 2) { appendHeading(this.doc, content, level, this.tab); }
+
+  // ---- Targeted edits: change only the blocks or words that need changing (see schema/blocks.ts) ----
+
+  /** A tab id for an id or title, or undefined when none was given (unlike useTab, which falls back to the main tab). */
+  tabId(idOrTitle?: string | null) { return idOrTitle ? resolveTab(this.doc, idOrTitle) : undefined; }
+
+  /** Headings per tab with block ids and section sizes: the cheap way to find where to edit. */
+  outline(tab?: string | null) { return outlineAsText(pageOutline(this.doc, this.tabId(tab))); }
+
+  /** Blocks with their ids as text: the whole page, a tab, one section (a heading's id) or a window from a block. */
+  readBlocks(opts: ReadBlocksOptions = {}) { return blocksAsText(this.doc, readBlocks(this.doc, opts)); }
+
+  /** Put our caret at the end of a block (and our dot on its tab), so people see where we are working. */
+  private caretAtBlock(id: string | undefined) {
+    const b = id ? findBlock(this.doc, id) : null;
+    if (!b) return;
+    this.provider.setAwarenessField('tab', b.tab);
+    const last = (n: Y.XmlElement | Y.XmlText): Y.XmlText | null => {
+      if (n instanceof Y.XmlText) return n;
+      const kids = n.toArray();
+      for (let i = kids.length - 1; i >= 0; i--) {
+        const k = kids[i];
+        const hit = k instanceof Y.XmlText || k instanceof Y.XmlElement ? last(k) : null;
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const t = last(b.node);
+    if (t) this.setCaret(t, t.length);
+  }
+
+  /** Insert Markdown as new blocks before/after a block, or at the start/end of the current tab. Returns the new ids. */
+  insertBlocks(markdown: string, where: Where = {}): string[] {
+    const r = insertBlocks(this.doc, markdown, { ...where, tab: where.tab ?? this.tab });
+    this.caretAtBlock(r.ids[r.ids.length - 1]);
+    return r.ids;
+  }
+
+  /** Replace a block (or the run through `through`) with Markdown. Returns the new ids. */
+  replaceBlocks(id: string, markdown: string, through?: string | null): string[] {
+    const r = replaceBlocks(this.doc, id, markdown, through);
+    this.caretAtBlock(r.ids[r.ids.length - 1]);
+    return r.ids;
+  }
+
+  deleteBlocks(id: string, through?: string | null): number {
+    const first = findBlock(this.doc, id);
+    const n = deleteBlocks(this.doc, id, through);
+    // Leave the caret just above where the deleted blocks were.
+    if (first) {
+      const nodes = fragment(this.doc, first.tab).toArray() as (Y.XmlElement | Y.XmlText)[];
+      const near = nodes[Math.min(Math.max(0, first.index - 1), nodes.length - 1)];
+      if (near) this.caretAtBlock(blockIdOf(near));
+    }
+    return n;
+  }
+
+  moveBlocks(id: string, where: Where, through?: string | null): string[] {
+    const r = moveBlocks(this.doc, id, where, through);
+    this.caretAtBlock(r.ids[r.ids.length - 1]);
+    return r.ids;
+  }
+
+  /**
+   * Find and replace inside text, in place. One replacement is typed out so people watch the edit happen;
+   * several are applied together. Returns how many were replaced and in which blocks.
+   */
+  async replaceText(find: string, replace: string, opts: ReplaceOptions = {}): Promise<{ replaced: number; blocks: string[] }> {
+    const hits = hitsToReplace(this.doc, find, opts);
+    const typed = hits.length === 1 && replace.length <= 2000;
+    // Last match first, so earlier offsets in the same text stay valid.
+    for (const h of [...hits].reverse()) {
+      const marks = marksAt(h.text, h.offset);
+      this.provider.setAwarenessField('tab', h.tab);
+      if (!typed) {
+        this.doc.transact(() => { h.text.delete(h.offset, h.length); if (replace) h.text.insert(h.offset, replace, marks); });
+        this.setCaret(h.text, h.offset + replace.length);
+        continue;
+      }
+      h.text.delete(h.offset, h.length);
+      this.setCaret(h.text, h.offset);
+      // Anchor to the character before the edit, so typing lands in the right place if someone edits earlier text meanwhile.
+      const anchor = Y.createRelativePositionFromTypeIndex(h.text, h.offset, -1);
+      const chunk = Math.max(2, Math.ceil(replace.length / 40));
+      for (let i = 0; i < replace.length; i += chunk) {
+        const at = (Y.createAbsolutePositionFromRelativePosition(anchor, this.doc)?.index ?? h.offset) + i;
+        h.text.insert(at, replace.slice(i, i + chunk), marks);
+        this.setCaret(h.text, at + Math.min(chunk, replace.length - i));
+        await sleep(20);
+      }
+    }
+    return { replaced: hits.length, blocks: [...new Set(hits.map((h) => h.blockId))] };
+  }
+
+  setTableCell(tableId: string, row: number, column: number, text: string) { setTableCell(this.doc, tableId, row, column, text); this.caretAtBlock(tableId); }
+  addTableRow(tableId: string, cells: string[], row?: number | null) { const at = insertTableRow(this.doc, tableId, cells, row); this.caretAtBlock(tableId); return at; }
+  removeTableRow(tableId: string, row: number) { deleteTableRow(this.doc, tableId, row); this.caretAtBlock(tableId); }
 
   /** Insert an HTML block. With `typeCode`, the code streams in like the agent is writing it. */
   async insertHtml(code: string, opts: { title?: string; typeCode?: boolean; cps?: number } = {}): Promise<string> {

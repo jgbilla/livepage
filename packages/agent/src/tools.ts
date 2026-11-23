@@ -33,9 +33,16 @@ export function createLivepageMcp(opts: LivepageMcpOptions): { server: McpServer
   const tab = z.string().optional().describe('Tab id or title to write in (see read_page). Omit for the main tab.');
 
   const server = new McpServer(
-    { name: 'livepage', version: '0.0.3' },
+    { name: 'livepage', version: '0.0.4' },
     {
       instructions: `You are a collaborator on a live Livepage page, next to the people editing it.
+To change what is already on a page, edit only what needs changing. Never rewrite a page, a tab or a section to change
+a few words, and never re-run a script that regenerates it: that costs far more tokens and drops the comments anchored to the old text.
+- Find the place: get_outline lists headings with block ids; read_blocks reads one section (or the page) with every block's id.
+- A few words or a sentence: replace_text (find and replace in place; formatting, links and footnotes stay).
+- A whole block or section: replace_blocks with Markdown. New content in the middle: insert_blocks before/after a block.
+- Remove or reorder: delete_blocks, move_blocks. Tables: set_table_cell, add_table_row, delete_table_row.
+Block ids stay valid while the page changes around them; a replaced or moved block gets a new id, which the tool returns.
 Pick the lightest block that does the job:
 - Plain writing: write_paragraph / add_heading.
 - Tabular data: insert_table (a native, editable table). Do not build tables in HTML.
@@ -53,14 +60,15 @@ create_page, move_page, set_page_tags and open_daily_page (folder YYYY/MM/DD, pa
 Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]; the link shows the target's current title
 and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
 search_pages finds pages by any words in them; get_link_graph shows how pages link together.
-Use list_pages or search_pages to find page ids, and call read_page first to see what is there.
+Use list_pages or search_pages to find page ids. Before writing, see what is there: get_outline for a long page
+(then read_blocks for the section you need), read_page for a short one.
 Templates: any page can be a template (list_templates). create_page with template starts a page as a copy of one, with
 {{date}}, {{title}} and similar filled in; other {{Fields}} are left for you: get_template_fields, then fill_template_fields.
 open_daily_page uses the person's daily template when they set one.
 import_markdown creates a page from Markdown (Obsidian [[links]], #tags, frontmatter and [^1] footnotes work); export_markdown
 gives a page as a Markdown file. publish_page puts a page on the public web (owner only), and unpublish_page takes it down.
 People can also ask you from the Ask AI panel inside Livepage. When asked to listen for Livepage requests, loop on
-wait_for_requests: for each request, work on its page (read_page first; use its tab), using your own context and tools
+wait_for_requests: for each request, work on its page (get_outline or read_page first; use its tab; edit what is there with the targeted edit tools), using your own context and tools
 as needed, then answer with reply_to_request. Send short progress with reply_to_request(done=false) on long tasks.
 People comment on text, blocks or the whole page and can @mention you. Check get_mentions, read the thread
 (list_comments) and the page, then answer with reply_to_comment and make any edit they asked for.`,
@@ -68,8 +76,94 @@ People comment on text, blocks or the whole page and can @mention you. Check get
     },
   );
 
-  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code, footnotes are [^n] with definitions (and ids) at the end of each tab.',
+  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code, footnotes are [^n] with definitions (and ids) at the end of each tab. On a long page, get_outline plus read_blocks for one section costs far fewer tokens. To edit, use read_blocks: it gives the block ids the edit tools need.',
     { page }, async ({ page: p }) => text((await agentFor(p)).read() || '(empty page)'));
+
+  // ---- Targeted edits ----
+  const blockId = z.string().min(1).max(80);
+  const through = blockId.optional().describe('Last block of a run: everything from block_id through this block (same tab) is included.');
+  const where = {
+    before: blockId.optional().describe('Put it right before this block.'),
+    after: blockId.optional().describe('Put it right after this block.'),
+    at: z.enum(['start', 'end']).optional().describe('Without before/after: the start or the end (default) of the tab.'),
+  };
+  const mdHelp = 'Markdown: headings, **bold**, lists, tables, code fences, [links](https://...), [[p_id]] page links.';
+  const idList = (ids: string[]) => ids.join(', ');
+
+  server.tool('get_outline',
+    'The page\'s structure without its text: each tab, its headings with their block ids, and how many blocks each section has. Start here on a long page, then read_blocks the one section you need.',
+    { page, tab: z.string().optional().describe('Only this tab (id or title). Omit for every tab.') },
+    async ({ page: p, tab: tb }) => tryText(async () => (await agentFor(p)).outline(tb) || '(empty page)'));
+
+  server.tool('read_blocks',
+    'Read blocks with their ids, each as "[block_id type]" followed by its Markdown. Give section (a heading\'s block id, from get_outline) to read just that heading and what is under it, from to start at a block, or neither for the whole page or tab. Use the ids with replace_blocks, insert_blocks, delete_blocks, move_blocks and the table tools.',
+    {
+      page,
+      tab: z.string().optional().describe('Only this tab (id or title). Omit for every tab.'),
+      section: blockId.optional().describe('A heading\'s block id: read that section only.'),
+      from: blockId.optional().describe('Start reading at this block.'),
+      limit: z.number().int().min(1).max(1000).default(200).describe('At most this many blocks.'),
+    },
+    async ({ page: p, tab: tb, section, from, limit }) => tryText(async () => {
+      const a = await agentFor(p);
+      return a.readBlocks({ tab: a.tabId(tb), section, from, limit }) || '(no blocks)';
+    }));
+
+  server.tool('replace_text',
+    'Change words in place: find exact text and replace it, keeping formatting, links, footnotes and comments around it. The cheapest way to fix, reword or update something. find must sit inside one paragraph, heading, list item or table cell, written as plain text (no Markdown markers). If it appears more than once, quote more words or pass block_id, occurrence or all. An empty replace deletes the text.',
+    {
+      page,
+      find: z.string().min(1).max(4000).describe('Exact text now on the page.'),
+      replace: z.string().max(20000).describe('Plain text to put in its place.'),
+      block_id: blockId.optional().describe('Only look inside this block.'),
+      tab: z.string().optional().describe('Only look in this tab (id or title). Omit for every tab.'),
+      occurrence: z.number().int().min(1).optional().describe('Which match to replace (1 = first) when there are several.'),
+      all: z.boolean().default(false).describe('Replace every match.'),
+      match_case: z.boolean().default(true),
+    },
+    async ({ page: p, find, replace, block_id, tab: tb, occurrence, all, match_case }) => tryText(async () => {
+      const a = await agentFor(p);
+      const r = await a.replaceText(find, replace, { blockId: block_id, tab: a.tabId(tb), occurrence, all, matchCase: match_case });
+      return `replaced ${r.replaced} in ${idList(r.blocks)}`;
+    }));
+
+  server.tool('replace_blocks',
+    `Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown. Everything else on the page is untouched. For a change of a few words use replace_text instead. Returns the new block ids. ${mdHelp}`,
+    { page, block_id: blockId, through_block_id: through, markdown: z.string().min(1) },
+    async ({ page: p, block_id, through_block_id, markdown }) =>
+      tryText(async () => `replaced; new blocks: ${idList((await agentFor(p)).replaceBlocks(block_id, markdown, through_block_id))}`));
+
+  server.tool('insert_blocks',
+    `Insert new content at a chosen place: before or after a block, or at the start or end of a tab. Returns the new block ids. ${mdHelp}`,
+    { page, tab, markdown: z.string().min(1), ...where },
+    async ({ page: p, tab: tb, markdown, before, after, at }) =>
+      tryText(async () => `inserted ${idList((await agentFor(p, tb)).insertBlocks(markdown, { before, after, at }))}`));
+
+  server.tool('delete_blocks', 'Delete one block, or a run of blocks (block_id through through_block_id). People can bring it back from History.',
+    { page, block_id: blockId, through_block_id: through },
+    async ({ page: p, block_id, through_block_id }) =>
+      tryText(async () => `deleted ${(await agentFor(p)).deleteBlocks(block_id, through_block_id)} block(s)`));
+
+  server.tool('move_blocks',
+    'Move one block, or a run of blocks (for example a section), before or after another block, or to the start or end of a tab (also another tab). Moved blocks get new ids, which are returned.',
+    { page, block_id: blockId, through_block_id: through, ...where, tab: z.string().optional().describe('With at: the tab to move to (id or title). Defaults to the tab the blocks are in.') },
+    async ({ page: p, block_id, through_block_id, before, after, at, tab: tb }) => tryText(async () => {
+      const a = await agentFor(p);
+      return `moved; new blocks: ${idList(a.moveBlocks(block_id, { before, after, at, tab: a.tabId(tb) }, through_block_id))}`;
+    }));
+
+  const tableId = blockId.describe('The table\'s block id (from read_blocks).');
+  server.tool('set_table_cell', 'Change one cell of a table. Rows and columns count from 1; row 1 is the header row.',
+    { page, block_id: tableId, row: z.number().int().min(1), column: z.number().int().min(1), text: z.string() },
+    async ({ page: p, block_id, row, column, text: t }) => tryText(async () => { (await agentFor(p)).setTableCell(block_id, row, column, t); return 'ok'; }));
+
+  server.tool('add_table_row', 'Add a row to a table: at the end, or at a row number (rows count from 1; row 1 is the header and stays first).',
+    { page, block_id: tableId, cells: z.array(z.string()), row: z.number().int().min(1).optional().describe('Where the new row goes. Omit to add it at the end.') },
+    async ({ page: p, block_id, cells, row }) => tryText(async () => `added row ${(await agentFor(p)).addTableRow(block_id, cells, row)}`));
+
+  server.tool('delete_table_row', 'Delete a row of a table (rows count from 1).',
+    { page, block_id: tableId, row: z.number().int().min(1) },
+    async ({ page: p, block_id, row }) => tryText(async () => { (await agentFor(p)).removeTableRow(block_id, row); return 'ok'; }));
 
   async function http<T = any>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${httpBase}/api${path}`, {
@@ -252,14 +346,14 @@ People comment on text, blocks or the whole page and can @mention you. Check get
   server.tool('add_tab', 'Add a tab to the page (tabs show at the top; each tab is its own scrolling document). Returns the tab id.',
     { page, title: z.string() }, async ({ page: p, title }) => text(`added tab ${(await agentFor(p)).addTab(title)}`));
 
-  server.tool('write_paragraph', 'Append a paragraph to the page. It is typed out live so collaborators see it appear. Link to a page or tab with [[p_id]], [[p_id#tab_id]] or [[p_id|label]] (ids from list_pages and read_page).',
+  server.tool('write_paragraph', 'Append a paragraph to the end of the page (to put text elsewhere, use insert_blocks; to change existing text, replace_text). It is typed out live so collaborators see it appear. Link to a page or tab with [[p_id]], [[p_id#tab_id]] or [[p_id|label]] (ids from list_pages and read_page).',
     { page, tab, text: z.string() }, async ({ page: p, tab: tb, text: t }) => { await (await agentFor(p, tb)).typeParagraph(t, 80); return text('ok'); });
 
-  server.tool('add_heading', 'Append a heading.',
+  server.tool('add_heading', 'Append a heading to the end of the page.',
     { page, tab, text: z.string(), level: z.number().int().min(1).max(3).default(2) },
     async ({ page: p, tab: tb, text: t, level }) => { (await agentFor(p, tb)).addHeading(t, level); return text('ok'); });
 
-  server.tool('insert_table', 'Append a native table (editable by everyone). First row is the header.',
+  server.tool('insert_table', 'Append a native table (editable by everyone). First row is the header. To change a table that is already there, use set_table_cell, add_table_row and delete_table_row.',
     { page, tab, rows: z.array(z.array(z.string())).min(1) },
     async ({ page: p, tab: tb, rows }) => { (await agentFor(p, tb)).addTable(rows); return text('ok'); });
 
@@ -321,7 +415,7 @@ People comment on text, blocks or the whole page and can @mention you. Check get
     { page, tab, code: z.string(), title: z.string().optional() },
     async ({ page: p, tab: tb, code, title }) => text(`inserted ${await (await agentFor(p, tb)).insertHtml(code, { title, typeCode: true })}`));
 
-  server.tool('update_html_block', 'Replace the code of an existing HTML/custom UI block.',
+  server.tool('update_html_block', 'Replace the code of an existing HTML/custom UI block (block ids come from read_page or read_blocks).',
     { page, block_id: z.string(), code: z.string() },
     async ({ page: p, block_id, code }) => { (await agentFor(p)).updateHtml(block_id, code); return text('ok'); });
 

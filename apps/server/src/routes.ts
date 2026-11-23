@@ -33,7 +33,7 @@ import { publishPage, unpublishPage } from './publish.ts';
 import { readDoc, writeDoc } from './docs.ts';
 import { fillFields, listFields } from '@livepage/schema';
 
-const CONTENT = new Set(['footnotes', 'content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
+const CONTENT = new Set(['footnotes', 'content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs', 'outline', 'blocks', 'move', 'replace-text']);
 const SHARE_ROLES = new Set(['editor', 'commenter', 'viewer']);
 
 // Tiny in-memory rate limits for login/signup. Good enough for one server instance.

@@ -57,6 +57,17 @@ export function tabToMarkdown(doc: Y.Doc, tab: string = MAIN_TAB, opts: ExportOp
 
 type Ctx = { doc: Y.Doc; opts: ExportOptions; notes: string[] };
 
+/**
+ * One block as Markdown, for agents that read and edit a page block by block. Footnotes in the block
+ * are numbered from 1 and their definitions follow the block, so sending the same Markdown back keeps them.
+ */
+export function blockToMarkdown(doc: Y.Doc, node: Y.XmlElement | Y.XmlText, opts: ExportOptions = {}): string {
+  const ctx: Ctx = { doc, opts, notes: [] };
+  const body = block(node, ctx);
+  const notes = ctx.notes.map((n, i) => `[^${i + 1}]: ${n}`).join('\n');
+  return [body, notes].filter(Boolean).join('\n\n');
+}
+
 function blocks(nodes: (Y.XmlElement | Y.XmlText)[], ctx: Ctx): string {
   return nodes.map((n) => block(n, ctx)).filter((s) => s !== '').join('\n\n');
 }
@@ -493,6 +504,16 @@ function mindMapBlock(doc: Y.Doc, outline: string, title: string): Y.XmlElement 
   }
   if (!mindMapNodes(doc, blockId).size) addMindNode(doc, blockId, null, title || 'Idea');
   return elementWith(MIND_NODE, [], { blockId, title });
+}
+
+/**
+ * Markdown as new, not yet inserted blocks for `doc` (the data of HTML blocks and mind maps is written
+ * to the doc's maps right away). [^1] footnotes need their definitions in the same text.
+ */
+export function markdownToBlocks(doc: Y.Doc, markdown: string, opts: ImportOptions = {}): Y.XmlElement[] {
+  const { body: rest, defs } = extractFootnotes(markdown.replace(/\r\n?/g, '\n'));
+  const b: Builder = { doc, opts, defs, tags: new Set(), linked: 0, unresolved: new Set() };
+  return blockNodes(md.lexer(rest), b);
 }
 
 /**
