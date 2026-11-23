@@ -7,7 +7,7 @@ import * as Y from 'yjs';
 import {
   actionsMap, addMindNode, appendHeading, fragment, htmlCodeText, htmlSections, insertHtmlBlock, insertMindMap, insertTable,
   addTab, listBlocks, listTabs, makeParagraph, resolveTab, pageAsMarkdown, pendingActions, removeMindNode, setHtmlBlockStatus, setHtmlCode,
-  setMindNodeText, updateAction, insertFootnote, updateFootnote, removeFootnote, listFootnotes,
+  setMindNodeText, splitLinks, makeLink, updateAction, insertFootnote, updateFootnote, removeFootnote, listFootnotes,
   type BlockAction, type FootnoteInput, type HtmlParts, type MindTree,
 } from '@livepage/schema';
 
@@ -71,13 +71,24 @@ export class LiveAgent {
   }
 
   /** Append a paragraph and type it out so people see the agent writing. cps = characters per second. */
+  /** [[p_id]], [[p_id#tab_id]] and [[p_id|label]] become links to that page or tab. */
   async typeParagraph(content: string, cps = 40) {
-    const { el, text } = makeParagraph();
+    let { el, text } = makeParagraph();
     this.doc.transact(() => { const f = fragment(this.doc, this.tab); f.insert(f.length, [el]); });
-    for (let i = 0; i < content.length; i++) {
-      text.insert(i, content[i]);
-      this.setCaret(text, i + 1);
-      await sleep(1000 / cps);
+    for (const part of splitLinks(content)) {
+      if (typeof part !== 'string') {
+        // A link is one inline element; typing continues in a new text run after it.
+        const next = new Y.XmlText();
+        this.doc.transact(() => el.insert(el.length, [makeLink(part), next]));
+        text = next;
+        await sleep(150);
+        continue;
+      }
+      for (let i = 0; i < part.length; i++) {
+        text.insert(text.length, part[i]);
+        this.setCaret(text, text.length);
+        await sleep(1000 / cps);
+      }
     }
   }
 

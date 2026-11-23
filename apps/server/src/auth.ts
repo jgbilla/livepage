@@ -107,10 +107,19 @@ export async function userFromApiToken(db: Db, token: string | null): Promise<(U
 }
 
 /**
+ * Short-lived tokens for the built-in assistant (apps/server/src/assistant). Each run gets one,
+ * in memory only, so the assistant joins the page over the collab socket as an agent with
+ * exactly the access of the person who asked it. Removed when the run ends.
+ */
+export const assistantTokens = new Map<string, Principal>();
+
+/**
  * Who is calling? Session cookie (browsers), "lp_" API token (agents acting for a person),
  * or, in development only, the shared AGENT_TOKEN (a super-agent that can open any page).
  */
 export async function resolvePrincipal(db: Db, opts: { cookie?: string | null; token?: string | null }): Promise<Principal | null> {
+  const assistant = opts.token ? assistantTokens.get(opts.token) : undefined;
+  if (assistant) return assistant;
   const devToken = process.env.NODE_ENV !== 'production' ? process.env.AGENT_TOKEN ?? 'dev-agent-token' : null;
   if (opts.token && devToken && opts.token === devToken) {
     return { id: 'dev-agent', email: '', name: 'Agent', kind: 'agent', superAgent: true };

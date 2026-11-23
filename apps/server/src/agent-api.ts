@@ -12,12 +12,23 @@
 //   POST /api/pages/:page/mind-maps    { root: { text, children? }, title } -> { id }
 //   GET  /api/pages/:page/actions                  -> pending actions sent from block controls (claims them)
 //   POST /api/pages/:page/actions/:id  { note }    -> mark handled
-//   POST /api/pages/:page/tabs         { title }   -> { id }
+//   POST /api/pages/:page/tabs         { title }   -> { id }      GET -> { tabs }
+//   GET  /api/pages/:page/backlinks                -> pages (and tabs) that link to this page
+// Paragraph text may contain links: [[p_id]], [[p_id#tab_id]], [[p_id|label]] (see packages/schema).
 //   GET  /api/pages/:page/footnotes                -> { footnotes: [{ id, n, note, url, title, author }] }
 //   POST /api/pages/:page/footnotes    { afterText?, last?, note?, url?, title?, author? } -> { id, n }  (cite a source)
 //   PUT  /api/pages/:page/footnotes/:id { note?, url?, title?, author? }
 //   DELETE /api/pages/:page/footnotes/:id
 // Writes go to the main tab unless ?tab=<id or title> is given.
+//
+// Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
+//   GET    /api/pages?path=a/b&tag=x&tag=y&match=any|all -> { pages (with folder_id, path, tags), folders, tags, views }
+//   POST   /api/pages          { title, path? | folder_id?, tags? } -> { page }
+//   PATCH  /api/pages/:page    { title?, path? | folder_id?, tags? }   (move only changes your own tree)
+//   PUT    /api/pages/:page/tags { tags }    POST { tag }    DELETE /tags/:tag
+//   POST   /api/daily          { date: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily")
+//   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
+//   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
 //
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
@@ -66,7 +77,7 @@ export type ContentCall = {
 
 /** Content operations on one page. The caller has already checked the principal can read it. */
 export async function handleContent({ req, res, hp, url, page, collection, id, who, writable }: ContentCall): Promise<void> {
-  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'footnotes');
+  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs' || collection === 'footnotes');
   if (!isRead && !writable) return send(res, 403, { error: 'read-only access to this page' });
   try {
     const body = req.method === 'GET' ? {} : await readJson(req);
@@ -94,6 +105,8 @@ export async function handleContent({ req, res, hp, url, page, collection, id, w
         } else if (req.method === 'POST' && collection === 'mind-maps') {
           if (!body.root || typeof body.root.text !== 'string') throw new Error('root.text is required');
           result = { id: insertMindMap(doc, body.root, { title: body.title, tab }) };
+        } else if (req.method === 'GET' && collection === 'tabs') {
+          result = { tabs: listTabs(doc) };
         } else if (req.method === 'POST' && collection === 'tabs') {
           result = { id: addTab(doc, str(body.title)) };
         } else if (req.method === 'GET' && collection === 'footnotes') {
