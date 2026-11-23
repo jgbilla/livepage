@@ -49,7 +49,8 @@ Pages live in folders in each person's sidebar (like Obsidian) and can have tags
 create_page, move_page, set_page_tags and open_daily_page (folder YYYY/MM/DD, page "daily") organize them.
 Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]; the link shows the target's current title
 and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
-Use list_pages to find page ids, and call read_page first to see what is there.
+search_pages finds pages by any words in them; get_link_graph shows how pages link together.
+Use list_pages or search_pages to find page ids, and call read_page first to see what is there.
 People can also ask you from the Ask AI panel inside Livepage. When asked to listen for Livepage requests, loop on
 wait_for_requests: for each request, work on its page (read_page first; use its tab), using your own context and tools
 as needed, then answer with reply_to_request. Send short progress with reply_to_request(done=false) on long tasks.`,
@@ -162,6 +163,24 @@ as needed, then answer with reply_to_request. Send short progress with reply_to_
     async ({ page: p }) => tryText(async () => {
       const { backlinks } = await http<{ backlinks: { page: string; title: string; from_tab: string; from_tab_title: string; to_tab: string | null }[] }>('GET', `/pages/${p}/backlinks`);
       return backlinks.map((b) => `${b.page}${b.from_tab !== 'main' ? `#${b.from_tab}` : ''}  ${b.title || 'Untitled'}${b.from_tab_title ? ` › ${b.from_tab_title}` : ''}${b.to_tab ? `  (links to tab ${b.to_tab})` : ''}`).join('\n') || 'no backlinks';
+    }));
+
+  server.tool('search_pages',
+    'Full-text search across every page this agent token can open: titles, tags and the text of all blocks (also tables, mind maps and HTML code). Every word must appear. Returns page ids with a snippet and the tab of the first match.',
+    { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(20) },
+    async ({ query, limit }) => tryText(async () => {
+      const { results } = await http<{ results: { id: string; title: string; tags: string[]; tab: string | null; snippet: string }[] }>(
+        'GET', `/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+      return results.map((r) => `${r.id}${r.tab && r.tab !== 'main' ? `#${r.tab}` : ''}  ${r.title || 'Untitled'}${r.tags.length ? `  ${r.tags.map((t) => `#${t}`).join(' ')}` : ''}${r.snippet ? `\n    ${r.snippet}` : ''}`).join('\n') || 'no matches';
+    }));
+
+  server.tool('get_link_graph',
+    'The graph of links between the pages this agent token can open: every page (id, title, tags) and every link "from -> to". Use it to find hubs, orphans and related pages.',
+    {}, async () => tryText(async () => {
+      const { nodes, edges } = await http<{ nodes: { id: string; title: string; tags: string[]; links: number }[]; edges: { source: string; target: string; count: number }[] }>('GET', '/graph');
+      const pages = nodes.map((n) => `${n.id}  ${n.title || 'Untitled'}${n.tags.length ? `  ${n.tags.map((t) => `#${t}`).join(' ')}` : ''}  (${n.links} links)`);
+      const links = edges.map((e) => `${e.source} -> ${e.target}${e.count > 1 ? ` (x${e.count})` : ''}`);
+      return `pages (${nodes.length}):\n${pages.join('\n')}\n\nlinks (${edges.length}):\n${links.join('\n') || 'none'}`;
     }));
 
   server.tool('add_tab', 'Add a tab to the page (tabs show at the top; each tab is its own scrolling document). Returns the tab id.',

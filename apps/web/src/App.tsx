@@ -10,6 +10,7 @@ import { NeonCallbackScreen } from './screens/NeonCallbackScreen';
 import { neonSignOut } from './neonAuth';
 import { Layout } from './Sidebar';
 import { ListScreen } from './screens/ListScreen';
+import { GraphScreen } from './screens/GraphScreen';
 
 export function App() {
   const { path } = useLocation();
@@ -44,6 +45,7 @@ export function App() {
       {page ? <PageScreen key={page[1]} pageId={page[1]} me={me} />
         : tag ? <ListScreen key={tag[1]} tag={decodeURIComponent(tag[1])} />
         : view ? <ListScreen key={view[1]} viewId={view[1]} />
+        : path === '/graph' ? <GraphScreen />
         : <HomeScreen me={me} />}
     </Layout>
   );

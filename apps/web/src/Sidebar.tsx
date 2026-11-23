@@ -9,6 +9,7 @@ import {
   titleOf, useWorkspace, type Folder, type TreePage, type View,
 } from './workspace';
 import { ViewDialog } from './screens/ViewDialog';
+import { shortcutLabel, SwitcherProvider, useOpenSwitcher } from './QuickSwitcher';
 
 // ---------- layout + open/closed state ----------
 
@@ -26,11 +27,13 @@ export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => voi
   useEffect(() => { if (narrow()) setOpen(false); }, [path]); // on phones, picking a page closes the drawer
   return (
     <SidebarCtx.Provider value={{ open, toggle }}>
+      <SwitcherProvider>
       <div className={`layout ${open ? 'sidebar-open' : 'sidebar-closed'}`}>
         {open && <Sidebar me={me} onLogout={onLogout} />}
         {open && <div className="sidebar-scrim" onClick={toggle} />}
         <div className="layout-main">{children}</div>
       </div>
+      </SwitcherProvider>
     </SidebarCtx.Provider>
   );
 }
@@ -71,6 +74,7 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [viewDialog, setViewDialog] = useState<View | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const openSwitcher = useOpenSwitcher();
 
   const tree = useMemo(() => {
     const folders = new Map<string | null, Folder[]>();
@@ -125,6 +129,12 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <div className="sb-head">
         <SidebarToggle />
         <Link to="/" className="brand">Livepage</Link>
+      </div>
+      <div className="sb-nav">
+        <button type="button" className="sb-search" onClick={openSwitcher} title="Search all pages, or jump to one">
+          <span>⌕ Search</span><kbd>{shortcutLabel}</kbd>
+        </button>
+        <Link to="/graph" className={`sb-graph ${path === '/graph' ? 'active' : ''}`}>◉ Graph</Link>
       </div>
       <div className="sb-actions">
         <button type="button" className="sb-today" onClick={today} disabled={busy} title="Open today's page (YYYY/MM/DD/daily)">

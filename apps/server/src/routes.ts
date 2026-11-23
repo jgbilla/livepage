@@ -17,6 +17,7 @@ import {
 import * as Y from 'yjs';
 import { META } from '@livepage/schema';
 import { handleContent, readJson, send } from './agent-api.ts';
+import { linkGraph, searchPages } from './search.ts';
 import { config } from './config.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
@@ -148,6 +149,15 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       const tags = Array.isArray(b.tags) ? await setPageTags(db, page.id, b.tags) : [];
       return send(res, 201, { page: { ...page, tags } });
     }
+
+    // Full-text search over every page you can open: title, tags and block text (?q=words&limit=20).
+    if (path === '/api/search' && method === 'GET') {
+      const q = (url.searchParams.get('q') ?? '').slice(0, 300);
+      const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
+      return send(res, 200, { query: q, results: await searchPages(db, who, q, limit) });
+    }
+    // Every page you can open and the links between them (for the graph view).
+    if (path === '/api/graph' && method === 'GET') return send(res, 200, await linkGraph(db, who));
 
     // Today's page: folder YYYY/MM/DD, page "daily". The browser sends its local date.
     if (path === '/api/daily' && method === 'POST') {
