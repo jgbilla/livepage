@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { IndexeddbPersistence } from 'y-indexeddb';
 import { META, MAIN_TAB, listTabs, type CommentAnchor } from '@livepage/schema';
 import type { Editor } from '@tiptap/core';
 import { api, colorFor, type Me, type Role } from '../api';
@@ -9,9 +10,13 @@ import { Link, navigate, useLocation } from '../router';
 import { Backlinks } from '../Backlinks';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
-import { ShareDialog } from './ShareDialog';
-import { HistoryPanel } from './HistoryPanel';
-import { AssistantPanel } from './AssistantPanel';
+import { forgetLocalPage, localPageName, noteLocalPage } from '../offline';
+import { PageSkeleton } from '../Skeleton';
+
+// Opened on demand, so they are not part of what every page view downloads.
+const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })));
+const HistoryPanel = lazy(() => import('./HistoryPanel').then((m) => ({ default: m.HistoryPanel })));
+const AssistantPanel = lazy(() => import('./AssistantPanel').then((m) => ({ default: m.AssistantPanel })));
 import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
 import { PageMenu } from '../PageMenu';
@@ -23,20 +28,43 @@ import { CommentsPanel } from './CommentsPanel';
 import { CommentStore } from '../editor/comments';
 
 
+type Live = { doc: Y.Doc; provider: HocuspocusProvider };
+
 export function PageScreen({ pageId, me }: { pageId: string; me: Me }) {
   const [info, setInfo] = useState<{ role: Role; page: PageInfo } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The live connection starts right away, next to the request for the page's details, not after it.
+  // The copy saved in this browser (if any) fills the page before the server has answered.
+  // The session cookie authenticates the WebSocket; no token needed in the browser.
+  const live = useMemo(() => {
+    const doc = new Y.Doc();
+    const name = localPageName(me.id, pageId);
+    let local: IndexeddbPersistence | null = null;
+    try { local = new IndexeddbPersistence(name, doc); noteLocalPage(name); } catch { /* private mode: no local copy */ }
+    const provider = new HocuspocusProvider({ url: collabUrl(), name: pageId, document: doc, token: 'session' });
+    return { doc, provider, local, name };
+  }, [pageId, me.id]);
+  useEffect(() => () => {
+    live.provider.destroy();
+    void live.local?.destroy().catch(() => {});
+    live.doc.destroy();
+  }, [live]);
+
   useEffect(() => {
-    api<{ role: Role; page: PageInfo }>(`/pages/${pageId}`).then(setInfo).catch((e) => setError(e.message));
-  }, [pageId]);
+    api<{ role: Role; page: PageInfo }>(`/pages/${pageId}`).then(setInfo).catch((e) => {
+      setError(e.message);
+      // Gone, or no longer shared with you: don't keep a copy on this device.
+      if (e?.status === 404 || e?.status === 403) void (live.local?.clearData() ?? Promise.resolve()).catch(() => {}).then(() => forgetLocalPage(live.name));
+    });
+  }, [pageId, live]);
 
   if (error) return <div className="center"><p>{error} <Link to="/">Back to your pages</Link></p></div>;
-  if (!info) return <div className="center muted">Loading…</div>;
-  return <LivePage pageId={pageId} me={me} role={info.role} info={info.page} />;
+  if (!info) return <PageSkeleton />;
+  return <LivePage pageId={pageId} me={me} role={info.role} info={info.page} live={live} />;
 }
 
-function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Role; info: PageInfo }) {
+function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; role: Role; info: PageInfo; live: Live }) {
   const ws = useWorkspace();
   const folderPath = ws?.pages.find((p) => p.id === pageId)?.path ?? info.path;
   const readOnly = role === 'viewer' || role === 'commenter';
@@ -74,12 +102,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
     if (url.href !== location.href) navigate(url.pathname + url.search, true); // keeps useLocation in step
   }, []);
 
-  // The session cookie authenticates the WebSocket; no token needed in the browser.
-  const { doc, provider } = useMemo(() => {
-    const doc = new Y.Doc();
-    const provider = new HocuspocusProvider({ url: collabUrl(), name: pageId, document: doc, token: 'session' });
-    return { doc, provider };
-  }, [pageId]);
+  const { doc, provider } = live;
 
   const tabTitle = useCallback((id: string) => listTabs(doc).find((t) => t.id === id)?.title ?? id, [doc]);
 
@@ -111,7 +134,6 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
 
   // A page shared with you that is not in your sidebar yet (just opened from a link): show it.
   useEffect(() => { if (ws && !ws.pages.some((p) => p.id === pageId)) void reloadWorkspace(); }, [ws, pageId]);
-  useEffect(() => () => { provider.destroy(); doc.destroy(); }, [provider, doc]);
   useEffect(() => { provider.setAwarenessField('tab', tab); }, [provider, tab]);
   useEffect(() => { document.title = `${title || 'Untitled'} · Livepage`; }, [title]);
 
@@ -150,12 +172,12 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
           comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor} />
         <Backlinks pageId={pageId} tab={tab} />
       </main>
-      {asking && <AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} />}
+      {asking && <Suspense fallback={null}><AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} /></Suspense>}
       <CommentsPanel pageId={pageId} tab={tab} tabTitle={tabTitle} onSelectTab={selectTab} provider={provider} me={me} role={role}
         editor={editor} store={commentStore} pending={pendingComment} setPending={setPendingComment}
         open={commentsOpen} setOpen={setCommentsOpen} onCount={setOpenComments} />
-      {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
-      {showHistory && <HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} />}
+      {sharing && <Suspense fallback={null}><ShareDialog pageId={pageId} onClose={() => setSharing(false)} /></Suspense>}
+      {showHistory && <Suspense fallback={null}><HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} /></Suspense>}
     </div>
   );
 }

@@ -3,7 +3,8 @@
 // a moment later with a snippet. Enter opens the page at the tab where the words are and
 // scrolls to them.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { MAIN_TAB } from '@livepage/schema';
+// Same value as MAIN_TAB in @livepage/schema; not imported so search doesn't pull in the sync code.
+const MAIN_TAB = 'main';
 import { api } from './api';
 import { navigate } from './router';
 import { reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';

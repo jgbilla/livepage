@@ -13,7 +13,8 @@
     "agent:demo": "pnpm --filter @livepage/agent demo",
     "agent:mcp": "pnpm --filter @livepage/agent mcp",
     "agent:docs": "pnpm --filter @livepage/agent docs",
-    "check:responsive": "node scripts/responsive-check.mjs"
+    "check:responsive": "node scripts/responsive-check.mjs",
+    "check:perf": "node scripts/perf-check.mjs"
   },
   "dependencies": {
     "@neon/config": "^1.14.6",

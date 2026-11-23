@@ -201,7 +201,10 @@ export async function connect(url: string | undefined): Promise<Db> {
   const pool = new pg.Pool({
     connectionString: url,
     max: Number(process.env.PG_POOL_MAX ?? 5),
-    idleTimeoutMillis: 30_000,
+    // Keep connections open between requests: a fresh TLS connection to a hosted database
+    // costs several round trips, which a person would otherwise feel on the next click.
+    idleTimeoutMillis: Number(process.env.PG_IDLE_MS ?? 5 * 60_000),
+    keepAlive: true,
     connectionTimeoutMillis: 10_000,
   });
   // Hosted databases close idle connections and restart for maintenance; don't crash on that.

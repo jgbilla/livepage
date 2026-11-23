@@ -28,6 +28,20 @@ Every push to `main` redeploys automatically.
 - **Built-in assistant (✦ Ask AI):** needs `AI_KEY_SECRET` on the `livepage` service. New Blueprints generate it; on an existing service add it under **Environment** with a long random value (`openssl rand -base64 32`). Then each person adds their own API key on their home page.
 - **Connect an agent:** in the app, **Agents > + Agent token**. It shows the exact command for Claude Code or any MCP client.
 
+## Speed
+
+The app is built to load fast anywhere: the first screen is a small download, the editor loads alongside it on page links, files are compressed and cached for a year, and pages you have opened show from a copy saved in your browser while the live connection catches up. `pnpm check:perf` measures it on a throttled connection.
+
+Two things about free hosting are outside the app's control:
+
+- **Render's free plan sleeps.** After 15 minutes without traffic the service stops, and the next visit waits about a minute while it starts again. Nothing in the code can shorten that. Your options:
+  - **Paid instance** (Starter, about $7 a month): never sleeps. Change `plan: free` to `plan: starter` for the `livepage` service in `render.yaml`, or pick it in the dashboard. The sandbox can stay free: it only serves a tiny static runner page, though a sleeping sandbox delays HTML blocks on the first visit.
+  - **Keep-alive ping**: a free uptime monitor (UptimeRobot, Better Stack, cron-job.org) that requests `https://<your app>/api/health` every 10 minutes keeps it awake. Free, but it uses the plan's monthly free hours faster (750 hours covers one always-on service, not two), and Render may change how it treats this.
+  - **Another host** that doesn't sleep (Fly.io, Railway, a small VPS): see "Other hosts" below.
+- **Neon's free plan also pauses** the database after 5 minutes idle; waking it adds about half a second to the first request. A keep-alive ping does not prevent this (`/api/health` doesn't touch the database). Neon's paid plan lets you turn auto-suspend off.
+
+Put the app and the database in the same region (for example Render Oregon and Neon US West). Every request crosses that link, so distance there is paid on every click.
+
 ## Other hosts
 
 The app is one Docker image (`Dockerfile`) run in two roles. Anywhere that runs Docker works (Railway, Fly.io, a VPS with `docker compose`):

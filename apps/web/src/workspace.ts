@@ -15,17 +15,38 @@ const liveTitles = new Map<string, string>(); // titles typed in an open page, b
 const listeners = new Set<() => void>();
 const emit = () => { state = state && { ...state }; listeners.forEach((l) => l()); };
 
+// The last workspace this person saw is kept in the browser, so the sidebar and home list
+// appear at once on the next visit and are then refreshed from the server.
+const CACHE_KEY = 'lp.workspace';
+let cacheUser: string | null = null;
+export function hydrateWorkspace(userId: string) {
+  if (cacheUser === userId) return;
+  cacheUser = userId;
+  if (state) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null');
+    if (saved?.user === userId && saved.ws?.pages) state = saved.ws;
+    else localStorage.removeItem(CACHE_KEY);
+  } catch { /* storage blocked or corrupt: just load from the server */ }
+}
+let fresh = false; // has the server answered since this tab opened?
+/** On sign-out: the next person on this device starts from nothing. */
+export function resetWorkspace() { state = null; fresh = false; cacheUser = null; liveTitles.clear(); emit(); }
+
 let inflight: Promise<void> | null = null;
 export function reloadWorkspace(): Promise<void> {
   inflight ??= api<Workspace>('/pages')
-    .then((w) => { state = w; liveTitles.clear(); emit(); })
+    .then((w) => {
+      state = w; fresh = true; liveTitles.clear(); emit();
+      try { if (cacheUser) localStorage.setItem(CACHE_KEY, JSON.stringify({ user: cacheUser, ws: w })); } catch { /* full or blocked */ }
+    })
     .finally(() => { inflight = null; });
   return inflight;
 }
 
 export function useWorkspace(): Workspace | null {
   const ws = useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state);
-  useEffect(() => { if (!state) void reloadWorkspace(); }, []);
+  useEffect(() => { if (!state || !fresh) void reloadWorkspace(); }, []);
   return ws;
 }
 
