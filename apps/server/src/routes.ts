@@ -19,6 +19,7 @@ import { META } from '@livepage/schema';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { linkGraph, searchPages } from './search.ts';
 import { config } from './config.ts';
+import { sameOrigin } from './origin.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
 import {
@@ -35,23 +36,30 @@ import { fillFields, listFields } from '@livepage/schema';
 const CONTENT = new Set(['footnotes', 'content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
 const SHARE_ROLES = new Set(['editor', 'commenter', 'viewer']);
 
-// Tiny in-memory rate limit for login/signup (per IP). Good enough for one server instance.
-const attempts = new Map<string, { n: number; reset: number }>();
-function limited(ip: string, max = 10, windowMs = 60_000): boolean {
+// Tiny in-memory rate limits for login/signup. Good enough for one server instance.
+// Per IP (10 a minute) and, for logins, per account (10 wrong passwords per 15 minutes), because
+// the IP comes from X-Forwarded-For behind a proxy and a client can put anything at its front.
+export const attempts = new Map<string, { n: number; reset: number }>();
+export function limited(key: string, max = 10, windowMs = 60_000): boolean {
   const now = Date.now();
-  const a = attempts.get(ip);
-  if (!a || a.reset < now) { attempts.set(ip, { n: 1, reset: now + windowMs }); return false; }
+  if (attempts.size > 50_000) for (const [k, a] of attempts) if (a.reset < now) attempts.delete(k); // stay small
+  if (attempts.size > 50_000) attempts.clear();
+  const a = attempts.get(key);
+  if (!a || a.reset < now) { attempts.set(key, { n: 1, reset: now + windowMs }); return false; }
   return ++a.n > max;
+}
+const LOGIN_FAILS = { max: 10, windowMs: 15 * 60_000 };
+const loginKey = (email: unknown) => `login:${String(email ?? '').trim().toLowerCase().slice(0, 254)}`;
+/** Has this account had too many wrong passwords lately? (Does not count this attempt.) */
+function accountLocked(email: unknown): boolean {
+  const a = attempts.get(loginKey(email));
+  return !!a && a.reset >= Date.now() && a.n >= LOGIN_FAILS.max;
 }
 const clientIp = (req: IncomingMessage) =>
   (config.trustProxy ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') || req.socket.remoteAddress || '?';
 
-/** Reject cross-site writes that ride on the session cookie. */
-function sameOrigin(req: IncomingMessage): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true; // non-browser clients (agents) send no Origin
-  try { return new URL(origin).host === req.headers.host; } catch { return false; }
-}
+/** Reject cross-site writes that ride on the session cookie (see origin.ts). */
+const isSameOrigin = (req: IncomingMessage) => sameOrigin(req.headers.origin, req.headers.host);
 
 export async function handleApi(req: IncomingMessage, res: ServerResponse, db: Db, hp: Hocuspocus): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://x');
@@ -59,7 +67,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
   const method = req.method ?? 'GET';
   const secure = config.secureCookies;
 
-  if (method !== 'GET' && method !== 'HEAD' && !sameOrigin(req)) return send(res, 403, { error: 'cross-site request blocked' });
+  if (method !== 'GET' && method !== 'HEAD' && !isSameOrigin(req)) return send(res, 403, { error: 'cross-site request blocked' });
 
   try {
     // ---------- public ----------
@@ -84,8 +92,12 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/auth/login' && method === 'POST') {
       if (limited(clientIp(req))) return send(res, 429, { error: 'Too many attempts. Try again in a minute.' });
       const b = await readJson(req);
+      if (accountLocked(b.email)) return send(res, 429, { error: 'Too many wrong passwords for this account. Try again in 15 minutes, or continue with Google.' });
       const user = await login(db, b.email, b.password);
-      if (!user) return send(res, 401, { error: 'Wrong email or password.' });
+      if (!user) {
+        limited(loginKey(b.email), LOGIN_FAILS.max, LOGIN_FAILS.windowMs);
+        return send(res, 401, { error: 'Wrong email or password.' });
+      }
       const raw = await createSession(db, user.id);
       return send(res, 200, { user }, { 'Set-Cookie': sessionCookie(raw, secure) });
     }
@@ -139,7 +151,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     const tokenDel = path.match(/^\/api\/tokens\/(tok_[\w-]+)$/);
     if (tokenDel && method === 'DELETE') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
-      await db.query('delete from api_tokens where id = $1 and user_id = $2', [tokenDel[1], who.id]);
+      const gone = await db.query('delete from api_tokens where id = $1 and user_id = $2 returning id', [tokenDel[1], who.id]);
+      if (gone.length) dropConnections(hp, (c) => c?.user?.tokenId === tokenDel[1]); // a deleted token stops working at once
       return send(res, 200, { ok: true });
     }
     // Optional webhook, called when someone @mentions this agent in a comment.
@@ -445,17 +458,25 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   if (!sub && method === 'DELETE') {
     if (role !== 'owner') return send(res, 403, { error: 'Only the owner can delete a page.' });
     await deletePage(db, pageId);
+    hp.closeConnections(pageId);
     return send(res, 200, { ok: true });
   }
 
   if (sub === 'members') {
-    if (method === 'GET') return send(res, 200, { members: await members(db, pageId) });
+    // Email addresses are for the owner (who manages access); everyone else sees names and roles.
+    if (method === 'GET') {
+      const list = await members(db, pageId);
+      return send(res, 200, { members: role === 'owner' ? list : list.map(({ email: _email, ...m }) => m) });
+    }
     if (!atLeast(role, 'owner')) return send(res, 403, { error: 'Only the owner can change who has access.' });
     if (method === 'PUT' && id) {
       const b = await readJson(req);
       const next = b.role === null ? null : String(b.role);
       if (next !== null && !SHARE_ROLES.has(next)) return send(res, 400, { error: 'bad role' });
       await setMemberRole(db, pageId, id, next as Exclude<Role, 'owner'> | null);
+      // Open live connections keep the access they had when they connected. Close them so
+      // everyone reconnects and is checked again: a removed person loses access at once.
+      hp.closeConnections(pageId);
       return send(res, 200, { members: await members(db, pageId) });
     }
   }
@@ -575,4 +596,11 @@ function viewInput(b: any): { name: string; tags: string[]; match: 'any' | 'all'
   const tags = [...new Set(raw.map(cleanTag).filter(Boolean))].slice(0, 20) as string[];
   if (!tags.length) return { error: 'Pick at least one tag for the view.' };
   return { name, tags, match: b.match === 'all' ? 'all' : 'any' };
+}
+
+/** Close live connections (any page) whose context matches; their clients reconnect and are checked again. */
+export function dropConnections(hp: Hocuspocus, match: (context: any) => boolean) {
+  hp.documents.forEach((doc) => {
+    for (const conn of doc.getConnections()) if (match(conn.context)) conn.close();
+  });
 }
