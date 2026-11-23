@@ -10,6 +10,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, use
 import type { Me } from './api';
 import { PaneContext, navigate, type Pane } from './router';
 import { useNarrow } from './Sidebar';
+import { HScrollEdges, useHScroll } from './HScroll';
 import { Icon, type IconName } from './design/Icon';
 import { titleOf, useWorkspace, type Workspace } from './workspace';
 import {
@@ -159,7 +160,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
           <div key={g.id} className={`wt-pane ${gi === st.focus ? 'wt-focused' : ''}`} hidden={!isShown}
             onPointerDownCapture={() => focusGroup(gi)} onFocusCapture={() => focusGroup(gi)}>
             {!narrow && (
-              <div className="wt-strip" role="tablist" aria-label={split ? `Open tabs, ${gi === 0 ? 'left' : 'right'} side` : 'Open tabs'}
+              <Strip active={`${g.active} ${g.tabs.length}`} label={split ? `Open tabs, ${gi === 0 ? 'left' : 'right'} side` : 'Open tabs'}
                 onDragOver={(e) => { if (e.dataTransfer.types.includes(TAB_DRAG) || e.dataTransfer.types.includes(PAGE_DRAG)) e.preventDefault(); }}
                 onDrop={dropAt(gi, g.tabs.length)}>
                 {g.tabs.map((t, ti) => (
@@ -169,7 +170,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
                 ))}
                 <button type="button" className="wt-new" title={`New tab (${ALT}T)`} aria-label="New tab"
                   onClick={() => openInTab('/', { group: gi, index: g.tabs.length })}><Icon name="plus" /></button>
-              </div>
+              </Strip>
             )}
             <div className="wt-body" ref={(el) => { bodies.current[gi] = el; }}
               onScroll={split ? (e) => scrolls.current.set(g.active, e.currentTarget.scrollTop) : undefined}>
@@ -190,6 +191,17 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
         onDoubleClick={() => setSplit(0.5)} />}
       {menu && <TabMenu {...menu} groups={st.groups.length} onClose={() => setMenu(null)} />}
       {switcher && <TabSwitcher ws={ws} onClose={() => setSwitcher(false)} />}
+    </div>
+  );
+}
+
+/** A group's strip of tabs: scrolls sideways with edge fades and keeps the active tab in view. */
+function Strip({ active, label, children, ...rest }: { active: string; label: string; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+  const { ref, edges, nudge } = useHScroll<HTMLDivElement>(active);
+  return (
+    <div className="hscroll wt-strip-wrap">
+      <div ref={ref} className="wt-strip" role="tablist" aria-label={label} {...rest}>{children}</div>
+      <HScrollEdges edges={edges} nudge={nudge} />
     </div>
   );
 }

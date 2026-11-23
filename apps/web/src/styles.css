@@ -219,11 +219,11 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .editor .selectedCell { background: var(--lp-accent-soft); }
 
 /* Tabs: underline tabs, the active one in ink */
-.tabbar { display: flex; align-items: flex-end; gap: var(--lp-space-1); margin: 0 0 var(--lp-space-6); border-bottom: var(--lp-border-width) solid transparent; overflow-x: auto; }
+.tabbar { display: flex; align-items: flex-end; gap: var(--lp-space-1); margin: 0; border-bottom: var(--lp-border-width) solid transparent; overflow-x: auto; }
 .tabbar-multi { border-bottom-color: var(--lp-border); }
 .tab { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) 0 0;
   transition: border-color var(--lp-duration-fast), background-color var(--lp-duration-instant); }
-.tab:hover { background: var(--lp-hover); }
+@media (hover: hover) { .tab:hover { background: var(--lp-hover); } }
 .tab-active { border-bottom-color: var(--lp-ink); }
 .tab-active:hover { background: transparent; }
 .tab-title, .tab-close, .tab-add { border: 0; background: transparent; color: var(--lp-text-secondary); font: inherit; font-size: var(--lp-text-md); font-weight: var(--lp-weight-medium);
@@ -238,6 +238,19 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .tab-add:hover { color: var(--lp-text); background: var(--lp-hover); }
 .tabbar { scrollbar-width: none; }
 .tabbar::-webkit-scrollbar { display: none; }
+/* Sideways rows (page tabs, open tabs): no rubber-banding past the ends, items snap into place, and
+   a fade with an arrow over each end that has more (see HScroll.tsx). */
+.tabbar, .wt-strip { overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: 40px; -webkit-overflow-scrolling: touch; }
+.tab, .tab-add, .wt-new { scroll-snap-align: start; flex-shrink: 0; }
+.wt-tab { scroll-snap-align: start; }
+.hscroll { position: relative; min-width: 0; --hscroll-bg: var(--lp-bg); }
+.tabbar-wrap { margin: 0 0 var(--lp-space-6); }
+.hscroll-edge { position: absolute; top: 0; bottom: 1px; z-index: 1; display: flex; align-items: center; width: 44px; padding: 0 var(--lp-space-1); border: 0;
+  color: var(--lp-text-secondary); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity var(--lp-duration-fast) var(--lp-ease-out); }
+.hscroll-edge.on { opacity: 1; pointer-events: auto; }
+.hscroll-start { left: 0; justify-content: flex-start; background: linear-gradient(to right, var(--hscroll-bg) 45%, transparent); }
+.hscroll-end { right: 0; justify-content: flex-end; background: linear-gradient(to left, var(--hscroll-bg) 45%, transparent); }
+.hscroll-edge:hover { color: var(--lp-text); }
 
 /* ---------- Sign in ---------- */
 .auth { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--lp-space-4);
@@ -844,8 +857,6 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   .page-topbar button.primary { padding: 0 var(--lp-space-3); }
   .page-topbar .icon { font-size: 17px; }
   .page { padding-left: var(--lp-space-4); padding-right: var(--lp-space-4); }
-  /* Tabs scroll sideways; fade the right edge so it is clear there is more. */
-  .tabbar-multi { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 }
 /* Wide page column: the comments or Ask AI panel docks beside the page instead of covering it.
    cqw is the page column's width, so a docked sidebar is taken into account. */
@@ -868,7 +879,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   .sidebar, .sidebar-scrim, .topbar, .tag-row input, .tag-row button, .tabbar button:not(.tab-title), .backlinks, .html-block-bar, .code-area,
   .collaboration-carets__caret, .link-menu, .slash-menu, .selection-menu, .insert-fab, .mm-hint, .mm-node button { display: none !important; }
   .layout, .layout-main, .shell { display: block !important; height: auto !important; overflow: visible !important; }
-  .wt-strip, .wt-mobilebar, .wt-divider, .wt-split .wt-pane:not(.wt-focused) { display: none !important; }
+  .wt-strip-wrap, .hscroll-edge, .wt-mobilebar, .wt-divider, .wt-split .wt-pane:not(.wt-focused) { display: none !important; }
   .wt, .wt-pane.wt-focused, .wt-body { display: block !important; height: auto !important; overflow: visible !important; }
   .page { max-width: none; padding: 0; }
   .editor .ProseMirror { min-height: 0; }
@@ -909,7 +920,8 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 .wt .graph-screen { height: calc(100vh - var(--wt-chrome)); }
 @media (max-width: 800px) { .wt .comments, .wt .assistant { top: 0; } }
 
-.wt-strip { position: sticky; top: 0; z-index: calc(var(--lp-z-sticky) + 1); display: flex; align-items: flex-end; gap: 2px; height: var(--wt-strip-h);
+.wt-strip-wrap { position: sticky; top: 0; z-index: calc(var(--lp-z-sticky) + 1); --hscroll-bg: var(--lp-bg-subtle); }
+.wt-strip { display: flex; align-items: flex-end; gap: 2px; height: var(--wt-strip-h);
   padding: 0 var(--lp-space-2); background: var(--lp-bg-subtle); border-bottom: var(--lp-border-width) solid var(--lp-border);
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .wt-strip::-webkit-scrollbar { display: none; }
@@ -918,7 +930,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   border-radius: var(--lp-radius-md) var(--lp-radius-md) 0 0; font-size: var(--lp-text-sm); font-weight: var(--lp-weight-medium); line-height: 1;
   color: var(--lp-text-secondary); cursor: default; user-select: none; -webkit-user-select: none;
   transition: background var(--lp-duration-instant), color var(--lp-duration-instant); }
-.wt-tab:hover { color: var(--lp-text); background: var(--lp-hover); }
+@media (hover: hover) { .wt-tab:hover { color: var(--lp-text); background: var(--lp-hover); } }
 .wt-tab-active, .wt-tab-active:hover { background: var(--lp-bg); color: var(--lp-text); border-color: var(--lp-border); height: 33px; }
 .wt-tab:focus-visible { box-shadow: inset var(--lp-focus-ring); }
 .wt-split .wt-tab-focused::before { content: ''; position: absolute; left: var(--lp-space-2); right: var(--lp-space-2); top: -1px; height: 2px;
@@ -946,7 +958,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 .wt-split .wt-pane { display: flex; flex-direction: column; height: 100vh; }
 .wt-split .wt-pane:nth-of-type(1) { flex: 0 0 calc(var(--wt-ratio, .5) * 100%); }
 .wt-split .wt-pane:nth-of-type(2) { flex: 1 1 0; order: 2; border-left: var(--lp-border-width) solid var(--lp-border); }
-.wt-split .wt-strip { position: static; flex: none; }
+.wt-split .wt-strip-wrap { position: relative; flex: none; }
 .wt-split .wt-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .wt-split .comments, .wt-split .assistant { position: absolute; }
 .wt-divider { order: 1; flex: none; width: 7px; margin: 0 -4px 0 -3px; z-index: calc(var(--lp-z-sticky) + 2); cursor: col-resize;

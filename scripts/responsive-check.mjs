@@ -148,6 +148,14 @@ const SCREENS = [
     }, ready: '.switcher',
   },
   { name: 'graph', go: (p) => p.goto(`${BASE}/graph`), ready: '.graph-canvas' },
+  {
+    name: 'page-tabs', go: async (p, s) => {
+      // The docs page has many page tabs: pick the last one, which starts off screen on phones.
+      await p.goto(`${BASE}/p/${s.pageId}`);
+      await p.waitForSelector('.tabbar-multi .tab-title');
+      await p.locator('.tabbar-multi .tab-title').last().click();
+    }, ready: '.tabbar-multi .tab-active',
+  },
   { name: 'tabs', go: (p, s) => openTabs(p, s, false), ready: '.wt-visible .ProseMirror' },
   { name: 'split', go: (p, s) => openTabs(p, s, true), ready: '.wt-visible .ProseMirror' },
   {
@@ -220,6 +228,29 @@ function measure() {
   }
   for (const bar of document.querySelectorAll('.topbar')) {
     if (bar.getBoundingClientRect().height > 64) problems.push(`top bar is ${Math.round(bar.getBoundingClientRect().height)}px tall (wraps onto more rows)`);
+  }
+  // Sideways rows of tabs: they must not rubber-band or scroll into empty space, must not use a
+  // mask-image on the scroller (iOS Safari stops painting its content), and keep the active tab in view.
+  for (const row of document.querySelectorAll('.tabbar-multi, .wt-strip')) {
+    if (!row.getClientRects().length) continue;
+    const st = getComputedStyle(row);
+    const name = row.classList.contains('wt-strip') ? 'open tabs strip' : 'page tabs';
+    if ((st.webkitMaskImage && st.webkitMaskImage !== 'none') || (st.maskImage && st.maskImage !== 'none')) problems.push(`${name} uses a mask-image on the scroller`);
+    if (row.scrollWidth <= row.clientWidth + 1) continue;
+    if (st.overscrollBehaviorX === 'auto') problems.push(`${name} can rubber-band sideways (overscroll-behavior-x: auto)`);
+    const rr = row.getBoundingClientRect();
+    const active = row.querySelector('.tab-active, [aria-selected="true"]');
+    if (active) {
+      const ar = active.getBoundingClientRect();
+      if (ar.left < rr.left - 1 || ar.right > rr.right + 1) problems.push(`${name}: the active tab is scrolled out of view`);
+    }
+    const was = row.scrollLeft;
+    row.scrollLeft = row.scrollWidth;
+    const items = [...row.children].filter((c) => c.getClientRects().length);
+    const last = items[items.length - 1]?.getBoundingClientRect();
+    const padR = parseFloat(st.paddingRight) || 0;
+    if (last && last.right < rr.right - padR - 24) problems.push(`${name} scrolls ${Math.round(rr.right - padR - last.right)}px past its last tab into empty space`);
+    row.scrollLeft = was;
   }
   // Open workspace tabs: one row.
   for (const strip of document.querySelectorAll('.wt-strip')) {
