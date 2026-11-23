@@ -24,6 +24,7 @@ One scrolling page per document. You write in it like Notion. An AI agent sits i
 | 7 | Hosting | Anyone can self-host: `docker compose up`. |
 | 8 | What goes on a page | **Anything, mixed freely**: your text, tables, mind maps, drawings and designs, and agent custom UI, all as first-class blocks on the same page, editable by people and agents. |
 | 9 | Tabs | **Optional tabs per page**, shown at the top. A page with one tab looks like a normal page. Each tab is its own scrolling page. |
+| 11 | License | **MIT.** |
 | 10 | Agent UI patterns | Borrowed from CopilotKit's OpenIntelligentUI (MIT): the agent picks text vs native component vs custom UI, custom UI streams in a fixed order, and a validated host bridge sends input back to the agent. Patterns only, no code embedded (it is a chat app). |
 
 ---
@@ -302,8 +303,7 @@ Scaling later: Hocuspocus Redis extension for several server instances.
 
 ## 14. Open questions
 
-1. **License.** AGPL-3.0 stops someone from hosting a closed fork as a paid service. MIT/Apache gets wider adoption. Pick before the first public push. (No license is set yet.)
-2. **Name.** "Livepage" is a placeholder.
-3. **Agent permissions.** Should agents edit directly by default, or start in suggestion mode and earn direct edit rights per page?
-4. **Built-in AI.** Keep the server model-free forever, or ship an optional "Ask AI" button with bring-your-own-key?
-5. **Offline.** Yjs supports offline editing via IndexedDB. Is offline-first a goal for v1?
+1. **Name.** "Livepage" is a placeholder.
+2. **Agent permissions.** Should agents edit directly by default, or start in suggestion mode and earn direct edit rights per page?
+3. **Built-in AI.** Keep the server model-free forever, or ship an optional "Ask AI" button with bring-your-own-key?
+4. **Offline.** Yjs supports offline editing via IndexedDB. Is offline-first a goal for v1?

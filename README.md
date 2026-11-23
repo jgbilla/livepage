@@ -91,3 +91,7 @@ packages/agent  Live agent client, demo script, MCP server
 ## Security note
 
 The current auth is a placeholder: one shared `AGENT_TOKEN`, everyone else is a guest. Don't expose this to the internet yet. Accounts and permissions are Milestone 1.
+
+## License
+
+[MIT](LICENSE)
