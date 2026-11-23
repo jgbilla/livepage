@@ -12,7 +12,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { Hocuspocus } from '@hocuspocus/server';
 import * as Y from 'yjs';
-import { COMMENT_LIMITS, cleanAnchor, currentAnchorText, parseMentions, plainBody, textAnchorForQuote, type CommentAnchor, MAIN_TAB } from '@livepage/schema';
+import { COMMENT_LIMITS, cleanAnchor, currentAnchorText, parseMentions, plainBody, textAnchorForQuote, type CommentAnchor, type MentionTarget, MAIN_TAB } from '@livepage/schema';
 import type { Db } from './db.ts';
 import { randomId, type Principal } from './auth.ts';
 import { atLeast, type Role } from './pages.ts';
@@ -105,7 +105,9 @@ export type NewComment = {
 
 export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, input: NewComment): Promise<CommentRow> {
   if (!atLeast(role, 'commenter')) throw new HttpError(403, 'You can view this page but not comment on it.');
-  const { body, mentions } = await checkBody(db, pageId, input.body);
+  const checked = await checkBody(db, pageId, input.body);
+  const body = checked.body;
+  let mentions = checked.mentions;
   let threadId: string;
   let tab = MAIN_TAB;
   let anchor: CommentAnchor | null = null;
@@ -116,6 +118,10 @@ export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role
     if (!root || root.id !== root.thread_id) throw new HttpError(404, 'Comment thread not found.');
     threadId = root.id;
     tab = root.tab;
+    // A person's reply that @mentions nobody goes to the agents already in the conversation, the way a
+    // reply in a chat would: every connected agent that answered in this thread, and the built-in assistant
+    // if it answered this person here. Mention anyone and only they are notified.
+    if (who.kind === 'human' && !who.superAgent && !mentions.length) mentions = await threadAgents(db, pageId, threadId, who.id);
   } else {
     threadId = id;
     tab = typeof input.tab === 'string' && /^[\w-]{1,64}$/.test(input.tab) ? input.tab : MAIN_TAB;
@@ -160,6 +166,20 @@ export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role
   const agentIds = targets.filter((m) => m.kind === 'agent' && m.id !== ASSISTANT_ID).map((m) => m.id);
   if (agentIds.length) void notifyAgents(db, hp, pageId, row, agentIds).catch((e) => console.warn('[comments] webhook:', e.message));
   return row;
+}
+
+/** Agents that replied in a thread, as implicit mentions for a follow-up from this person. */
+async function threadAgents(db: Db, pageId: string, threadId: string, personId: string): Promise<MentionTarget[]> {
+  const rows = await db.query<{ token_id: string | null; author_id: string }>(
+    `select distinct c.token_id, c.author_id from comments c
+      where c.page_id = $1 and c.thread_id = $2 and c.author_kind = 'agent'`, [pageId, threadId]);
+  const allowed = new Map((await mentionables(db, pageId)).filter((m) => m.kind === 'agent').map((m) => [m.id, m.name]));
+  const out: MentionTarget[] = [];
+  for (const r of rows) {
+    const id = r.token_id ?? (r.author_id === personId ? ASSISTANT_ID : null);
+    if (id && allowed.has(id) && !out.some((m) => m.id === id)) out.push({ kind: 'agent', id, name: allowed.get(id)! });
+  }
+  return out;
 }
 
 export async function updateComment(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, id: string, patch: { body?: unknown; resolved?: unknown }) {
@@ -398,7 +418,7 @@ async function answerWithAssistant(db: Db, hp: Hocuspocus, who: Principal, role:
     role: (c.author_kind === 'agent' && c.author_id === who.id && !c.token_id ? 'assistant' : 'user') as 'user' | 'assistant',
     text: `${c.author_kind === 'human' ? `${c.author_name}: ` : ''}${plainBody(c.body)}`,
   }));
-  const prompt = `${who.name} mentioned you in a comment on this page${quote ? ' (on the selected text)' : ''}. ` +
+  const prompt = `${who.name} wrote to you in a comment on this page${quote ? ' (on the selected text)' : ''}. ` +
     `Do what the comment asks, on the page if it asks for changes. Your final message is posted as your reply in the comment thread, so keep it short.\n\n` +
     `Comment: ${plainBody(last.body).replace(/@AI\b/g, '').trim()}`;
 

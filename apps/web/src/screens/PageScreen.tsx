@@ -23,6 +23,7 @@ import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
 import { PageMenu } from '../PageMenu';
 import { Presence, uniquePeers, type Peer } from '../Presence';
+import { agentKey, assignAgentShades } from '../agents';
 import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
 
 type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[]; is_template?: boolean; published_slug?: string | null };
@@ -128,6 +129,7 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
     const onAwareness = () => {
       const list: Peer[] = [];
       awareness.getStates().forEach((s) => s.user && list.push({ ...s.user, tab: s.tab ?? MAIN_TAB }));
+      assignAgentShades(list.filter((p) => p.kind === 'agent').map(agentKey));
       setPeers(list);
     };
     const meta = doc.getMap(META);
@@ -163,7 +165,7 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
         {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
         {isTemplate && <span className="badge badge-template narrow-hide" title="New pages can start from this template">Template</span>}
         {publishedSlug && <a className="badge badge-published narrow-hide" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Published: open the public page"><span className="dot" /><span className="badge-label">Published</span></a>}
-        <Presence peers={peers} />
+        <Presence peers={peers} meId={me.id} tabTitle={listTabs(doc).length > 1 ? tabTitle : undefined} />
         <Link to={`/graph?page=${pageId}`} className="ghost-link narrow-hide" title="Graph around this page"><Icon name="graph" />Graph</Link>
         {!readOnly && <button type="button" className="ghost narrow-hide" onClick={() => setShowHistory(true)} title="Version history"><Icon name="history" />History</button>}
         {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }} title="Ask AI" aria-label="Ask AI"><Icon name="sparkles" /><span className="ask-ai-label">Ask AI</span></button>}

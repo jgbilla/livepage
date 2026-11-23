@@ -111,15 +111,34 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .crumbs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; color: var(--lp-text-tertiary); }
 
 /* ---------- Presence: people are circles, agents are violet squircles ---------- */
-.peers { display: flex; align-items: center; flex: 1; min-width: 0; padding-left: var(--lp-space-2); }
+.peers-wrap { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+.peers { display: flex; align-items: center; min-width: 0; padding: 2px 0 2px var(--lp-space-2); border: 0; background: transparent; font: inherit; cursor: pointer; border-radius: var(--lp-radius-md); -webkit-tap-highlight-color: transparent; }
+.peers:focus-visible { box-shadow: var(--lp-focus-ring); outline: none; }
 .peer { width: 26px; height: 26px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--lp-radius-full); position: relative;
   color: #fff; font-size: var(--lp-text-2xs); font-weight: var(--lp-weight-semibold); letter-spacing: .02em; line-height: 1; margin-left: -6px;
   box-shadow: 0 0 0 2px var(--lp-bg); cursor: default; user-select: none; transition: transform var(--lp-duration-fast) var(--lp-ease-out); }
 .peer:first-child { margin-left: 0; }
-.peer:hover { transform: translateY(-2px); z-index: 1; }
-.peer-agent { border-radius: var(--lp-radius-agent); background: var(--lp-agent-gradient) !important; color: var(--lp-on-agent); }
-.peer-agent .peer-spark { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 4px; background: var(--lp-surface); color: var(--lp-agent);
+@media (hover: hover) { .peers .peer:hover { transform: translateY(-2px); z-index: 1; } }
+/* Agents sit side by side instead of overlapping, so each one's initials and spark stay readable. */
+.peers .peer-agent:not(:first-child) { margin-left: 5px; }
+.peers .peer-agent + .peer:not(.peer-agent) { margin-left: 5px; }
+/* One violet per agent on the page (agents.ts), so several agents are easy to tell apart. */
+.agent-shade-1 { --agent: var(--lp-agent-1); --agent-gradient: var(--lp-agent-gradient-1); }
+.agent-shade-2 { --agent: var(--lp-agent-2); --agent-gradient: var(--lp-agent-gradient-2); }
+.agent-shade-3 { --agent: var(--lp-agent-3); --agent-gradient: var(--lp-agent-gradient-3); }
+.agent-shade-4 { --agent: var(--lp-agent-4); --agent-gradient: var(--lp-agent-gradient-4); }
+.agent-shade-5 { --agent: var(--lp-agent-5); --agent-gradient: var(--lp-agent-gradient-5); }
+.peer-agent { border-radius: var(--lp-radius-agent); background: var(--agent-gradient, var(--lp-agent-gradient)) !important; color: var(--lp-on-agent); }
+.peer-agent .peer-spark { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 4px; background: var(--lp-surface); color: var(--agent, var(--lp-agent));
   display: grid; place-items: center; box-shadow: 0 0 0 1.5px var(--lp-bg); }
+.menu.peers-menu { left: 0; right: auto; top: calc(100% + 4px); width: min(280px, calc(100vw - 24px)); padding: var(--lp-space-1-5); }
+.peers-menu-head { font-size: var(--lp-text-xs); font-weight: var(--lp-weight-semibold); color: var(--lp-text-tertiary); padding: var(--lp-space-1) var(--lp-space-2) var(--lp-space-1-5); }
+.peers-row { display: flex; align-items: center; gap: var(--lp-space-2-5); padding: var(--lp-space-1-5) var(--lp-space-2); border-radius: var(--lp-radius-sm); min-width: 0; }
+.peers-row .peer { margin-left: 0; cursor: default; }
+.peers-row .peer:hover { transform: none; }
+.peers-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--lp-text-md); color: var(--lp-text); }
+.peers-row .agent-tag { flex: none; }
+.peers-where { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .peer-more { background: var(--lp-active); color: var(--lp-text); }
 
 /* ---------- Page and editor ---------- */
@@ -184,10 +203,10 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .collaboration-carets__label { position: absolute; top: -1.55em; left: -2px; display: inline-flex; align-items: center; gap: 3px; font: var(--lp-weight-semibold) var(--lp-text-2xs)/1.5 var(--lp-font-sans);
   color: #fff; padding: 0 6px; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) var(--lp-radius-sm) 2px; white-space: nowrap; user-select: none; letter-spacing: .01em;
   box-shadow: var(--lp-shadow-1); }
-.collaboration-carets__caret.is-agent { border-left-color: var(--lp-agent) !important; animation: lp-caret-glow 1.6s var(--lp-ease-standard) infinite; }
-.collaboration-carets__caret.is-agent .collaboration-carets__label { background: var(--lp-agent-gradient) !important; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) var(--lp-radius-sm) 2px; }
+.collaboration-carets__caret.is-agent { border-left-color: var(--agent, var(--lp-agent)) !important; animation: lp-caret-glow 1.6s var(--lp-ease-standard) infinite; }
+.collaboration-carets__caret.is-agent .collaboration-carets__label { background: var(--agent-gradient, var(--lp-agent-gradient)) !important; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) var(--lp-radius-sm) 2px; }
 .collaboration-carets__caret.is-agent .collaboration-carets__label svg { width: 10px; height: 10px; }
-@keyframes lp-caret-glow { 0%, 100% { box-shadow: -2px 0 6px -1px color-mix(in srgb, var(--lp-agent) 70%, transparent); } 50% { box-shadow: -2px 0 2px -1px transparent; } }
+@keyframes lp-caret-glow { 0%, 100% { box-shadow: -2px 0 6px -1px color-mix(in srgb, var(--agent, var(--lp-agent)) 70%, transparent); } 50% { box-shadow: -2px 0 2px -1px transparent; } }
 
 /* Mind map */
 .mm-hint { font-size: var(--lp-text-xs); }
@@ -235,6 +254,7 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .tab-close:hover { color: var(--lp-text); }
 .tab input { border: 0; background: transparent; color: var(--lp-text); font: inherit; font-size: var(--lp-text-md); padding: var(--lp-space-2) var(--lp-space-3); outline: none; width: 10ch; box-shadow: none !important; }
 .tab-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px var(--lp-bg); }
+.tab-dot-agent { border-radius: 2px; background: var(--agent, var(--lp-agent)); }
 .tab-add { color: var(--lp-text-tertiary); border-radius: var(--lp-radius-sm); }
 .tab-add:hover { color: var(--lp-text); background: var(--lp-hover); }
 .tabbar { scrollbar-width: none; }
@@ -778,7 +798,8 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
    (comments, Ask AI) start right at its bottom edge at any scroll position. */
 .page-topbar { height: var(--topbar-h); padding-top: 0; padding-bottom: 0; flex-wrap: nowrap; }
 .page-topbar > * { flex-shrink: 0; }
-.page-topbar .peers { flex-shrink: 1; overflow: hidden; }
+.page-topbar .peers-wrap { flex-shrink: 1; }
+.page-topbar .peers { overflow: hidden; }
 .page-topbar .crumbs { flex-shrink: 1; min-width: 0; }
 .comments { position: fixed; z-index: 9; top: var(--topbar-h); right: 0; bottom: 0; width: 340px; max-width: 100vw; display: flex; flex-direction: column;
   background: var(--lp-bg-subtle); border-left: var(--lp-border-width) solid var(--lp-border); box-shadow: var(--lp-shadow-2); font-size: var(--lp-text-md); line-height: var(--lp-leading-ui);
@@ -806,7 +827,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 .comment-meta .ghost.small, .small.ghost { font-size: var(--lp-text-xs); padding: 0 var(--lp-space-1); min-height: 22px; }
 .avatar { width: 20px; height: 20px; border-radius: var(--lp-radius-full); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: var(--lp-weight-semibold); flex: none; }
 .avatar-agent { border-radius: var(--lp-radius-agent); background: var(--lp-agent-gradient) !important; color: var(--lp-on-agent); }
-.agent-tag { font-size: var(--lp-text-2xs); font-weight: var(--lp-weight-semibold); color: var(--lp-agent-text); background: var(--lp-agent-soft); border-radius: var(--lp-radius-xs); padding: 0 5px; line-height: 16px; }
+.agent-tag { font-size: var(--lp-text-2xs); font-weight: var(--lp-weight-semibold); color: var(--agent, var(--lp-agent-text)); background: color-mix(in srgb, var(--agent, var(--lp-agent)) 12%, transparent); border-radius: var(--lp-radius-xs); padding: 0 5px; line-height: 16px; }
 .comment-body { font-size: var(--lp-text-md); white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 28px; }
 .mention { background: var(--lp-accent-soft); color: var(--lp-accent-text); border-radius: var(--lp-radius-xs); padding: 0 3px; font-weight: var(--lp-weight-medium); }
 .mention-agent { background: var(--lp-agent-soft); color: var(--lp-agent-text); }
@@ -848,7 +869,10 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   .shell { --topbar-h: 49px; }
   .page-topbar { gap: var(--lp-space-1); padding: 0 var(--lp-space-2-5); }
   .page-topbar > * { flex-shrink: 0; }
-  .page-topbar .peers { flex-shrink: 1; overflow: hidden; padding: 2px 0 2px var(--lp-space-2); }
+  .page-topbar .peers-wrap { flex-shrink: 1; }
+  .page-topbar .peers { overflow: hidden; padding: 2px 0 2px var(--lp-space-2); }
+  /* On a phone the list spans the screen under the top bar instead of hanging off one edge. */
+  .page-topbar .menu.peers-menu { position: fixed; left: var(--lp-space-3); right: var(--lp-space-3); width: auto; top: calc(var(--topbar-h) + 4px); }
   .narrow-hide { display: none !important; }
   .narrow-only { display: block; }
   .badge-label, .ask-ai-label { display: none; }

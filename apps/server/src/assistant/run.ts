@@ -68,7 +68,7 @@ export async function runAssistant(input: RunInput): Promise<void> {
   let agent: LiveAgent | null = null;
   let tools: PageTools | null = null;
   try {
-    agent = await LiveAgent.connect({ page: pageId, url: `ws://127.0.0.1:${config.port}/collab`, token, name, color: '#6e56cf' });
+    agent = await LiveAgent.connect({ page: pageId, url: `ws://127.0.0.1:${config.port}/collab`, token, name, id: `ai:${user.id}`, color: '#6e56cf' });
     const tab = resolveTab(agent.doc, input.tab);
     agent.useTab(tab);
     tools = new PageTools(agent, tab);

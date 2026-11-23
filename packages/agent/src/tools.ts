@@ -9,9 +9,34 @@ export type LivepageMcpOptions = {
   wsUrl: string;
   /** Agent token (lp_...) the agent acts as. */
   token: string;
-  /** Name shown on the agent's caret. */
+  /** Name shown on the agent's avatar and caret. A generic one ("Agent") gives way to the MCP client's own name. */
   agentName?: string;
+  /** Stable id for this agent (its token id), so several agents on a page stay apart. */
+  agentId?: string;
 };
+
+const GENERIC_NAME = /^\s*(agent|ai|assistant|bot|mcp|token|default|livepage)?\s*$/i;
+const KNOWN_CLIENTS: [RegExp, string][] = [
+  [/^claude[-_ ]?code/i, 'Claude Code'], [/^claude[-_ ]?(ai|desktop)?$/i, 'Claude'], [/^cursor/i, 'Cursor'],
+  [/^codex/i, 'Codex'], [/^gemini/i, 'Gemini CLI'], [/visual studio code|^vscode/i, 'VS Code'], [/^windsurf/i, 'Windsurf'],
+  [/^zed/i, 'Zed'], [/^cline/i, 'Cline'], [/^goose/i, 'Goose'], [/^chatgpt|^openai/i, 'ChatGPT'],
+];
+
+/** A readable name from an MCP client's clientInfo.name: "claude-code" -> "Claude Code". */
+export function clientDisplayName(raw: string | undefined): string | undefined {
+  const name = (raw ?? '').trim();
+  if (!name) return undefined;
+  for (const [re, label] of KNOWN_CLIENTS) if (re.test(name)) return label;
+  const words = name.replace(/[-_]+/g, ' ').replace(/\b(mcp|client)\b/gi, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return undefined;
+  return words.map((w) => (w === w.toLowerCase() ? w[0].toUpperCase() + w.slice(1) : w)).join(' ').slice(0, 40);
+}
+
+/** The name an agent shows on the page: its token's name, unless that says nothing (then its MCP client's). */
+export function agentDisplayName(tokenName: string | undefined, clientName: string | undefined): string {
+  if (tokenName && !GENERIC_NAME.test(tokenName)) return tokenName;
+  return clientDisplayName(clientName) ?? (tokenName?.trim() || 'Agent');
+}
 
 /** HTTP base of the app for a collab WebSocket URL: wss://host/collab -> https://host */
 export const httpBaseFor = (wsUrl: string) => wsUrl.replace(/^ws/, 'http').replace(/\/collab\/?$/, '');
@@ -22,7 +47,9 @@ export function createLivepageMcp(opts: LivepageMcpOptions): { server: McpServer
   async function agentFor(page: string, tab?: string) {
     let a = agents.get(page);
     if (!a) {
-      a = LiveAgent.connect({ page, url: opts.wsUrl, token: opts.token, name: opts.agentName ?? 'Agent' });
+      // Named when it first joins a page; by then the client has introduced itself (initialize).
+      const name = agentDisplayName(opts.agentName, server.server.getClientVersion()?.name);
+      a = LiveAgent.connect({ page, url: opts.wsUrl, token: opts.token, name, id: opts.agentId });
       agents.set(page, a);
       a.catch(() => agents.delete(page));
     }
@@ -69,9 +96,11 @@ import_markdown creates a page from Markdown (Obsidian [[links]], #tags, frontma
 gives a page as a Markdown file. publish_page puts a page on the public web (owner only), and unpublish_page takes it down.
 People can also ask you from the Ask AI panel inside Livepage. When asked to listen for Livepage requests, loop on
 wait_for_requests: for each request, work on its page (get_outline or read_page first; use its tab; edit what is there with the targeted edit tools), using your own context and tools
-as needed, then answer with reply_to_request. Send short progress with reply_to_request(done=false) on long tasks.
-People comment on text, blocks or the whole page and can @mention you. Check get_mentions, read the thread
-(list_comments) and the page, then answer with reply_to_comment and make any edit they asked for.`,
+as needed, then answer with reply_to_request, and go straight back to wait_for_requests: the person's follow-ups in the same chat
+arrive as new requests carrying the earlier turns. Send short progress with reply_to_request(done=false) on long tasks.
+People comment on text, blocks or the whole page and can @mention you. Once you have replied in a thread, the person's
+later replies there reach you too, without an @. Check get_mentions, read the thread (list_comments) and the page,
+then answer with reply_to_comment and make any edit they asked for.`,
 
     },
   );
@@ -165,9 +194,9 @@ People comment on text, blocks or the whole page and can @mention you. Check get
     { page, block_id: tableId, row: z.number().int().min(1) },
     async ({ page: p, block_id, row }) => tryText(async () => { (await agentFor(p)).removeTableRow(block_id, row); return 'ok'; }));
 
-  async function http<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  async function http<T = any>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const res = await fetch(`${httpBase}/api${path}`, {
-      method,
+      method, signal,
       headers: { authorization: `Bearer ${opts.token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -183,17 +212,22 @@ People comment on text, blocks or the whole page and can @mention you. Check get
 
   type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
   server.tool('wait_for_requests',
-    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and claim them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. Call it in a loop when asked to listen.',
+    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and take them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Call it in a loop when asked to listen, including after each reply_to_request, so follow-ups reach you.',
     { wait_seconds: z.number().min(0).max(30).default(25) },
-    async ({ wait_seconds }) => tryText(async () => {
-      const { requests } = await http<{ requests: AgentReq[] }>('GET', `/agent-requests?wait=${wait_seconds}`);
+    async ({ wait_seconds }, extra) => tryText(async () => {
+      // Pass the call's abort signal on, so a cancelled or timed-out call ends the long poll instead of
+      // leaving it open to take a request nobody will see.
+      const { requests } = await http<{ requests: AgentReq[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
       if (!requests.length) return 'no requests yet; call wait_for_requests again to keep listening';
+      // Confirm we got them. Unconfirmed requests go back in the queue after a short while.
+      await Promise.all(requests.map((r) => http('POST', `/agent-requests/${r.id}/ack`).catch(() => {})));
       return requests.map((r) => [
-        `request ${r.id}`,
+        `request ${r.id}${r.history?.length ? ' (follow-up in an ongoing chat)' : ''}`,
         `page: ${r.page_id} (${r.page_title || 'Untitled'})${r.tab && r.tab !== 'main' ? `, tab ${r.tab}` : ''}`,
         r.history?.length ? `earlier in this chat:\n${r.history.map((h) => `  ${h.role}: ${h.text}`).join('\n')}` : '',
         r.selection ? `selected text:\n${r.selection}` : '',
         `asks: ${r.prompt}`,
+        `answer with reply_to_request (request_id ${r.id}), then call wait_for_requests again for the next message.`,
       ].filter(Boolean).join('\n')).join('\n\n---\n\n');
     }));
 
@@ -488,7 +522,7 @@ People comment on text, blocks or the whole page and can @mention you. Check get
     }));
 
   server.tool('get_mentions',
-    'Comments where someone @mentioned you (this agent) that you have not answered yet, across all pages. Waits up to wait_seconds for a new one. Answer with reply_to_comment (and edit the page if asked); use dismiss_mention if no reply is needed.',
+    'Comments where someone @mentioned you (this agent), or replied in a thread you answered, that you have not answered yet, across all pages. Waits up to wait_seconds for a new one. Answer with reply_to_comment (and edit the page if asked); use dismiss_mention if no reply is needed.',
     { wait_seconds: z.number().min(0).max(60).default(0) },
     async ({ wait_seconds }) => safe(async () => {
       const { mentions } = await call(`/mentions?wait=${wait_seconds}`);

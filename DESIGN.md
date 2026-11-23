@@ -151,6 +151,13 @@ This is the part of Livepage no other editor has, so it gets its own grammar.
 | In history | Chip outlined in their hue | Violet chip with spark |
 | Work in progress | — | Violet shimmer on the block being streamed, running steps pulse |
 
+**Several agents on one page.** Each agent gets one of five violets (`--lp-agent-1` to `--lp-agent-5`,
+`--lp-agent-gradient-n`) and its own initials ("Claude Code" CC, "Cursor" C, someone's built-in AI is AI).
+`agents.ts` hands the shades out so two agents on a page never share one, and the same agent wears
+the same shade on its avatar, caret, tab dot and *Agent* tag. In the top bar agents sit side by side
+(people overlap), and tapping the avatars lists everyone on the page by name. An agent's name is its
+token's name, or, when that is generic ("Agent"), the name its MCP client reports.
+
 The *Ask AI* button, the assistant panel and agent-written HTML blocks all use the agent palette,
 so "violet = AI" holds across the app.
 
