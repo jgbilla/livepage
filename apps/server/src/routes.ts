@@ -7,7 +7,7 @@ import {
   randomId, sessionCookie, validateSignup, type Principal,
 } from './auth.ts';
 import {
-  acceptShareLink, atLeast, canEdit, cleanTag, createPage, createShareLink, dailyPage, deletePage, isPageId, listPages, members,
+  acceptShareLink, atLeast, backlinks, canEdit, cleanTag, createPage, createShareLink, dailyPage, deletePage, isPageId, listPages, members,
   pageInfo, pageTags, revokeShareLink, roleFor, setMemberRole, setPageTags, setTitle, shareLinks, tagsByPage, tagsFor, type Role,
 } from './pages.ts';
 import {
@@ -279,6 +279,8 @@ async function pageRoutes(c: PageCtx): Promise<void> {
     }
     return send(res, 200, { ok: true });
   }
+
+  if (sub === 'backlinks' && method === 'GET') return send(res, 200, { backlinks: await backlinks(db, who, pageId) });
 
   if (sub === 'tags') {
     if (method === 'GET') return send(res, 200, { tags: await pageTags(db, pageId) });

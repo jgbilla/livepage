@@ -1,7 +1,7 @@
 import { Server } from '@hocuspocus/server';
 import { Database } from '@hocuspocus/extension-database';
 import * as Y from 'yjs';
-import { listBlocks, META } from '@livepage/schema';
+import { listBlocks, listLinks, listTabs, META } from '@livepage/schema';
 import { connect } from './db.ts';
 import { resolvePrincipal } from './auth.ts';
 import { canEdit, isPageId, roleFor, type Role } from './pages.ts';
@@ -39,6 +39,8 @@ const server = new Server<Context>({
         const doc = document as unknown as Y.Doc;
         const blocks = listBlocks(doc);
         const title = String(doc.getMap(META).get('title') ?? '').slice(0, 200);
+        const tabTitles = new Map(listTabs(doc).map((t) => [t.id, t.title]));
+        const links = [...new Map(listLinks(doc).map((l) => [`${l.fromTab} ${l.page} ${l.tab}`, l])).values()];
         await db.tx(async (q) => {
           await q(
             `insert into documents (name, data, updated_at) values ($1, $2, now())
@@ -46,6 +48,11 @@ const server = new Server<Context>({
             [documentName, state],
           );
           await q('update pages set title = $2, updated_at = now() where id = $1', [documentName, title]);
+          await q('delete from page_links where from_page = $1', [documentName]);
+          for (const l of links) {
+            await q('insert into page_links (from_page, from_tab, from_tab_title, to_page, to_tab) values ($1,$2,$3,$4,$5)',
+              [documentName, l.fromTab, tabTitles.size > 1 ? tabTitles.get(l.fromTab) ?? '' : '', l.page, l.tab]);
+          }
           await q('delete from blocks where doc_name = $1', [documentName]);
           for (const b of blocks) {
             await q(

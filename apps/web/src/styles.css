@@ -178,3 +178,20 @@ button.google { border: 1px solid var(--line); background: var(--bg); color: var
 .field input { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 8px 10px; font: inherit; }
 .match-row { flex-wrap: wrap; gap: 16px; font-size: 14px; }
 .modal-buttons { margin-top: 20px; align-items: center; }
+/* Links between pages and tabs */
+.page-link a { color: #7048e8; text-decoration: none; background: #7048e812; border-radius: 4px; padding: 0 4px; white-space: nowrap; cursor: pointer; }
+.page-link a:hover { background: #7048e826; text-decoration: underline; }
+.page-link.is-selected a { outline: 2px solid var(--accent); }
+.page-link-missing a { color: var(--muted); background: var(--line); text-decoration: line-through; }
+.link-menu { position: fixed; z-index: 60; min-width: 260px; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 30px #0002; padding: 4px; }
+.link-menu-head { padding: 4px 8px; }
+.link-item { display: flex; justify-content: space-between; gap: 12px; width: 100%; border: 0; background: transparent; color: var(--fg); text-align: left;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.link-item > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-item.active { background: var(--line); }
+.backlinks { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 12px; }
+.backlinks h3 { margin: 0 0 6px; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+.backlinks ul { list-style: none; margin: 0; padding: 0; }
+.backlinks li { padding: 3px 0; }
+.backlinks a { color: #7048e8; text-decoration: none; }

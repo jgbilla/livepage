@@ -47,6 +47,8 @@ Pick the lightest block that does the job:
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
 Pages live in folders in each person's sidebar (like Obsidian) and can have tags. list_pages shows folder paths and tags;
 create_page, move_page, set_page_tags and open_daily_page (folder YYYY/MM/DD, page "daily") organize them.
+Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]; the link shows the target's current title
+and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
 Use list_pages to find page ids, and call read_page first to see what is there.`,
     },
   );
@@ -132,10 +134,16 @@ Use list_pages to find page ids, and call read_page first to see what is there.`
     { name: z.string(), tags: z.array(z.string()).min(1), match: z.enum(['any', 'all']).default('any') },
     async ({ name, tags, match }) => tryText(async () => `created view ${(await http('POST', '/views', { name, tags, match })).view.id}`));
 
+  server.tool('get_backlinks', 'List the pages (and tabs) that link to a page.', { page },
+    async ({ page: p }) => tryText(async () => {
+      const { backlinks } = await http<{ backlinks: { page: string; title: string; from_tab: string; from_tab_title: string; to_tab: string | null }[] }>('GET', `/pages/${p}/backlinks`);
+      return backlinks.map((b) => `${b.page}${b.from_tab !== 'main' ? `#${b.from_tab}` : ''}  ${b.title || 'Untitled'}${b.from_tab_title ? ` › ${b.from_tab_title}` : ''}${b.to_tab ? `  (links to tab ${b.to_tab})` : ''}`).join('\n') || 'no backlinks';
+    }));
+
   server.tool('add_tab', 'Add a tab to the page (tabs show at the top; each tab is its own scrolling document). Returns the tab id.',
     { page, title: z.string() }, async ({ page: p, title }) => text(`added tab ${(await agentFor(p)).addTab(title)}`));
 
-  server.tool('write_paragraph', 'Append a paragraph to the page. It is typed out live so collaborators see it appear.',
+  server.tool('write_paragraph', 'Append a paragraph to the page. It is typed out live so collaborators see it appear. Link to a page or tab with [[p_id]], [[p_id#tab_id]] or [[p_id|label]] (ids from list_pages and read_page).',
     { page, tab, text: z.string() }, async ({ page: p, tab: tb, text: t }) => { await (await agentFor(p, tb)).typeParagraph(t, 80); return text('ok'); });
 
   server.tool('add_heading', 'Append a heading.',

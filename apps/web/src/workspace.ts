@@ -29,6 +29,8 @@ export function useWorkspace(): Workspace | null {
   return ws;
 }
 
+export const workspaceSnapshot = () => state;
+
 export function titleOf(p: { id: string; title: string }): string {
   return liveTitles.get(p.id) ?? p.title;
 }

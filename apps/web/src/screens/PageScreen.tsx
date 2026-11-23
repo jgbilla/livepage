@@ -4,7 +4,8 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { META, MAIN_TAB } from '@livepage/schema';
 import { api, colorFor, type Me, type Role } from '../api';
 import { collabUrl } from '../config';
-import { Link } from '../router';
+import { Link, navigate, useLocation } from '../router';
+import { Backlinks } from '../Backlinks';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
@@ -39,13 +40,21 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
+  // Following a link to another tab of this same page changes only ?tab=.
+  const { search } = useLocation();
+  useEffect(() => { setTab(new URLSearchParams(search).get('tab') || MAIN_TAB); }, [search]);
+  const [copied, setCopied] = useState(false);
+  const [synced, setSynced] = useState(false);
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
+  };
 
   const selectTab = useCallback((id: string) => {
     setTab(id);
     const url = new URL(location.href);
     if (id === MAIN_TAB) url.searchParams.delete('tab');
     else url.searchParams.set('tab', id);
-    history.replaceState(null, '', url);
+    if (url.href !== location.href) navigate(url.pathname + url.search, true); // keeps useLocation in step
   }, []);
 
   // The session cookie authenticates the WebSocket; no token needed in the browser.
@@ -57,6 +66,9 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
 
   useEffect(() => {
     const onStatus = ({ status }: { status: string }) => setStatus(status);
+    const onSynced = () => setSynced(true);
+    if (provider.isSynced) setSynced(true);
+    provider.on('synced', onSynced);
     const awareness = provider.awareness!;
     const onAwareness = () => {
       const list: Peer[] = [];
@@ -66,11 +78,13 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
     const meta = doc.getMap(META);
     const onMeta = () => { const t = String(meta.get('title') ?? ''); setTitle(t); setLiveTitle(pageId, t); };
     provider.on('status', onStatus);
+    const offSynced = () => provider.off('synced', onSynced);
     awareness.on('change', onAwareness);
     meta.observe(onMeta);
     onMeta();
     return () => {
       provider.off('status', onStatus);
+      offSynced();
       awareness.off('change', onAwareness);
       meta.unobserve(onMeta);
     };
@@ -96,6 +110,9 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
             </span>
           ))}
         </div>
+        <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
+          {copied ? 'Copied' : '🔗 Copy link'}
+        </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
       <main className={`page ${readOnly ? 'read-only' : ''}`}>
@@ -108,8 +125,9 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
           onChange={(e) => doc.getMap(META).set('title', e.target.value.slice(0, 200))}
         />
         <TagEditor pageId={pageId} initial={info.tags} readOnly={readOnly} />
-        <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} />
-        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} />
+        <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} synced={synced} />
+        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId} />
+        <Backlinks pageId={pageId} tab={tab} />
       </main>
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
     </div>
