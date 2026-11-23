@@ -685,3 +685,8 @@ export function removeFootnote(doc: Y.Doc, id: string): void {
   parent.delete(i, 1);
 }
 export * from './comments.ts';
+// Markdown import/export, the public HTML renderer and templates live in their own files.
+export * from './walk.ts';
+export * from './markdown.ts';
+export * from './html.ts';
+export * from './template.ts';

@@ -168,6 +168,12 @@ create index if not exists comment_mentions_target_idx on comment_mentions (targ
 -- Optional outgoing webhook per agent token, called when someone @mentions that agent.
 alter table api_tokens add column if not exists webhook_url text;
 alter table api_tokens add column if not exists webhook_secret text;
+-- Templates: any page can be marked as one. New pages (and each person's daily page) can start from a template.
+alter table pages add column if not exists is_template boolean not null default false;
+alter table users add column if not exists daily_template_id text references pages(id) on delete set null;
+-- Publishing: a published page is readable by anyone at /pub/<slug>, without an account.
+alter table pages add column if not exists published_slug text unique;
+alter table pages add column if not exists published_at timestamptz;
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

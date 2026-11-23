@@ -5,11 +5,12 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api, type Me } from './api';
 import { Link, navigate, useLocation } from './router';
 import {
-  deleteFolder, deleteView, moveFolder, movePage, newFolder, newPage, openToday, reloadWorkspace, renameFolder, renamePage,
+  deleteFolder, deleteView, moveFolder, movePage, newFolder, newPage, newPageFromTemplate, openToday, reloadWorkspace, renameFolder, renamePage,
   titleOf, useWorkspace, type Folder, type TreePage, type View,
 } from './workspace';
 import { ViewDialog } from './screens/ViewDialog';
 import { shortcutLabel, SwitcherProvider, useOpenSwitcher } from './QuickSwitcher';
+import { ImportDialog } from './screens/ImportDialog';
 
 // ---------- layout + open/closed state ----------
 
@@ -104,6 +105,9 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openSwitcher = useOpenSwitcher();
+  const [importing, setImporting] = useState(false);
+  const templates = useMemo(() => (ws?.pages ?? []).filter((p) => p.is_template)
+    .sort((a, b) => byName(titleOf(a) || 'Untitled', titleOf(b) || 'Untitled')), [ws]);
 
   const tree = useMemo(() => {
     const folders = new Map<string | null, Folder[]>();
@@ -191,6 +195,24 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </div>
 
         <div className="sb-section">
+          <div className="sb-label">Templates</div>
+          <ul className="sb-list">
+            {templates.map((t) => (
+              <li key={t.id} className={`sb-item ${activePage === t.id ? 'active' : ''}`}>
+                <button type="button" className="sb-link sb-template" title={`New page from "${titleOf(t) || 'Untitled'}"`}
+                  onClick={() => void run(() => newPageFromTemplate(t.id))}>
+                  <span className="sb-glyph">＋</span>{titleOf(t) || 'Untitled'}
+                </button>
+                <span className="sb-hover">
+                  <Link to={`/p/${t.id}`} className="sb-mini" title="Edit template">✎</Link>
+                </span>
+              </li>
+            ))}
+            {ws && !templates.length && <li className="muted small sb-pad">Make any page a template from ⋯ on the page.</li>}
+          </ul>
+        </div>
+
+        <div className="sb-section">
           <div className="sb-label">
             Views <button type="button" className="sb-mini" onClick={() => setViewDialog('new')} title="New view from tags">＋</button>
           </div>
@@ -225,8 +247,12 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
 
       <div className="sb-foot">
         <span className="muted small">{me.name}</span>
-        <button type="button" className="ghost" onClick={onLogout}>Log out</button>
+        <span className="row">
+          <button type="button" className="ghost" onClick={() => setImporting(true)} title="Import Markdown or an Obsidian vault, or export everything">⇅ Import / export</button>
+          <button type="button" className="ghost" onClick={onLogout}>Log out</button>
+        </span>
       </div>
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {viewDialog && <ViewDialog view={viewDialog === 'new' ? null : viewDialog} tags={ws?.tags ?? []} onClose={(saved) => {
         setViewDialog(null);
         if (saved) navigate(`/view/${saved.id}`);

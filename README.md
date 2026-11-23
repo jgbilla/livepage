@@ -16,6 +16,9 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Search everything with Cmd+K (Ctrl+K): titles match instantly, and full-text matches from any block (tables, mind maps and HTML code too) follow with a snippet. Enter opens the page at the right tab and highlights the words. Only pages you can open are searched
 - Graph view (sidebar, or ◉ Graph on a page for the local graph around it): every page you can open and the links between them. Hover to see neighbours, click to open, drag, zoom, filter by title or #tag, show tags as nodes
 - Tags on pages, and saved **views** in the sidebar that list the pages with any or all of some tags
+- **Templates**: mark any page as a template (⋯ menu), start new pages from it in the sidebar, and pick one for your daily pages. `{{date}}`, `{{title}}`, `{{yesterday}}`, `{{date:MMMM D, YYYY}}` and similar fill in automatically; any other `{{Field}}` stays highlighted for you or an agent to fill in (`fill_template_fields`)
+- **Import** Markdown files, a folder or an Obsidian vault (or a .zip): folders, frontmatter, `#tags`, `[[links]]` and `[^1]` footnotes come across. **Export** a page as Markdown or PDF, or everything as a zip you can open in Obsidian
+- **Publish to the web**: a clean, public, read-only page at `/pub/<slug>` that anyone can read without an account; live HTML blocks keep running in the sandbox
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
 - Built-in AI assistant (**✦ Ask AI** on every page): bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model; it edits the page live with its own caret

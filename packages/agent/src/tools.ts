@@ -53,6 +53,11 @@ Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]
 and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
 search_pages finds pages by any words in them; get_link_graph shows how pages link together.
 Use list_pages or search_pages to find page ids, and call read_page first to see what is there.
+Templates: any page can be a template (list_templates). create_page with template starts a page as a copy of one, with
+{{date}}, {{title}} and similar filled in; other {{Fields}} are left for you: get_template_fields, then fill_template_fields.
+open_daily_page uses the person's daily template when they set one.
+import_markdown creates a page from Markdown (Obsidian [[links]], #tags, frontmatter and [^1] footnotes work); export_markdown
+gives a page as a Markdown file. publish_page puts a page on the public web (owner only), and unpublish_page takes it down.
 People can also ask you from the Ask AI panel inside Livepage. When asked to listen for Livepage requests, loop on
 wait_for_requests: for each request, work on its page (read_page first; use its tab), using your own context and tools
 as needed, then answer with reply_to_request. Send short progress with reply_to_request(done=false) on long tasks.
@@ -127,9 +132,64 @@ People comment on text, blocks or the whole page and can @mention you. Check get
   server.tool('create_folder', 'Create a folder path (like mkdir -p).', { path: folderPath },
     async ({ path }) => tryText(async () => `created ${(await http('POST', '/folders', { path })).folder.path}`));
 
-  server.tool('create_page', 'Create a page, optionally in a folder path and with tags. Returns the page id.',
-    { title: z.string(), path: folderPath.optional(), tags: z.array(z.string()).optional() },
-    async ({ title, path, tags }) => tryText(async () => `created ${(await http('POST', '/pages', { title, path: path || undefined, tags })).page.id}`));
+  server.tool('create_page', 'Create a page, optionally in a folder path, with tags, or from a template (ids from list_templates). Returns the page id, and any {{fields}} left to fill in.',
+    {
+      title: z.string().optional().describe('Omit with a template to use the template title (its {{date}} etc. filled in).'),
+      path: folderPath.optional(), tags: z.array(z.string()).optional(),
+      template: z.string().regex(/^p_[\w-]{8,40}$/).optional().describe('Template page id'),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Date for {{date}} in the template (the person\'s local date). Defaults to today.'),
+    },
+    async ({ title, path, tags, template, date }) => tryText(async () => {
+      const r = await http('POST', '/pages', { title: title ?? (template ? undefined : ''), path: path || undefined, tags, template_id: template, date });
+      if (!template) return `created ${r.page.id}`;
+      const { fields } = await http<{ fields: string[] }>('GET', `/pages/${r.page.id}/fields`);
+      return `created ${r.page.id}  "${r.page.title}"${fields.length ? `\nfields to fill in: ${fields.map((f) => `{{${f}}}`).join(', ')}` : ''}`;
+    }));
+
+  server.tool('list_templates', 'List the templates you can use (pages marked as templates), and which one daily pages start from.', {},
+    async () => tryText(async () => {
+      const { templates, daily_template_id } = await http<{ templates: PageRow[]; daily_template_id: string | null }>('GET', '/templates');
+      return templates.map((t) => `${t.id}  ${t.title || 'Untitled'}${t.id === daily_template_id ? '  (daily pages)' : ''}`).join('\n') || 'no templates';
+    }));
+
+  server.tool('set_template', 'Mark a page as a template (or not). Use {{date}}, {{time}}, {{title}}, {{yesterday}}, {{tomorrow}}, {{weekday}} or {{date:MMMM D, YYYY}} for values filled in automatically, and any other {{Name}} for a field to fill in later.',
+    { page, template: z.boolean().default(true), daily: z.boolean().optional().describe('Also make it (or stop it being) the template for new daily pages') },
+    async ({ page: p, template, daily }) => tryText(async () => {
+      await http('PATCH', `/pages/${p}`, { template });
+      if (daily !== undefined) await http('PUT', '/templates/daily', { page_id: daily && template ? p : null });
+      return 'ok';
+    }));
+
+  server.tool('get_template_fields', 'List the {{fields}} still waiting to be filled in on a page made from a template.', { page },
+    async ({ page: p }) => tryText(async () => (await http<{ fields: string[] }>('GET', `/pages/${p}/fields`)).fields.map((f) => `{{${f}}}`).join('\n') || 'no fields left'));
+
+  server.tool('fill_template_fields', 'Fill in {{fields}} on a page: { "Field name": "text" }. Names match without caring about case.',
+    { page, fields: z.record(z.string(), z.string()) },
+    async ({ page: p, fields }) => tryText(async () => {
+      const r = await http<{ filled: number; fields: string[] }>('POST', `/pages/${p}/fields`, { fields });
+      return `filled ${r.filled}${r.fields.length ? `; still open: ${r.fields.map((f) => `{{${f}}}`).join(', ')}` : ''}`;
+    }));
+
+  server.tool('import_markdown', 'Create a page from Markdown. Frontmatter title/tags, #tags, [[Page title]] links to your pages, [^1] footnotes, tables and ```livepage-html blocks are understood.',
+    { markdown: z.string(), title: z.string().optional().describe('Defaults to the frontmatter title or "Imported"'), path: folderPath.optional() },
+    async ({ markdown, title, path }) => tryText(async () => {
+      const name = `${(title || 'Imported').replace(/[\\/]/g, '-')}.md`;
+      const r = await http<{ pages: { id: string; title: string }[]; unresolved: string[] }>('POST', '/import', { files: [{ path: name, content: markdown }], into: path || undefined });
+      return `created ${r.pages[0]?.id}${r.unresolved.length ? `\nlinks not found: ${r.unresolved.join(', ')}` : ''}`;
+    }));
+
+  server.tool('export_markdown', 'Get a page as a Markdown file (frontmatter, [[links]] by title, footnotes as [^1]).', { page },
+    async ({ page: p }) => tryText(async () => {
+      const res = await fetch(`${httpBase}/api/pages/${p}/export?format=md`, { headers: { authorization: `Bearer ${opts.token}` } });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any).error ?? String(res.status));
+      return res.text();
+    }));
+
+  server.tool('publish_page', 'Publish a page to the public web (anyone with the link can read it, live HTML blocks included). Owner only. Returns the public URL.',
+    { page }, async ({ page: p }) => tryText(async () => `${httpBase}${(await http('POST', `/pages/${p}/publish`)).url}`));
+
+  server.tool('unpublish_page', 'Take a published page off the public web.', { page },
+    async ({ page: p }) => tryText(async () => { await http('DELETE', `/pages/${p}/publish`); return 'unpublished'; }));
 
   server.tool('open_daily_page',
     'Get (or create) the daily page for a date: folder YYYY/MM/DD, page titled "daily". Returns the page id to write into.',

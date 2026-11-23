@@ -17,9 +17,9 @@ export function useLocation() {
   return loc;
 }
 
-export function Link({ to, children, className }: { to: string; children: React.ReactNode; className?: string }) {
+export function Link({ to, children, className, title }: { to: string; children: React.ReactNode; className?: string; title?: string }) {
   return (
-    <a href={to} className={className} onClick={(e) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); navigate(to); }}>
+    <a href={to} className={className} title={title} onClick={(e) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); navigate(to); }}>
       {children}
     </a>
   );

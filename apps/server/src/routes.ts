@@ -26,6 +26,11 @@ import {
   updateComment, waitForMention,
 } from './comments.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
+import { dailyTemplateFor, fillFromTemplate, listTemplates, setDailyTemplate, setTemplateFlag, templateClock, titleFromTemplate } from './templates.ts';
+import { exportPage, exportVault, IMPORT_LIMITS, importFiles } from './transfer.ts';
+import { publishPage, unpublishPage } from './publish.ts';
+import { readDoc, writeDoc } from './docs.ts';
+import { fillFields, listFields } from '@livepage/schema';
 
 const CONTENT = new Set(['footnotes', 'content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
 const SHARE_ROLES = new Set(['editor', 'commenter', 'viewer']);
@@ -173,9 +178,23 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       const b = await readJson(req);
       const where = await placement(b);
       if ('error' in where) return send(res, 400, { error: where.error });
-      const page = await createPage(db, who.id, String(b.title ?? ''), where);
-      const tags = Array.isArray(b.tags) ? await setPageTags(db, page.id, b.tags) : [];
-      return send(res, 201, { page: { ...page, tags } });
+      // From a template: a copy of it, with {{date}}, {{title}}... filled in. Any template you can open works.
+      let template: { id: string; title: string } | null = null;
+      if (b.template_id) {
+        const tid = String(b.template_id);
+        const [t] = isPageId(tid) && (await roleFor(db, who, tid))
+          ? await db.query('select id, title from pages where id = $1 and is_template', [tid]) : [];
+        if (!t) return send(res, 404, { error: 'Template not found.' });
+        template = t;
+      }
+      const clock = templateClock(b);
+      const title = b.title !== undefined && b.title !== null && String(b.title) !== ''
+        ? String(b.title)
+        : template ? titleFromTemplate(template.title, { ...clock, title: '' }) : '';
+      const page = await createPage(db, who.id, title, where);
+      if (template) await fillFromTemplate(hp, db, who, page.id, template.id, { ...clock, title });
+      const tags = Array.isArray(b.tags) ? await setPageTags(db, page.id, b.tags) : await pageTags(db, page.id);
+      return send(res, 201, { page: { ...page, title, tags } });
     }
 
     // Full-text search over every page you can open: title, tags and block text (?q=words&limit=20).
@@ -194,7 +213,47 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       const segments = dailySegments(b.date);
       if (!segments) return send(res, 400, { error: 'date must be YYYY-MM-DD' });
       const r = await dailyPage(db, who.id, segments);
+      if (r.created) {
+        const tid = await dailyTemplateFor(db, who.id);
+        if (tid) await fillFromTemplate(hp, db, who, r.id, tid, { ...templateClock(b), date: String(b.date), title: 'daily' });
+      }
       return send(res, r.created ? 201 : 200, { page: { id: r.id, title: 'daily', path: segments.join('/') }, created: r.created });
+    }
+
+    // ---------- templates ----------
+    if (path === '/api/templates' && method === 'GET') {
+      if (who.superAgent) return send(res, 200, { templates: [], daily_template_id: null });
+      return send(res, 200, await listTemplates(db, who.id));
+    }
+    if (path === '/api/templates/daily' && method === 'PUT') {
+      if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token.' });
+      const b = await readJson(req);
+      const id = b.page_id ? String(b.page_id) : null;
+      if (id && !isPageId(id)) return send(res, 400, { error: 'bad page_id' });
+      if (!(await setDailyTemplate(db, who.id, id))) return send(res, 404, { error: 'That page is not a template you can open.' });
+      return send(res, 200, { daily_template_id: id });
+    }
+
+    // ---------- import / export ----------
+    if (path === '/api/export' && method === 'GET') {
+      if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token.' });
+      const zip = await exportVault(hp, db, who.id);
+      res.writeHead(200, {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="livepage-${new Date().toISOString().slice(0, 10)}.zip"`,
+        'Cache-Control': 'no-store',
+      });
+      res.end(Buffer.from(zip));
+      return;
+    }
+    if (path === '/api/import' && method === 'POST') {
+      if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token to import.' });
+      const b = await readJson(req, IMPORT_LIMITS.bytes);
+      if (!Array.isArray(b.files) || !b.files.length) return send(res, 400, { error: 'files must be a list of { path, content }' });
+      const into = b.into ? splitPath(b.into) : [];
+      if (!into) return send(res, 400, { error: 'into must look like "Imported/Vault"' });
+      const report = await importFiles(hp, db, { id: who.id, name: who.name, kind: who.kind }, b.files, into);
+      return send(res, 201, report);
     }
 
     // ---------- folders (each person's own tree) ----------
@@ -314,9 +373,10 @@ async function pageRoutes(c: PageCtx): Promise<void> {
         await movePage(q, who.id, pageId, folderId);
       });
     }
-    if (b.title !== undefined || b.tags !== undefined) {
+    if (b.title !== undefined || b.tags !== undefined || b.template !== undefined) {
       if (!canEdit(role)) return send(res, 403, { error: 'You can only view this page.' });
     }
+    if (b.template !== undefined) await setTemplateFlag(db, pageId, !!b.template);
     if (b.title !== undefined) await renamePage(hp, db, pageId, String(b.title), who);
     if (b.tags !== undefined) {
       if (!Array.isArray(b.tags)) return send(res, 400, { error: 'tags must be a list' });
@@ -326,6 +386,43 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   }
 
   if (sub === 'backlinks' && method === 'GET') return send(res, 200, { backlinks: await backlinks(db, who, pageId) });
+
+  if (sub === 'export' && method === 'GET') {
+    const format = url.searchParams.get('format') ?? 'md';
+    if (format !== 'md') return send(res, 400, { error: 'format must be md (for PDF, use Export → PDF in the app, which prints the page)' });
+    const { name, markdown } = await exportPage(hp, db, who.superAgent ? '' : who.id, pageId);
+    res.writeHead(200, {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(markdown);
+    return;
+  }
+
+  // {{fields}} left in a page made from a template, for a person or an agent to fill in.
+  if (sub === 'fields') {
+    if (method === 'GET') return send(res, 200, { fields: listFields(await readDoc(hp, db, pageId)) });
+    if (method === 'POST') {
+      if (!canEdit(role)) return send(res, 403, { error: 'You can only view this page.' });
+      const b = await readJson(req);
+      if (!b.fields || typeof b.fields !== 'object' || Array.isArray(b.fields)) return send(res, 400, { error: 'fields must be { "name": "text" }' });
+      const filled = await writeDoc(hp, pageId, { id: who.id, name: who.name, kind: who.kind }, (doc) => fillFields(doc, b.fields));
+      return send(res, 200, { filled, fields: listFields(await readDoc(hp, db, pageId)) });
+    }
+  }
+
+  if (sub === 'publish') {
+    if (role !== 'owner') return send(res, 403, { error: 'Only the owner can publish a page.' });
+    if (method === 'POST') {
+      const slug = await publishPage(db, pageId);
+      return send(res, 200, { slug, url: `/pub/${slug}` });
+    }
+    if (method === 'DELETE') {
+      await unpublishPage(db, pageId);
+      return send(res, 200, { ok: true });
+    }
+  }
 
   if (sub === 'tags') {
     if (method === 'GET') return send(res, 200, { tags: await pageTags(db, pageId) });

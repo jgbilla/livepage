@@ -5,7 +5,7 @@ import { api, type PageSummary } from './api';
 import { navigate } from './router';
 
 export type Folder = { id: string; parent_id: string | null; name: string; path: string };
-export type TreePage = PageSummary & { folder_id: string | null; path: string; tags: string[] };
+export type TreePage = PageSummary & { folder_id: string | null; path: string; tags: string[]; is_template?: boolean; published_slug?: string | null };
 export type TagCount = { tag: string; count: number };
 export type View = { id: string; name: string; tags: string[]; match: 'any' | 'all' };
 export type Workspace = { pages: TreePage[]; folders: Folder[]; tags: TagCount[]; views: View[] };
@@ -49,13 +49,24 @@ export function localDate(d = new Date()): string {
 }
 
 export async function openToday() {
-  const { page } = await api<{ page: { id: string } }>('/daily', { body: { date: localDate() } });
+  const d = new Date();
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const { page } = await api<{ page: { id: string } }>('/daily', { body: { date: localDate(d), time } });
   await reloadWorkspace();
   navigate(`/p/${page.id}`);
 }
 
 export async function newPage(folderId: string | null = null) {
   const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: '', folder_id: folderId } });
+  await reloadWorkspace();
+  navigate(`/p/${page.id}`);
+}
+
+/** A new page that starts as a copy of a template, with {{date}} and friends filled in for this device's date and time. */
+export async function newPageFromTemplate(templateId: string, folderId: string | null = null) {
+  const d = new Date();
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const { page } = await api<{ page: { id: string } }>('/pages', { body: { template_id: templateId, folder_id: folderId, date: localDate(d), time } });
   await reloadWorkspace();
   navigate(`/p/${page.id}`);
 }

@@ -15,6 +15,7 @@ import { CodeBlock } from './CodeBlock';
 import { CommentHighlights, anchorFromSelection, type CommentStore } from './comments';
 import type { CommentAnchor } from '@livepage/schema';
 import { LinkMenu, PageLink, PageLinkInput } from './PageLink';
+import { TemplateFields } from './TemplateFields';
 import { titleOf, workspaceSnapshot } from '../workspace';
 import { Footnote } from './Footnote';
 import { Footnotes } from './Footnotes';
@@ -46,6 +47,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
         PageLink.configure({ doc, currentPage: pageId }),
+        TemplateFields,
         PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
         Footnote.configure({ onInsert: (id) => setFootnoteEdit({ id, at: Date.now() }) }),
         CommentHighlights.configure({ store: comments ?? null }),
