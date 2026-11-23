@@ -112,6 +112,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
             </span>
           ))}
         </div>
+        <Link to={`/graph?page=${pageId}`} className="ghost-link small" >◉ Graph</Link>
         {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => setAsking((v) => !v)}>✦ Ask AI</button>}
         <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
           {copied ? 'Copied' : '🔗 Copy link'}
