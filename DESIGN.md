@@ -173,8 +173,12 @@ All in `styles.css`, built only from tokens.
 - **Tags/chips.** Pills, 24px, neutral fill; `#` glyph in tertiary text.
 - **Badges.** 20px pills: neutral, success (Published), agent (Template, Agent).
 - **Tabs.** Underline tabs: the active tab has ink text and a 2px ink underline.
-- **Sidebar.** `--lp-bg-subtle`, 30px rows, 16px icons in tertiary color, the active row is a surface
-  fill with a hairline; uppercase 11px section labels.
+- **Sidebar.** `--lp-bg-subtle`. One row rhythm: 28px rows (36px on touch), a 16px chevron slot,
+  a 16px icon in tertiary color, then the label; nesting indents 16px with a faint guide line. Nav rows
+  (Search, Today, Home, Graph) on top, then foldable sections (Pages, Views, Templates, Tags) with 11px
+  caps labels. Actions show on hover (always on touch). Selection is a quiet `--lp-active` fill.
+  Dragging dims the row; the target folder gets an accent ring and opens after a moment. The right edge
+  resizes the sidebar (208–440px, double-click resets), remembered per browser.
 - **Blocks** (HTML, mind map, code, tables). Surface, hairline, 12px radius, a slim header bar in
   12px secondary text; selected blocks get the accent ring.
 
