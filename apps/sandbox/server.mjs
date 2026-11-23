@@ -7,10 +7,14 @@ import { readFile } from 'node:fs/promises';
 
 const port = Number(process.env.PORT ?? process.env.SANDBOX_PORT ?? 5174);
 // Which pages may embed the sandbox. Space-separated origins.
-// On Render, APP_HOST is the app service's host name (set in render.yaml).
+// On Render, APP_HOST is the app service's internal host name (set in render.yaml), e.g. "livepage";
+// its public address is <name>.onrender.com.
+const appHost = process.env.APP_HOST;
 const frameAncestors =
   process.env.SANDBOX_FRAME_ANCESTORS ??
-  (process.env.APP_HOST ? `https://${process.env.APP_HOST}` : 'http://localhost:5173 http://127.0.0.1:5173');
+  (appHost
+    ? `https://${appHost.includes('.') ? appHost : `${appHost}.onrender.com`}`
+    : 'http://localhost:5173 http://127.0.0.1:5173');
 // CDNs block code may load libraries from (GSAP, three.js, d3...).
 const scriptHosts = process.env.SANDBOX_SCRIPT_HOSTS ?? 'https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com';
 
