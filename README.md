@@ -16,15 +16,20 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Search everything with Cmd+K (Ctrl+K): titles match instantly, and full-text matches from any block (tables, mind maps and HTML code too) follow with a snippet. Enter opens the page at the right tab and highlights the words. Only pages you can open are searched
 - Graph view (sidebar, or ◉ Graph on a page for the local graph around it): every page you can open and the links between them. Hover to see neighbours, click to open, drag, zoom, filter by title or #tag, show tags as nodes
 - Tags on pages, and saved **views** in the sidebar that list the pages with any or all of some tags
+- **Templates**: mark any page as a template (⋯ menu), start new pages from it in the sidebar, and pick one for your daily pages. `{{date}}`, `{{title}}`, `{{yesterday}}`, `{{date:MMMM D, YYYY}}` and similar fill in automatically; any other `{{Field}}` stays highlighted for you or an agent to fill in (`fill_template_fields`)
+- **Import** Markdown files, a folder or an Obsidian vault (or a .zip): folders, frontmatter, `#tags`, `[[links]]` and `[^1]` footnotes come across. **Export** a page as Markdown or PDF, or everything as a zip you can open in Obsidian
+- **Publish to the web**: a clean, public, read-only page at `/pub/<slug>` that anyone can read without an account; live HTML blocks keep running in the sandbox
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
 - Built-in AI assistant (**✦ Ask AI** on every page): bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model; it edits the page live with its own caret
 - Real-time collaborative editor (TipTap + Yjs + Hocuspocus) with live carets and a presence bar
 - Any mix of blocks on one page: text, tables, mind maps and custom UI, all editable by people and agents
 - Optional tabs at the top of a page, each its own live document
+- Version history: see each saved version, who changed it (a person or an agent, marked ✦), a block-by-block diff with word-level edits, and restore any version live for everyone. Agent edits always land in their own version. Old versions are thinned out (all for 2 days, hourly to 30 days, then daily, at most 200 per page) and stored compressed. API: `GET /api/pages/:page/versions`, `GET .../versions/:id?compare=previous|current`, `POST .../versions/:id/restore`
 - Custom UI (HTML) blocks rendered in a sandboxed iframe on a separate origin with a strict CSP; they stream in progressively (CSS, HTML, then JS) and their code is co-editable live
 - Host bridge: controls inside a block can send validated input back to the agent
 - Agents as live participants with their own named caret (`packages/agent`)
+- Comments like Google Docs: on a text selection, a block or the whole page, with replies, resolve, and @mentions of people and agents (a mentioned agent gets the comment by MCP, HTTP or webhook and answers in the thread)
 - Hosted MCP endpoint (`/mcp`) so Claude, Cursor, Codex, Gemini CLI or any MCP client can read and write pages with just a URL and a token
 - HTTP API for scripts in any language
 - Postgres persistence (hosted by default) plus a queryable `blocks` table
@@ -124,7 +129,7 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 
 Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
 
-Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `search_pages`, `get_link_graph`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `search_pages`, `get_link_graph`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`, and for comments `get_mentions`, `list_comments`, `add_comment`, `reply_to_comment`, `resolve_comment`, `dismiss_mention`, for templates `list_templates`, `set_template`, `get_template_fields`, `fill_template_fields`, for import and publishing `import_markdown`, `export_markdown`, `publish_page`, `unpublish_page`, and for Ask AI requests `wait_for_requests`, `reply_to_request`.
 
 **HTTP**:
 
@@ -140,6 +145,24 @@ curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/jso
 ```
 
 The folder, tag and view endpoints are listed at the top of `apps/server/src/agent-api.ts`.
+
+## Comments and @mentioning agents
+
+Select text (or click 💬 on a block, or use **Comment on the page**) and press **💬 Comment** (Ctrl/Cmd+Alt+M). Type `@` to mention a person on the page or one of their agents. Anchors are Yjs relative positions, so a comment stays on its text while people and agents edit around it. Commenters (share links with "comment" access) can comment and reply but not edit. People see their mentions on the home page.
+
+Livepage doesn't run agents itself. When someone mentions an agent, that agent finds out in one of three ways:
+
+- **MCP:** `get_mentions` (it can wait up to 60s for a new one), then `list_comments` / `read_page`, then `reply_to_comment` and any page edits asked for. Replying marks the mention handled.
+- **HTTP:** `GET /api/mentions?wait=30` long-polls; reply with `POST /api/pages/<page>/comments/<thread id>` and `{"body": "..."}`.
+- **Webhook:** on the home page, **Add webhook** on an agent token. Livepage POSTs a `comment.mention` event (page, comment, the whole thread and how to reply) to that URL right away, signed with `x-livepage-signature: sha256=HMAC_SHA256(secret, x-livepage-timestamp + "." + body)`. Use it to start an agent run (a GitHub Action, a serverless function, a Claude Agent SDK script). In production, webhook URLs must be https and public; self-hosters can set `WEBHOOK_ALLOW_PRIVATE=1`.
+
+Agents write mentions as `@[Name](user:<id>)` or `@[Name](agent:<id>)`; `list_comments` lists who can be mentioned.
+
+```bash
+# comment on a phrase, as an agent
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"body":"Is this the right number?","quote":"42 moons"}' https://<your app>/api/pages/p_xxx/comments
+```
 
 ## Layout
 

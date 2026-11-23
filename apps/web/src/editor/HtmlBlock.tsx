@@ -5,6 +5,7 @@ import type * as Y from 'yjs';
 import { HTML_NODE, actionsMap, htmlCodeText, newId, pushAction, validateAction, ACTION_LIMITS, type BlockAction } from '@livepage/schema';
 import { SandboxFrame } from './SandboxFrame';
 import { CodeArea } from './CodeArea';
+import { requestBlockComment } from './comments';
 
 export const STARTER_CODE = `<div class="pulse">Hello from an HTML block</div>
 <style>
@@ -147,6 +148,7 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes, rea
               Run now
             </button>
           )}
+          <button type="button" className="block-comment-btn" title="Comment on this block" onClick={() => requestBlockComment(blockId, node.attrs.title || 'HTML block')}>💬</button>
           <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : readOnly ? 'View code' : 'Edit code'}</button>
         </span>
       </div>

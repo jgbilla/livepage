@@ -88,6 +88,7 @@ A page is a stack of blocks, and **every block type is first-class**: same drag 
 | Paragraph, heading, list, quote, code | Native text | People and agents, character by character | Tab's block tree | ✅ |
 | Table | Native component | People (cells are normal text) and agents (`insert_table`) | Tab's block tree | ✅ |
 | Mind map | Native component | People (click a node, Tab for child, Enter for sibling) and agents (`insert_mind_map`, `add_mind_map_node`) | `mindMaps` map, node by node | ✅ |
+| Footnote | Native inline node | People (toolbar **Footnote¹**, Ctrl/⌘+Alt+F, or type `/footnote`) and agents (`add_footnote` with `after_text`, url, title, author) | node attrs (note, url, title, author); numbered per tab in reading order, listed at the bottom with hover previews and back-links; markdown export as `[^n]` | ✅ |
 | Custom UI / HTML block | Sandboxed code | People ("Edit code") and agents (`insert_custom_ui`, `update_html_block`) | `htmlCode` map, one `Y.Text` per block | ✅ |
 | Drawing / whiteboard | Native component | People draw, agents add shapes and arrows | `drawings` map: shapes keyed by id (an Excalidraw- or tldraw-style scene, both MIT, both Yjs-friendly) | Planned (M3) |
 | Design frame | Native component | Layout of boxes, text and images for mockups and covers; agents can generate or tweak it | `designs` map | Planned (M4) |
@@ -123,7 +124,7 @@ Each page is one `Y.Doc`:
 | `Map<Y.Text>` | `htmlCode` | `blockId → Y.Text` with each HTML block's source |
 | `Map<Y.Map>` | `mindMaps` | `blockId → (nodeId → { text, parent, order })` |
 | `Map` | `actions` | Host-bridge actions sent from custom UI controls to agents |
-| `Map<Y.Map>` | `comments` | Comment threads (M2) |
+| `Map<Y.Map>` | `comments` | Unused: comment threads live in Postgres (see section 8) |
 | `Map` | `meta` | Title, icon, cover (M1) |
 
 An HTML block in the tree stores only `{ blockId, title, status, initialHeight, placeholders }`. Its code lives in `htmlCode` as a `Y.Text`, so two people and an agent can edit the same block's code at the same time, character by character, and the merge is automatic. The rendered iframe follows the code with a 400 ms debounce.
@@ -230,7 +231,7 @@ An agent is a **participant**, not a feature. Three ways to connect, from riches
 | **Local MCP server** (stdio) | Yes (uses the live client) | Clients that only run local servers | `packages/agent/src/mcp.ts` |
 | **HTTP API** | No caret, edits still appear live | Scripts, webhooks, any language | `apps/server/src/agent-api.ts` |
 
-MCP tools today (same on both): `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+MCP tools today (same on both): `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`.
 
 **Choosing the output (from OpenIntelligentUI).** For each request the agent picks the lightest form that works: plain text, then a native component (table, mind map, later drawing or database), and custom UI only for motion or interaction. The MCP server's instructions spell this out for any model that connects.
 
@@ -245,7 +246,8 @@ Planned tools: `insert_after(block_id, ...)`, `replace_text(range)`, `comment(an
 ## 8. Collaboration and comments
 
 - Real-time editing, presence and carets: done (Yjs + CollaborationCaret).
-- **Comments (M2):** a TipTap mark holds `commentId` on a text range. Threads live in the doc's `comments` map (`{ anchor, author, body, createdAt, resolved, replies[] }`) so agents can read and answer them too. Also projected into a `comments` table for notifications.
+- **Comments (M2, built):** threads live in Postgres (`comments`, `comment_mentions`), not in the Y.Doc, because commenters and viewers connect to the live doc read-only and still need to comment. A thread is anchored to a text range (two Yjs relative positions plus the quoted text, so it follows edits and shows the quote if the text is deleted), a block (`blockId`: HTML/custom UI blocks, mind maps) or the whole page. Replies, resolve/reopen (a reply reopens), edit and delete (author; owner can delete any). The server pings open browsers with a Hocuspocus stateless message when comments change. Highlights are ProseMirror decorations, so nothing is written into the document.
+- **@mentions:** `@[Name](user:<id>)` / `@[Name](agent:<token id>)` in the body; the server keeps only page members and the agent tokens of members who can comment. Mentioned people see them on the home page. Mentioned agents get them by MCP `get_mentions` / `GET /api/mentions?wait=` (long poll) and, optionally, a signed webhook per agent token, then answer with `reply_to_comment` (which marks the mention handled) and/or edit the page. Livepage itself never runs a model.
 - Suggestions / track changes (M3): edits from agents can be made as suggestions first.
 - Version history (M3): Hocuspocus snapshots every N minutes, browse and restore.
 

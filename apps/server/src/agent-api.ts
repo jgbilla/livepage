@@ -15,6 +15,10 @@
 //   POST /api/pages/:page/tabs         { title }   -> { id }      GET -> { tabs }
 //   GET  /api/pages/:page/backlinks                -> pages (and tabs) that link to this page
 // Paragraph text may contain links: [[p_id]], [[p_id#tab_id]], [[p_id|label]] (see packages/schema).
+//   GET  /api/pages/:page/footnotes                -> { footnotes: [{ id, n, note, url, title, author }] }
+//   POST /api/pages/:page/footnotes    { afterText?, last?, note?, url?, title?, author? } -> { id, n }  (cite a source)
+//   PUT  /api/pages/:page/footnotes/:id { note?, url?, title?, author? }
+//   DELETE /api/pages/:page/footnotes/:id
 // Writes go to the main tab unless ?tab=<id or title> is given.
 //
 // Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
@@ -25,6 +29,27 @@
 //   POST   /api/daily          { date: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily")
 //   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
 //   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
+// Comments (routes.ts + comments.ts; commenters can use these too):
+//   GET    /api/pages/:page/comments?status=open|resolved|all  -> { threads }
+//   POST   /api/pages/:page/comments  { body, quote? | block_id?, tab?, occurrence? } -> { comment }   (no anchor = whole page)
+//   POST   /api/pages/:page/comments/:threadId { body }  -> reply
+//   PATCH  /api/pages/:page/comments/:id { body? , resolved? }
+//   DELETE /api/pages/:page/comments/:id
+//   GET    /api/pages/:page/mentionables                 -> people and agents who can be @mentioned
+//   GET    /api/mentions?wait=<s>                        -> your unanswered @mentions (long-polls up to 60s)
+//   POST   /api/mentions/:id/done
+//
+// Templates, import/export and publishing (routes.ts, templates.ts, transfer.ts, publish.ts):
+//   GET    /api/templates                          -> { templates, daily_template_id }
+//   PUT    /api/templates/daily { page_id | null }    which template new daily pages start from
+//   PATCH  /api/pages/:page    { template: true|false }   mark a page as a template
+//   POST   /api/pages          { template_id, title?, date?, time? }   new page from a template
+//   GET    /api/pages/:page/fields                 -> { fields }   {{fields}} still to fill in
+//   POST   /api/pages/:page/fields { fields: { name: text } }      fill them in
+//   GET    /api/pages/:page/export?format=md       -> the page as a Markdown file (footnotes, [[links]], frontmatter)
+//   GET    /api/export                              -> zip of all your pages as an Obsidian-style vault
+//   POST   /api/import         { files: [{ path, content }], into?: "Folder" }  Markdown files or a vault
+//   POST   /api/pages/:page/publish -> { url }   DELETE unpublishes. Public at /pub/<slug>.
 //
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
@@ -35,17 +60,20 @@ import * as Y from 'yjs';
 import {
   appendHeading, appendParagraph, htmlSections, insertHtmlBlock, insertMindMap, insertTable, listBlocks, pageAsMarkdown,
   addTab, listTabs, pendingActions, resolveTab, setHtmlCode, updateAction,
+  insertFootnote, listFootnotes, removeFootnote, updateFootnote, type FootnoteInput,
 } from '@livepage/schema';
 
 export const MAX_BODY = 512 * 1024;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const opt = (v: unknown) => (typeof v === 'string' ? v : undefined);
+const citation = (b: any): FootnoteInput => ({ note: opt(b.note), url: opt(b.url), title: opt(b.title), author: opt(b.author) });
 
-export async function readJson(req: IncomingMessage): Promise<any> {
+export async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<any> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY) throw new Error('body too large');
+    if (size > max) throw new Error('body too large');
     chunks.push(chunk);
   }
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
@@ -70,7 +98,7 @@ export type ContentCall = {
 
 /** Content operations on one page. The caller has already checked the principal can read it. */
 export async function handleContent({ req, res, hp, url, page, collection, id, who, writable }: ContentCall): Promise<void> {
-  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs');
+  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs' || collection === 'footnotes');
   if (!isRead && !writable) return send(res, 403, { error: 'read-only access to this page' });
   try {
     const body = req.method === 'GET' ? {} : await readJson(req);
@@ -102,6 +130,14 @@ export async function handleContent({ req, res, hp, url, page, collection, id, w
           result = { tabs: listTabs(doc) };
         } else if (req.method === 'POST' && collection === 'tabs') {
           result = { id: addTab(doc, str(body.title)) };
+        } else if (req.method === 'GET' && collection === 'footnotes') {
+          result = { footnotes: listFootnotes(doc, tab) };
+        } else if (req.method === 'POST' && collection === 'footnotes') {
+          result = insertFootnote(doc, { ...citation(body), afterText: opt(body.afterText), last: body.last === true, tab });
+        } else if (req.method === 'PUT' && collection === 'footnotes' && id) {
+          updateFootnote(doc, id, citation(body));
+        } else if (req.method === 'DELETE' && collection === 'footnotes' && id) {
+          removeFootnote(doc, id);
         } else if (req.method === 'GET' && collection === 'actions') {
           const list = pendingActions(doc);
           list.forEach((a) => updateAction(doc, a.id, { status: 'claimed' }));

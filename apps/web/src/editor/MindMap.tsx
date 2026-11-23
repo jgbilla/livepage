@@ -5,6 +5,7 @@ import type * as Y from 'yjs';
 import {
   MIND_NODE, addMindNode, mindChildren, mindMapNodes, newId, removeMindNode, setMindNodeText, type MindNode,
 } from '@livepage/schema';
+import { requestBlockComment } from './comments';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -75,6 +76,7 @@ function MindMapView({ node, selected, doc, readOnly }: ReactNodeViewProps & { d
       <div className="html-block-bar" contentEditable={false}>
         <span className="html-block-label">{node.attrs.title || 'Mind map'}</span>
         {!readOnly && <span className="mm-hint">Tab adds a child, Enter adds a sibling</span>}
+        <button type="button" className="block-comment-btn" title="Comment on this mind map" onClick={() => requestBlockComment(blockId, node.attrs.title || 'Mind map')}>💬</button>
       </div>
       <div className="mm-canvas" contentEditable={false}>
         {mindChildren(nodes, null).map((r) => <Branch key={r.id} n={r} isRoot nodes={nodes} doc={doc} blockId={blockId} readOnly={readOnly} />)}

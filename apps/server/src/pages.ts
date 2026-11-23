@@ -63,7 +63,7 @@ export async function roleFor(db: Db, who: Principal | null, pageId: string): Pr
 
 export async function listPages(db: Db, userId: string) {
   return db.query(
-    `select p.id, p.title, p.updated_at, m.role, m.folder_id, u.name as owner_name
+    `select p.id, p.title, p.updated_at, m.role, m.folder_id, u.name as owner_name, p.is_template, p.published_slug
        from page_members m join pages p on p.id = m.page_id join users u on u.id = p.owner_id
       where m.user_id = $1 order by p.updated_at desc limit 5000`,
     [userId],
@@ -71,7 +71,7 @@ export async function listPages(db: Db, userId: string) {
 }
 
 export async function pageInfo(db: Db, pageId: string) {
-  const [page] = await db.query('select id, title, owner_id, updated_at from pages where id = $1', [pageId]);
+  const [page] = await db.query('select id, title, owner_id, updated_at, is_template, published_slug from pages where id = $1', [pageId]);
   return page ?? null;
 }
 
