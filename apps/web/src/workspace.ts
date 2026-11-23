@@ -8,7 +8,7 @@ export type Folder = { id: string; parent_id: string | null; name: string; path:
 export type TreePage = PageSummary & { folder_id: string | null; path: string; tags: string[]; is_template?: boolean; published_slug?: string | null };
 export type TagCount = { tag: string; count: number };
 export type View = { id: string; name: string; tags: string[]; match: 'any' | 'all' };
-export type Workspace = { pages: TreePage[]; folders: Folder[]; tags: TagCount[]; views: View[] };
+export type Workspace = { pages: TreePage[]; folders: Folder[]; tags: TagCount[]; views: View[]; /** the server's change counter this list is current to */ rev?: number };
 
 let state: Workspace | null = null;
 const liveTitles = new Map<string, string>(); // titles typed in an open page, before the server saves them
@@ -31,7 +31,7 @@ export function hydrateWorkspace(userId: string) {
 }
 let fresh = false; // has the server answered since this tab opened?
 /** On sign-out: the next person on this device starts from nothing. */
-export function resetWorkspace() { state = null; fresh = false; cacheUser = null; liveTitles.clear(); emit(); }
+export function resetWorkspace() { state = null; fresh = false; cacheUser = null; gen++; poll?.abort(); liveTitles.clear(); emit(); }
 
 let inflight: Promise<void> | null = null;
 export function reloadWorkspace(): Promise<void> {
@@ -46,8 +46,68 @@ export function reloadWorkspace(): Promise<void> {
 
 export function useWorkspace(): Workspace | null {
   const ws = useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state);
-  useEffect(() => { if (!state || !fresh) void reloadWorkspace(); }, []);
+  useEffect(() => { if (!state || !fresh) void reloadWorkspace(); followWorkspace(); }, []);
   return ws;
+}
+
+// ---- Live updates from your other devices (and the people you share pages with).
+// The server says when your page list changed (GET /api/workspace/events, a long poll), and
+// the list reloads. Coming back to the app (a phone waking, switching tabs) also reloads it,
+// since nothing is followed while the app is off screen.
+let wired = false;
+let gen = 0;
+let hiddenAt = 0;
+let poll: AbortController | null = null;
+function followWorkspace() {
+  if (typeof document === 'undefined') return;
+  if (wired) { if (!poll || poll.signal.aborted) startFollowing(); return; }
+  wired = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') { hiddenAt = Date.now(); poll?.abort(); return; }
+    if (cacheUser && Date.now() - hiddenAt > 2000) void refreshWorkspace();
+    startFollowing();
+  });
+  window.addEventListener('online', () => { if (cacheUser) void refreshWorkspace(); startFollowing(); });
+  // The installed app may have opened with a saved list while the server was waking up (pwa/sw.js).
+  navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (e.data?.type === 'lp-api-updated' && e.data.path === '/api/pages' && cacheUser) void refreshWorkspace();
+  });
+  startFollowing();
+}
+
+/** Reload the list, after any reload already under way (it may have started before this change). */
+function refreshWorkspace(): Promise<void> {
+  const after = inflight ?? Promise.resolve();
+  return after.catch(() => {}).then(() => reloadWorkspace()).catch(() => {});
+}
+
+function startFollowing() {
+  const loop = async (mine: number) => {
+    while (mine === gen && cacheUser && document.visibilityState === 'visible') {
+      const ctl = (poll = new AbortController());
+      try {
+        // Ask about the list on screen: if the server has moved on since it was loaded, load it again.
+        await (inflight ?? Promise.resolve()).catch(() => {});
+        const shown = state?.rev;
+        const q = typeof shown === 'number' ? `&since=${shown}` : '';
+        const res = await fetch(`/api/workspace/events?wait=25${q}`, { credentials: 'same-origin', signal: ctl.signal, cache: 'no-store' });
+        if (!res.ok) throw new Error(String(res.status));
+        const { rev } = await res.json();
+        if (rev !== state?.rev && mine === gen) {
+          await refreshWorkspace();
+          // Still behind (an offline copy came back instead): don't spin, look again shortly.
+          if (state?.rev !== rev) await new Promise((r) => setTimeout(r, 5000));
+        }
+      } catch {
+        if (ctl.signal.aborted) return;
+        await new Promise((r) => setTimeout(r, 5000)); // offline or the server is waking up
+      }
+    }
+    if (mine === gen) poll = null;
+  };
+  const mine = ++gen;
+  poll?.abort();
+  void Promise.resolve().then(() => { if (mine === gen) void loop(mine); });
 }
 
 export const workspaceSnapshot = () => state;

@@ -13,9 +13,12 @@ import { createHistory, VERSIONS_SQL, type Author } from './history.ts';
 import { handleVersions, isVersionsPath } from './versions-api.ts';
 import { config } from './config.ts';
 import { sameOriginHeaders } from './origin.ts';
+import { bumpPageMembers } from './workspace-events.ts';
+import { CHATS_SQL } from './chats.ts';
 
 const db = await connect(process.env.DATABASE_URL);
 for (const stmt of VERSIONS_SQL.split(';').map((x) => x.trim()).filter(Boolean)) await db.query(stmt);
+await db.query(CHATS_SQL);
 const history = createHistory(db);
 const serveStatic = config.webDist
   ? staticHandler(config.webDist, config.sandboxUrl, config.neonAuthUrl ? new URL(config.neonAuthUrl).origin : null)
@@ -47,13 +50,16 @@ const server = new Server<Context>({
         const title = String(doc.getMap(META).get('title') ?? '').slice(0, 200);
         const tabTitles = new Map(listTabs(doc).map((t) => [t.id, t.title]));
         const links = [...new Map(listLinks(doc).map((l) => [`${l.fromTab} ${l.page} ${l.tab}`, l])).values()];
+        let renamed = false;
         await db.tx(async (q) => {
           await q(
             `insert into documents (name, data, updated_at) values ($1, $2, now())
              on conflict (name) do update set data = excluded.data, updated_at = now()`,
             [documentName, state],
           );
+          const [old] = await q('select title from pages where id = $1', [documentName]);
           await q('update pages set title = $2, updated_at = now() where id = $1', [documentName, title]);
+          renamed = !!old && old.title !== title;
           await q('delete from page_links where from_page = $1', [documentName]);
           // One statement per table, not one per row: each statement is a round trip to the database.
           if (links.length) {
@@ -76,6 +82,8 @@ const server = new Server<Context>({
             );
           }
         });
+        // A new title shows in the page list of everyone who has this page, on every device.
+        if (renamed) await bumpPageMembers(db, documentName).catch(() => {});
       },
     }),
   ],

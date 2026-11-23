@@ -14,6 +14,7 @@ import { TabBar } from '../TabBar';
 import { forgetLocalPage, localPageName, noteLocalPage } from '../offline';
 import { PageSkeleton } from '../Skeleton';
 import { useOnline } from '../pwa';
+import { reconnectOnWake } from '../liveConnection';
 
 // Opened on demand, so they are not part of what every page view downloads.
 const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })));
@@ -48,6 +49,7 @@ export function PageScreen({ pageId, me }: { pageId: string; me: Me }) {
     const provider = new HocuspocusProvider({ url: collabUrl(), name: pageId, document: doc, token: 'session' });
     return { doc, provider, local, name };
   }, [pageId, me.id]);
+  useEffect(() => reconnectOnWake(live.provider), [live]);
   useEffect(() => () => {
     live.provider.destroy();
     void live.local?.destroy().catch(() => {});

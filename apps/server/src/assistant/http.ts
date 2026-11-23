@@ -3,7 +3,8 @@
 //   PUT    /api/ai/settings          { provider, model, baseUrl?, apiKey? }  (omit apiKey to keep the saved one)
 //   DELETE /api/ai/settings
 //   POST   /api/ai/models            { provider, baseUrl?, apiKey? } -> { models }  (also checks the key works)
-//   POST   /api/pages/:page/assistant { prompt, tab?, history?, selection? } -> text/event-stream of RunEvent
+//   POST   /api/pages/:page/assistant { prompt, tab?, selection? } -> 202; the answer streams into the
+//          page's Ask AI chat (GET /api/pages/:page/chat, see chats.ts)
 // People only (session cookie); agent tokens can't read or use someone's AI key.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Db } from '../db.ts';
@@ -11,6 +12,7 @@ import type { Principal } from '../auth.ts';
 import { readJson, send } from '../agent-api.ts';
 import { listModels } from './providers.ts';
 import { runAssistant, type RunEvent } from './run.ts';
+import { changeTurn, historyOf, readChat, startExchange, trackRun } from '../chats.ts';
 import { AiError, aiAvailable, deleteSettings, getSettings, PROVIDERS, resolveInput, saveSettings } from './settings.ts';
 
 const fail = (res: ServerResponse, e: unknown) => {
@@ -46,45 +48,59 @@ export async function handleAssistantRun(req: IncomingMessage, res: ServerRespon
   if (who.kind !== 'human' || who.superAgent) return send(res, 403, { error: 'The built-in assistant is for people. Agents use MCP or the HTTP API.' });
   if (!canEdit) return send(res, 403, { error: 'You can view this page but not edit it, so the assistant can’t either.' });
   const b = await readJson(req);
-  const prompt = typeof b.prompt === 'string' ? b.prompt : '';
-  if (!prompt.trim()) return send(res, 400, { error: 'Ask something first.' });
-  const history = Array.isArray(b.history)
-    ? b.history.filter((h: any) => h && (h.role === 'user' || h.role === 'assistant') && typeof h.text === 'string')
-    : [];
+  const prompt = typeof b.prompt === 'string' ? b.prompt.trim() : '';
+  if (!prompt) return send(res, 400, { error: 'Ask something first.' });
+  if (!(await getSettings(db, who.id))) return send(res, 412, { error: 'Set up the assistant first: pick a provider and add your API key.' });
+  const chat = await readChat(db, who.id, pageId);
+  if (chat.running) return send(res, 409, { error: 'Still answering your last question. Wait for it, or stop it.' });
+  const selection = typeof b.selection === 'string' ? b.selection.slice(0, 8000) : '';
 
+  // The answer belongs to the chat, not to this request: it keeps going if the tab closes or the
+  // phone sleeps, and every device with the panel open follows it (see chats.ts). Stop ends it.
+  const { answerId } = await startExchange(db, who.id, pageId, { prompt, selection }, { kind: 'builtin' });
   const abort = new AbortController();
-  let opened = false;
-  const open = () => {
-    if (opened) return;
-    opened = true;
-    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  const untrack = trackRun(who.id, pageId, abort);
+  let afterTool = false; // a new paragraph when the model talks again after using tools
+  const emit = (e: RunEvent) => {
+    if (e.type === 'start') void changeTurn(db, who.id, pageId, answerId, (t) => { t.model = e.model; });
+    else if (e.type === 'text') {
+      const sep = afterTool ? '\n\n' : '';
+      afterTool = false;
+      void changeTurn(db, who.id, pageId, answerId, (t) => { t.text = t.text ? t.text + sep + e.delta : e.delta; });
+    } else if (e.type === 'tool') {
+      afterTool = true;
+      void changeTurn(db, who.id, pageId, answerId, (t) => {
+        const steps = (t.steps ??= []);
+        const step = { id: e.id, name: e.name, status: e.status, note: e.note };
+        const at = steps.findIndex((s) => s.id === e.id);
+        if (at >= 0) steps[at] = step; else steps.push(step);
+      });
+    } else if (e.type === 'error') void changeTurn(db, who.id, pageId, answerId, (t) => { t.error = e.message; });
   };
-  const emit = (e: RunEvent) => { open(); if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`); };
-  // The person pressed Stop or closed the tab.
-  res.on('close', () => { if (!res.writableFinished) abort.abort(); });
-  const ping = setInterval(() => { if (opened && !res.writableEnded) res.write(': ping\n\n'); }, 15_000);
+  send(res, 202, { ok: true, turn: answerId });
 
-  try {
-    await runAssistant({
-      db, user: who, pageId, prompt, history,
-      tab: typeof b.tab === 'string' ? b.tab : null,
-      selection: typeof b.selection === 'string' ? b.selection : '',
-      signal: abort.signal, emit,
-    });
-  } catch (e) {
-    const err = e as Error;
-    if (abort.signal.aborted || err.name === 'AbortError' || err.name === 'APIUserAbortError') {
-      // stopped: nothing to report
-    } else if (!opened) {
-      if (e instanceof AiError) return send(res, e.status, { error: e.message });
-      console.error('[assistant]', e);
-      return send(res, 500, { error: `The assistant failed: ${err.message}` });
-    } else {
-      if (!(e instanceof AiError)) console.error('[assistant]', e);
-      emit({ type: 'error', message: err.message });
+  void (async () => {
+    let error: string | undefined;
+    try {
+      await runAssistant({
+        db, user: who, pageId, prompt, history: historyOf(chat.turns), selection,
+        tab: typeof b.tab === 'string' ? b.tab : null,
+        signal: abort.signal, emit,
+      });
+    } catch (e) {
+      const err = e as Error;
+      if (abort.signal.aborted || err.name === 'AbortError' || err.name === 'APIUserAbortError') error = 'Stopped.';
+      else {
+        if (!(e instanceof AiError)) console.error('[assistant]', e);
+        error = e instanceof AiError ? e.message : `The assistant failed: ${err.message}`;
+      }
+    } finally {
+      untrack();
+      await changeTurn(db, who.id, pageId, answerId, (t) => {
+        t.running = false;
+        for (const s of t.steps ?? []) if (s.status === 'running') s.status = error ? 'error' : 'done';
+        if (error) t.error = error;
+      }, true).catch((e) => console.warn('[assistant] could not save the answer:', (e as Error).message));
     }
-  } finally {
-    clearInterval(ping);
-    if (opened && !res.writableEnded) res.end();
-  }
+  })();
 }

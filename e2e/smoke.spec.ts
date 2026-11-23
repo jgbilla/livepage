@@ -93,6 +93,41 @@ test('two browsers see each other\'s edits live', async ({ browser, page }) => {
   await other.close();
 });
 
+test('your other device follows along: new pages and the Ask AI chat', async ({ browser, page }) => {
+  // The same person on a second device (its own browser profile, same account).
+  const phone = await browser.newContext({ storageState: USERS.a, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const other = await phone.newPage();
+  await page.goto('/');
+  await other.goto('/');
+
+  // A page made on one device shows up on the other without a reload.
+  const title = `Made elsewhere ${Date.now().toString(36)}`;
+  const pageId = await newPage(page.request, title);
+  await expect(other.getByText(title).first()).toBeAttached({ timeout: 15_000 });
+
+  // A question asked on one device (here to a connected agent) and its answer show on the other.
+  const agentName = `Sync agent ${Math.random().toString(36).slice(2, 8)}`;
+  const token = await agentToken(page.request, agentName);
+  const tokenId = (await (await page.request.get('/api/agents')).json()).agents.find((a: { name: string }) => a.name === agentName).id;
+  // Ask through that agent on this device too (Writer A has no AI key set up).
+  await other.evaluate((id) => localStorage.setItem('livepage.askTarget', id), tokenId);
+  await openPage(other, pageId);
+  await other.locator('button.ask-ai').click();
+  const asked = await page.request.post(`/api/pages/${pageId}/agent-requests`, { data: { tokenId, prompt: 'Asked on the laptop' } });
+  expect(asked.ok(), await asked.text()).toBeTruthy();
+  await expect(other.locator('.turn-user')).toContainText('Asked on the laptop');
+  const agent = await page.request.get('/api/agent-requests?wait=2', { headers: { authorization: `Bearer ${token}` } });
+  const [req] = (await agent.json()).requests;
+  await page.request.post(`/api/agent-requests/${req.id}/reply`, { headers: { authorization: `Bearer ${token}` }, data: { text: 'Answered for every device.' } });
+  await expect(other.locator('.turn-assistant')).toContainText('Answered for every device.');
+
+  // And it is still there after a reload.
+  await other.reload();
+  await other.locator('button.ask-ai').click();
+  await expect(other.locator('.turn-assistant')).toContainText('Answered for every device.');
+  await phone.close();
+});
+
 test('an agent writes through the HTTP API and MCP, and the page updates live', async ({ page }) => {
   const pageId = await newPage(page.request, 'Agent page');
   const token = await agentToken(page.request);

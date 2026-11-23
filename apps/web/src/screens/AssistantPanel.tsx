@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { AiSettings, type AiSettingsValue } from './AiSettings';
 import { Icon } from '../design/Icon';
 
 type ToolStep = { id: string; name: string; status: 'running' | 'done' | 'error'; note?: string };
-type Turn = { role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string; status?: string };
-type Agent = { id: string; name: string; online: boolean };
-type AgentReq = {
-  id: string; status: 'pending' | 'working' | 'done' | 'cancelled'; progress: string; reply: string; sig: string; agent_online: boolean; agent_name: string;
-  /** queued: waiting for a poll; delivered: a poll took it but the agent hasn't confirmed; working: confirmed. */
-  delivery?: 'queued' | 'delivered' | 'working' | 'finished';
+type Turn = {
+  id: string; role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string; status?: string;
+  running?: boolean; kind?: 'builtin' | 'agent'; requestId?: string;
 };
+type ChatState = { turns: Turn[]; rev: number; running: boolean };
+type Agent = { id: string; name: string; online: boolean };
 const BUILTIN = 'builtin';
 const loadTarget = () => { try { return localStorage.getItem('livepage.askTarget') || BUILTIN; } catch { return BUILTIN; } };
 const saveTarget = (v: string) => { try { localStorage.setItem('livepage.askTarget', v); } catch { /* private mode */ } };
@@ -40,21 +39,67 @@ function useEditorSelection(): [string, () => void] {
   return [sel, () => setSel('')];
 }
 
+/**
+ * This page's Ask AI chat, as the server has it, kept current with a long poll: answers stream
+ * in whichever device asked. Polls only while the app is on screen (a phone in a pocket, or a
+ * background tab, doesn't keep the server and database awake) and catches up when it comes back.
+ */
+function useChat(pageId: string): ChatState & { refresh: () => Promise<void> } {
+  const [state, setState] = useState<ChatState>({ turns: [], rev: -1, running: false });
+  const revRef = useRef(-1);
+  useEffect(() => {
+    let alive = true;
+    let ac: AbortController | null = null;
+    const take = (c: ChatState) => { if (alive && c.rev !== revRef.current) { revRef.current = c.rev; setState(c); } };
+    const loop = async (mine: number) => {
+      while (alive && mine === gen && document.visibilityState === 'visible') {
+        const ctl = (ac = new AbortController());
+        const since = revRef.current;
+        try {
+          const res = await fetch(`/api/pages/${pageId}/chat?wait=25${since >= 0 ? `&since=${since}` : ''}`, { credentials: 'same-origin', signal: ctl.signal, cache: 'no-store' });
+          if (!res.ok) throw new Error(String(res.status));
+          take(await res.json());
+        } catch {
+          if (!alive || ctl.signal.aborted) return;
+          await new Promise((r) => setTimeout(r, 3000)); // offline or the server is waking: try again shortly
+        }
+      }
+    };
+    let gen = 0; // one loop at a time: coming back on screen starts a fresh one
+    const start = () => {
+      const mine = ++gen;
+      ac?.abort();
+      void (async () => { await Promise.resolve(); if (mine === gen) await loop(mine); })();
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') start(); else ac?.abort(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('online', start);
+    start();
+    return () => { alive = false; gen++; ac?.abort(); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('online', start); };
+  }, [pageId]);
+  const refresh = useCallback(async () => {
+    const c = await api<ChatState>(`/pages/${pageId}/chat`);
+    if (c.rev !== revRef.current) { revRef.current = c.rev; setState(c); }
+  }, [pageId]);
+  return { ...state, refresh };
+}
+
 export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: string; onClose: () => void }) {
   const [ready, setReady] = useState<boolean | null>(null);
   const [setup, setSetup] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const chat = useChat(pageId);
+  const { turns } = chat;
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const busy = sending || chat.running;
   const [selection, clearSelection] = useEditorSelection();
-  const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [target, setTargetState] = useState(loadTarget);
   const setTarget = (v: string) => { setTargetState(v); saveTarget(v); setSetup(false); };
   const agent = agents.find((a) => a.id === target);
   const builtin = target === BUILTIN || !agent;
-  const reqRef = useRef<string | null>(null);
 
   useEffect(() => {
     api<{ settings: AiSettingsValue | null }>('/ai/settings').then((r) => setReady(!!r.settings)).catch(() => setReady(false));
@@ -66,117 +111,37 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [turns]);
-  useEffect(() => () => {
-    abortRef.current?.abort();
-    if (reqRef.current) void fetch(`/api/agent-requests/${reqRef.current}`, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
-  }, []);
+  const last = turns[turns.length - 1];
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [turns.length, last?.text, last?.steps?.length, last?.status]);
 
-  const patchLast = (fn: (t: Turn) => Turn) => setTurns((ts) => [...ts.slice(0, -1), fn(ts[ts.length - 1])]);
-
-  /** Hand the request to a connected agent (Claude Code, Cursor…) and follow it until it answers. */
-  const askAgent = async (a: Agent, prompt: string, sel: string, history: { role: string; text: string }[], ac: AbortController) => {
-    // Only say the agent is working once it has confirmed it got the request (or replied).
-    const statusFor = (r: AgentReq) =>
-      r.status === 'working' ? (r.progress ? `${a.name}: ${r.progress}` : `${a.name} is working on it…`)
-        : r.status !== 'pending' ? ''
-        : r.delivery === 'delivered' ? `Sent to ${a.name}, waiting for it to confirm…`
-        : r.agent_online ? `Waiting for ${a.name} to pick it up…`
-        : `${a.name} isn't listening right now. Ask it to “listen for Livepage requests”; this request waits for it.`;
-    let { request: r } = await api<{ request: AgentReq }>(`/pages/${pageId}/agent-requests`, { body: { tokenId: a.id, prompt, tab, selection: sel, history } });
-    reqRef.current = r.id;
-    patchLast((t) => ({ ...t, model: a.name, status: statusFor(r) }));
-    while (r.status === 'pending' || r.status === 'working') {
-      const res = await fetch(`/api/agent-requests/${r.id}?wait=25&since=${encodeURIComponent(r.sig)}`, { credentials: 'same-origin', signal: ac.signal });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
-      r = (await res.json()).request;
-      patchLast((t) => ({ ...t, status: statusFor(r) }));
+  // The chat lives on the server: the question goes there, and the answer streams back through
+  // useChat on this device and on every other one with this page's panel open. Closing the panel
+  // (or the phone going to sleep) doesn't stop it; Stop does.
+  const ask = async (prompt: string) => {
+    if (!prompt.trim() || busy) return;
+    const sel = selection;
+    setSending(true);
+    setSendError('');
+    try {
+      if (agent) await api(`/pages/${pageId}/agent-requests`, { body: { tokenId: agent.id, prompt, tab, selection: sel } });
+      else await api(`/pages/${pageId}/assistant`, { body: { prompt, tab, selection: sel } });
+      setInput('');
+      clearSelection();
+      await chat.refresh();
+    } catch (e) {
+      if ((e as { status?: number }).status === 412) setReady(false);
+      setSendError((e as Error).message);
+    } finally {
+      setSending(false);
     }
-    reqRef.current = null;
-    if (r.status === 'cancelled') patchLast((t) => ({ ...t, error: 'Cancelled.' }));
-    else patchLast((t) => ({ ...t, text: r.reply || `${a.name} finished without a message.`, status: '' }));
   };
 
   const stop = () => {
-    abortRef.current?.abort();
-    if (reqRef.current) { void api(`/agent-requests/${reqRef.current}`, { method: 'DELETE' }).catch(() => {}); reqRef.current = null; }
+    const t = [...turns].reverse().find((x) => x.running);
+    if (t?.requestId) void api(`/agent-requests/${t.requestId}`, { method: 'DELETE' }).catch(() => {});
+    else void api(`/pages/${pageId}/chat/stop`, { body: {} }).catch(() => {});
   };
-
-  const ask = async (prompt: string) => {
-    if (!prompt.trim() || busy) return;
-    if (agent) {
-      const history = turns.filter((t) => t.text).map((t) => ({ role: t.role, text: t.text }));
-      const sel = selection;
-      setTurns((ts) => [...ts, { role: 'user', text: prompt, selection: sel || undefined }, { role: 'assistant', text: '', steps: [] }]);
-      setInput('');
-      clearSelection();
-      setBusy(true);
-      const ac = new AbortController();
-      abortRef.current = ac;
-      try { await askAgent(agent, prompt, sel, history, ac); }
-      catch (e) { patchLast((t) => ({ ...t, status: '', error: (e as Error).name === 'AbortError' ? 'Stopped.' : (e as Error).message })); }
-      finally { setBusy(false); abortRef.current = null; }
-      return;
-    }
-    const history = turns.filter((t) => t.text).map((t) => ({ role: t.role, text: t.text }));
-    const sel = selection;
-    setTurns((ts) => [...ts, { role: 'user', text: prompt, selection: sel || undefined }, { role: 'assistant', text: '', steps: [] }]);
-    setInput('');
-    clearSelection();
-    setBusy(true);
-    const ac = new AbortController();
-    abortRef.current = ac;
-    try {
-      const res = await fetch(`/api/pages/${pageId}/assistant`, {
-        method: 'POST', credentials: 'same-origin', signal: ac.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, tab, history, selection: sel }),
-      });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 412) setReady(false);
-        throw new Error(data.error ?? `Request failed (${res.status})`);
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-      let afterTool = false; // start a new paragraph when the model talks again after using tools
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i: number;
-        while ((i = buf.indexOf('\n\n')) >= 0) {
-          const chunk = buf.slice(0, i);
-          buf = buf.slice(i + 2);
-          const line = chunk.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          const ev = JSON.parse(line.slice(6));
-          if (ev.type === 'start') patchLast((t) => ({ ...t, model: ev.model }));
-          else if (ev.type === 'text') {
-            const sep = afterTool ? '\n\n' : '';
-            afterTool = false;
-            patchLast((t) => ({ ...t, text: t.text ? t.text + sep + ev.delta : ev.delta }));
-          } else if (ev.type === 'tool') {
-            afterTool = true;
-            patchLast((t) => {
-              const steps = [...(t.steps ?? [])];
-              const at = steps.findIndex((s) => s.id === ev.id);
-              const step = { id: ev.id, name: ev.name, status: ev.status, note: ev.note };
-              if (at >= 0) steps[at] = step; else steps.push(step);
-              return { ...t, steps };
-            });
-          } else if (ev.type === 'error') patchLast((t) => ({ ...t, error: ev.message }));
-        }
-      }
-    } catch (e) {
-      if ((e as Error).name !== 'AbortError') patchLast((t) => ({ ...t, error: (e as Error).message }));
-      else patchLast((t) => ({ ...t, error: 'Stopped.' }));
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
-    }
-  };
+  const clear = () => { void api(`/pages/${pageId}/chat`, { method: 'DELETE' }).then(() => chat.refresh()).catch((e) => setSendError(e.message)); };
 
   return (
     <aside className="assistant" aria-label="AI assistant">
@@ -184,7 +149,7 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
         <h2 className="panel-title"><Icon name="sparkles" />Ask AI</h2>
         <span className="spacer" />
         {ready && builtin && <button type="button" className="ghost" onClick={() => setSetup((v) => !v)}>{setup ? 'Back to chat' : 'Settings'}</button>}
-        {turns.length > 0 && !busy && <button type="button" className="ghost" onClick={() => setTurns([])}>Clear</button>}
+        {turns.length > 0 && !busy && <button type="button" className="ghost" onClick={clear}>Clear</button>}
         <button type="button" className="ghost icon-btn" aria-label="Close" onClick={onClose}><Icon name="x" /></button>
       </div>
 
@@ -236,10 +201,11 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
                 )}
                 {t.status && <div className="turn-status"><Icon name="sparkles" />{t.status}</div>}
                 {t.text && <div className="turn-text">{t.text}</div>}
-                {t.role === 'assistant' && !t.text && !t.error && busy && i === turns.length - 1 && !(t.steps?.length) && !t.status && <div className="muted small">Thinking…</div>}
+                {t.role === 'assistant' && !t.text && !t.error && t.running && !(t.steps?.length) && !t.status && <div className="muted small">Thinking…</div>}
                 {t.error && <div className="form-error small">{t.error}</div>}
               </div>
             ))}
+            {sendError && <p className="form-error small pad">{sendError}</p>}
             <div ref={endRef} />
           </div>
           <form className="assistant-input" onSubmit={(e) => { e.preventDefault(); void ask(input); }}>

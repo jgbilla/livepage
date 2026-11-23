@@ -9,7 +9,8 @@
 //
 //   Person (session cookie)
 //     GET    /api/agents                                -> your agent tokens + online status
-//     POST   /api/pages/:page/agent-requests            { tokenId, prompt, tab?, selection?, history? } -> { request }
+//     POST   /api/pages/:page/agent-requests            { tokenId, prompt, tab?, selection? } -> { request }
+//                                                       (question and answer also go in the page's Ask AI chat, chats.ts)
 //     GET    /api/agent-requests/:id?wait=25            -> { request } (returns early when it changes)
 //     DELETE /api/agent-requests/:id                    -> cancel
 //   Agent (Bearer lp_ token)
@@ -28,6 +29,7 @@ import type { Db } from './db.ts';
 import { randomId, type Principal } from './auth.ts';
 import { readJson, send } from './agent-api.ts';
 import { canEdit, roleFor } from './pages.ts';
+import { changeChat, historyOf, readChat, startExchange } from './chats.ts';
 
 const ONLINE_MS = 2 * 60_000;
 const MAX_WAIT = 30_000;
@@ -97,6 +99,36 @@ function forPerson(r: AgentRequest & { user_id?: string }) {
   return { ...rest, delivery: delivery(r), sig: signature(r), agent_online: isOnline(r.token_id) };
 }
 
+/** What the Ask AI chat shows while an agent has the request. */
+function statusFor(r: AgentRequest): string {
+  const name = r.agent_name || 'Your agent';
+  const d = delivery(r);
+  if (r.status === 'working') return r.progress ? `${name}: ${r.progress}` : `${name} is working on it…`;
+  if (r.status !== 'pending') return '';
+  if (d === 'delivered') return `Sent to ${name}, waiting for it to confirm…`;
+  return isOnline(r.token_id) ? `Waiting for ${name} to pick it up…`
+    : `${name} isn't listening right now. Ask it to “listen for Livepage requests”; this request waits for it.`;
+}
+
+/** A request changed: wake whoever follows it, and update its answer in the person's Ask AI chat. */
+function changed(db: Db, id: string) {
+  wake(`req:${id}`);
+  void (async () => {
+    const r = await getRequest(db, id);
+    if (!r) return;
+    const finished = r.status === 'done' || r.status === 'cancelled';
+    await changeChat(db, r.user_id, r.page_id, (turns) => {
+      const t = turns.find((x) => x.requestId === id);
+      if (!t) return;
+      t.model = r.agent_name || t.model;
+      t.status = statusFor(r);
+      t.running = !finished;
+      if (r.status === 'done') t.text = r.reply || `${r.agent_name || 'The agent'} finished without a message.`;
+      if (r.status === 'cancelled') t.error = 'Cancelled.';
+    }, finished);
+  })().catch((e) => console.warn('[agent-requests] chat update failed:', (e as Error).message));
+}
+
 /** People: list your agents with online status. */
 export async function listAgents(db: Db, userId: string) {
   const rows = await db.query('select id, name, last_used_at from api_tokens where user_id = $1 order by created_at desc', [userId]);
@@ -131,9 +163,9 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
       }
       lastSeen.set(tokenId, Date.now());
       for (const id of ids) {
-        wake(`req:${id}`);
+        changed(db, id);
         // If this delivery is never confirmed, offer it again: wake this token's next poll and the person's panel.
-        setTimeout(() => { wake(`token:${tokenId}`); wake(`req:${id}`); }, LEASE_MS + 1000).unref?.();
+        setTimeout(() => { wake(`token:${tokenId}`); changed(db, id); }, LEASE_MS + 1000).unref?.();
       }
       const requests = ids.length ? await db.query(`select ${COLS} from ${FROM} where r.id = any($1) order by r.created_at`, [ids]) : [];
       if (!res.writableEnded && !res.destroyed) send(res, 200, { requests });
@@ -151,7 +183,7 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     if (r.status === 'cancelled') { send(res, 409, { error: 'The person cancelled this request. Stop working on it.' }); return true; }
     if (r.status === 'pending') {
       await db.query(`update agent_requests set status = 'working', claimed_at = coalesce(claimed_at, now()) where id = $1 and status = 'pending'`, [r.id]);
-      wake(`req:${r.id}`);
+      changed(db, r.id);
     }
     send(res, 200, { ok: true });
     return true;
@@ -171,7 +203,7 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     } else {
       await db.query(`update agent_requests set reply = $2, status = 'done', claimed_at = coalesce(claimed_at, now()), done_at = now() where id = $1`, [r.id, text.slice(0, LIMITS.reply)]);
     }
-    wake(`req:${r.id}`);
+    changed(db, r.id);
     send(res, 200, { ok: true });
     return true;
   }
@@ -185,7 +217,7 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     if (method === 'DELETE') {
       if (r.status === 'pending' || r.status === 'working') {
         await db.query(`update agent_requests set status = 'cancelled', done_at = now() where id = $1`, [r.id]);
-        wake(`req:${r.id}`);
+        changed(db, r.id);
       }
       send(res, 200, { ok: true });
       return true;
@@ -218,16 +250,19 @@ export async function createAgentRequest(req: IncomingMessage, res: ServerRespon
   if (!prompt) return send(res, 400, { error: 'Ask something first.' });
   const [{ n }] = await db.query(`select count(*)::int as n from agent_requests where token_id = $1 and status = 'pending'`, [token.id]);
   if (n >= LIMITS.pendingPerToken) return send(res, 429, { error: `${token.name} already has ${n} requests waiting. Is it listening?` });
-  const history = Array.isArray(b.history)
-    ? b.history.filter((h: any) => h && (h.role === 'user' || h.role === 'assistant') && typeof h.text === 'string')
-        .slice(-12).map((h: any) => ({ role: h.role, text: h.text.slice(0, 4000) }))
-    : [];
+  // The earlier turns of this page's Ask AI chat, from the server, so a follow-up asked on another device has them too.
+  const chat = await readChat(db, who.id, pageId);
+  if (chat.running) return send(res, 409, { error: 'Still waiting on your last question. Wait for it, or stop it.' });
+  const history = historyOf(chat.turns).slice(-12);
   const id = randomId('ar', 10);
   const tab = typeof b.tab === 'string' && /^[\w-]{1,64}$/.test(b.tab) ? b.tab : 'main';
   await db.query(
     'insert into agent_requests (id, user_id, token_id, page_id, tab, prompt, selection, history) values ($1,$2,$3,$4,$5,$6,$7,$8)',
     [id, who.id, token.id, pageId, tab, prompt.slice(0, LIMITS.prompt), String(b.selection ?? '').slice(0, LIMITS.selection), JSON.stringify(history)],
   );
+  const r = (await getRequest(db, id))!;
+  await startExchange(db, who.id, pageId, { prompt, selection: String(b.selection ?? '').slice(0, LIMITS.selection) },
+    { kind: 'agent', requestId: id, model: token.name, status: statusFor(r) });
   wake(`token:${token.id}`);
-  send(res, 201, { request: forPerson((await getRequest(db, id))!) });
+  send(res, 201, { request: forPerson(r) });
 }

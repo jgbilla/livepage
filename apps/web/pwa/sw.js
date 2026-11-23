@@ -73,7 +73,8 @@ async function cacheFirst(req) {
 
 // Network first, so the app shows current data. Falls back to the last good answer when the
 // network fails, or when the server takes over 4 seconds (a free-plan host waking from sleep):
-// the app opens with what it had, and the answer, when it comes, is saved for next time.
+// the app opens with what it had, and the answer, when it comes, is saved and the app is told
+// (message lp-api-updated), so it refreshes instead of showing the old list until next launch.
 async function networkFirst(event) {
   const req = event.request;
   const cache = await caches.open(API);
@@ -88,7 +89,14 @@ async function networkFirst(event) {
     const first = await Promise.race([network, slow]);
     if (first !== 'slow') return first;
     const hit = await cache.match(req, { ignoreVary: true });
-    return hit ?? await network;
+    if (!hit) return await network;
+    // The app got the saved answer; tell it when the fresh one lands, so it can show it.
+    event.waitUntil(network.then(async (res) => {
+      if (!res.ok) return;
+      const path = new URL(req.url).pathname;
+      for (const c of await self.clients.matchAll({ type: 'window' })) c.postMessage({ type: 'lp-api-updated', path });
+    }).catch(() => {}));
+    return hit;
   } catch (err) {
     const hit = await cache.match(req, { ignoreVary: true });
     if (hit) return hit;

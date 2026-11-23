@@ -22,6 +22,8 @@ import { config } from './config.ts';
 import { sameOrigin } from './origin.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
+import { handleChat } from './chats.ts';
+import { bumpWorkspace, handleWorkspaceEvents, workspaceRev } from './workspace-events.ts';
 import {
   HttpError, createComment, deleteComment, isCommentId, listMentions, markMentionDone, mentionables, setWebhook, threadsWithText,
   updateComment, waitForMention,
@@ -146,6 +148,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/me' && method === 'GET' && !who) return send(res, 200, { user: null }); // signed out is a normal state
     if (!who) return send(res, 401, { error: 'Sign in first.' });
     touchAgent(who);
+    // Any change you make (from any device, or through your agents) refreshes your page list everywhere.
+    if (method !== 'GET' && method !== 'HEAD' && !who.superAgent) {
+      res.on('finish', () => { if (res.statusCode < 400) bumpWorkspace(who.id); });
+    }
+    if (path === '/api/workspace/events' && method === 'GET') return handleWorkspaceEvents(req, res, who.id, url);
     if ((path === '/api/agents' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });
@@ -359,6 +366,12 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       const [, pageId, sub, id] = m;
       const role = await roleFor(db, who, pageId);
       if (!role) return send(res, 404, { error: 'Page not found, or you do not have access.' });
+      // Renames, tags, sharing and deletes show in everyone's page list who has the page (looked
+      // up first: deleting the page removes its members).
+      if (method !== 'GET' && method !== 'HEAD' && sub !== 'chat' && sub !== 'assistant' && sub !== 'agent-requests') {
+        const members = (await db.query<{ user_id: string }>('select user_id from page_members where page_id = $1', [pageId])).map((r) => r.user_id);
+        res.on('finish', () => { if (res.statusCode < 400) bumpWorkspace(...members, ...(sub === 'members' && id ? [id] : [])); });
+      }
       return pageRoutes({ req, res, db, hp, url, who, role, pageId, sub, id, method });
     }
 
@@ -511,6 +524,7 @@ async function pageRoutes(c: PageCtx): Promise<void> {
 
   if (sub === 'agent-requests' && !id && method === 'POST') return createAgentRequest(req, res, db, who, pageId);
   if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
+  if (sub === 'chat') return handleChat(req, res, db, who, pageId, url, id);
   if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId) });
 
   if (sub === 'comments') {
@@ -564,6 +578,8 @@ async function placement(b: any): Promise<{ folderId?: string | null; path?: str
 
 /** Everything the sidebar needs: folders, pages (with folder, path and tags) and tag counts. ?path= and ?tag= filter pages. */
 async function workspace(db: Db, userId: string, url: URL) {
+  // Taken before reading: a change that lands meanwhile makes the app's next check reload again.
+  const rev = workspaceRev(userId);
   const [folders, pages, tagMap, tags, views] = await Promise.all([
     listFolders(db.query, userId), listPages(db, userId), tagsByPage(db, userId), tagsFor(db, userId), listViews(db, userId),
   ]);
@@ -578,7 +594,7 @@ async function workspace(db: Db, userId: string, url: URL) {
   // ?tag=a&tag=b (or ?tag=a,b) with ?match=all|any (default any). A tag also matches its nested tags (a/x).
   const wantTags = url.searchParams.getAll('tag').flatMap((t) => t.split(',')).map(cleanTag).filter((t): t is string => !!t);
   if (wantTags.length) out = out.filter((p) => matchesTags(p.tags, wantTags, url.searchParams.get('match') === 'all' ? 'all' : 'any'));
-  return { pages: out, folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })), tags, views };
+  return { pages: out, folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })), tags, views, rev };
 }
 
 /** Title lives in the live document (so open editors update at once) and in pages.title (for lists). */
