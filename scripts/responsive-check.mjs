@@ -13,7 +13,9 @@
 //     scrolls sideways on purpose (tab bar, selection menu, code blocks, tables, mind maps), or
 //   - the page title is cut off (its text is wider than the title field), or
 //   - the top bar wraps onto a second row, or
-//   - the same person shows twice in the presence avatars (they have the page open in two tabs).
+//   - the same person shows twice in the presence avatars (they have the page open in two tabs), or
+//   - a side panel (comments, Ask AI) overlaps the top bar instead of sitting under it or covering it
+//     completely. Panel screens are checked after scrolling the page down, where this used to show.
 import { chromium } from 'playwright';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -78,14 +80,14 @@ const SCREENS = [
   {
     name: 'comments', go: async (p, s) => {
       await p.goto(`${BASE}/p/${s.pageId}?comment=`);
-    }, ready: '.comments',
+    }, ready: '.comments', scroll: true,
   },
   {
     name: 'ask-ai', go: async (p, s) => {
       await p.goto(`${BASE}/p/${s.pageId}`);
       await p.waitForSelector('.ProseMirror');
       await p.click('button.ask-ai');
-    }, ready: '.assistant',
+    }, ready: '.assistant', scroll: true,
   },
   {
     // The "/" menu: typed on desktop, opened with the "+" button on touch screens.
@@ -177,6 +179,16 @@ function measure() {
   if (dup) problems.push(`"${dup}" shows more than once in the presence avatars`);
   const title = document.querySelector('.page-title-input');
   if (title && title.scrollWidth > title.clientWidth + 2) problems.push(`page title is cut off (${title.scrollWidth}px of text in ${title.clientWidth}px)`);
+  // Side panels: either start at (or below) the top bar's bottom edge, or cover the whole bar (phone sheets).
+  const topbar = document.querySelector('.topbar');
+  for (const panel of document.querySelectorAll('.assistant, .comments')) {
+    if (!topbar) break;
+    const pr = panel.getBoundingClientRect(), br = topbar.getBoundingClientRect();
+    if (!pr.width || !pr.height) continue;
+    const below = pr.top >= br.bottom - 0.5;
+    const covers = pr.top <= br.top + 0.5 && Number(getComputedStyle(panel).zIndex) > Number(getComputedStyle(topbar).zIndex);
+    if (!below && !covers) problems.push(`${label(panel)} overlaps the top bar (panel starts at ${Math.round(pr.top)}px, the bar ends at ${Math.round(br.bottom)}px)`);
+  }
   const bar = document.querySelector('.topbar');
   if (bar && bar.getBoundingClientRect().height > 64) problems.push(`top bar is ${Math.round(bar.getBoundingClientRect().height)}px tall (wraps onto more rows)`);
   return problems;
@@ -203,6 +215,7 @@ for (const vp of VIEWPORTS) {
       await screen.go(page, state, vp);
       await page.waitForSelector(screen.ready, { timeout: 15000 });
       await page.waitForTimeout(screen.name === 'graph' ? 1500 : 700);
+      if (screen.scroll) { await page.evaluate(() => window.scrollBy(0, 700)); await page.waitForTimeout(200); }
       const problems = await page.evaluate(measure);
       for (const p of problems) failures.push(`${vp.name} ${screen.name}: ${p}`);
       if (!NO_SHOTS) await page.screenshot({ path: join(OUT, `${screen.name}-${vp.name}.png`) });

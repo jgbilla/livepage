@@ -2,6 +2,8 @@
 // = more links), each line is a [[link]]. Hover to see a page's neighbours, click to open it,
 // drag dots around, scroll or pinch to zoom, drag the background to pan.
 // /graph shows everything; /graph?page=<id> is the local graph around one page.
+import { Icon } from '../design/Icon';
+import { onThemeChange } from '../design/theme';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY,
@@ -18,7 +20,8 @@ type ApiGraph = {
 type N = SimulationNodeDatum & { id: string; title: string; kind: 'page' | 'tag'; tags: string[]; degree: number };
 type E = SimulationLinkDatum<N> & { kind: 'link' | 'tag' };
 
-const TAG_COLORS = ['#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c940d', '#7048e8'];  // not the accent orange, which marks the focused or hovered page
+// Categorical tag hues (DESIGN.md --lp-cat-1..8): never the accent, which marks the focused or hovered page, nor agent violet.
+const TAG_COLORS = ['#1b6ec2', '#2b8a3e', '#c2255c', '#b5650a', '#0b7d8f', '#d4520f', '#4f7a12', '#8a6d3b'];
 const tagColor = (tag: string) => {
   let h = 0;
   for (const c of tag.split('/')[0]) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -89,7 +92,7 @@ export function GraphScreen() {
     <div className="graph-screen">
       <header className="topbar">
         <SidebarToggle />
-        <span className="brand">{focus ? <>Graph around <Link to={`/p/${focus}`}>{focusTitle}</Link></> : 'Graph'}</span>
+        <h1 className="panel-title"><Icon name="graph" />{focus ? <>Graph around <Link to={`/p/${focus}`}>{focusTitle}</Link></> : 'Graph'}</h1>
         {graph && <span className="muted small graph-count">{pageCount} pages · {linkCount} links</span>}
         <span style={{ flex: 1 }} />
         <input className="name-input graph-filter" placeholder="Filter by title or #tag" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -153,12 +156,10 @@ function GraphCanvas({ graph, focus, filter }: { graph: { nodes: N[]; links: E[]
     const colors = () => {
       const cs = getComputedStyle(document.documentElement);
       const v = (name: string, fb: string) => cs.getPropertyValue(name).trim() || fb;
-      return { fg: v('--fg', '#1f1f1f'), muted: v('--muted', '#777'), line: v('--line', '#e6e3de'), accent: v('--accent', '#e8590c'), bg: v('--bg', '#fff') };
+      return { fg: v('--lp-text', '#1f1d1a'), muted: v('--lp-text-tertiary', '#8a857c'), line: v('--lp-border-strong', '#d4d0c8'), accent: v('--lp-accent', '#2f5bd3'), bg: v('--lp-bg', '#fcfbf9') };
     };
     let pal = colors();
-    const mq = matchMedia('(prefers-color-scheme: dark)');
-    const onScheme = () => { pal = colors(); draw(); };
-    mq.addEventListener('change', onScheme);
+    const offTheme = onThemeChange(() => { pal = colors(); draw(); });
 
     const sim: Simulation<N, E> = forceSimulation(nodes)
       .force('link', forceLink<N, E>(links).id((n) => n.id).distance((l) => (l.kind === 'tag' ? 40 : 60)).strength((l) => (l.kind === 'tag' ? 0.3 : 0.6)))
@@ -232,7 +233,7 @@ function GraphCanvas({ graph, focus, filter }: { graph: { nodes: N[]; links: E[]
       }
 
       // Labels: always for the hovered page and its neighbours, the focus, filter hits and big hubs; for everyone when zoomed in.
-      ctx.font = `${12 / view.k}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = `500 ${12 / view.k}px ${getComputedStyle(document.documentElement).getPropertyValue('--lp-font-sans') || 'system-ui, sans-serif'}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       for (const n of nodes) {
@@ -363,7 +364,7 @@ function GraphCanvas({ graph, focus, filter }: { graph: { nodes: N[]; links: E[]
     return () => {
       sim.stop();
       ro.disconnect();
-      mq.removeEventListener('change', onScheme);
+      offTheme();
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);

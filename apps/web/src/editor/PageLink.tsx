@@ -10,6 +10,7 @@ import { LINK_NODE, MAIN_TAB, listTabs, tabsMap, type Tab } from '@livepage/sche
 import { api } from '../api';
 import { navigate } from '../router';
 import { titleOf, useWorkspace } from '../workspace';
+import { Icon } from '../design/Icon';
 
 export const linkHref = (page: string, tab?: string | null) => `/p/${page}${tab && tab !== MAIN_TAB ? `?tab=${encodeURIComponent(tab)}` : ''}`;
 
@@ -96,7 +97,7 @@ function LinkView({ node, selected, doc, currentPage }: ReactNodeViewProps & { d
         contentEditable={false}
         onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); navigate(linkHref(page, tab)); }}
       >
-        {tab && page === currentPage ? '⇥ ' : '↗ '}{text}
+        <Icon name={tab && page === currentPage ? 'arrow-right-to-line' : 'arrow-up-right'} />{text}
       </a>
     </NodeViewWrapper>
   );
@@ -222,7 +223,7 @@ export function LinkMenu({ editor, doc, currentPage }: { editor: Editor; doc: Y.
       <div className="link-menu-head muted small">{tabQ === null ? 'Link to a page · type # for a tab' : 'Link to a tab'}</div>
       {items.length ? items.map((it, i) => (
         <button type="button" key={it.key} className={`link-item ${i === index ? 'active' : ''}`} onMouseEnter={() => setIndex(i)} onClick={() => pick(it)}>
-          <span>{it.tab || it.hint.startsWith('tab') ? '⇥' : '↗'} {it.title}</span>
+          <span><Icon name={it.tab || it.hint.startsWith('tab') ? 'arrow-right-to-line' : 'file'} />{it.title}</span>
           {it.hint && <span className="muted small">{it.hint}</span>}
         </button>
       )) : <div className="muted small link-item">No matches</div>}

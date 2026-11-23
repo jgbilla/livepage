@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Role } from '../api';
+import { Icon } from '../design/Icon';
 
 type Member = { id: string; name: string; email: string; role: Role };
 type ShareLink = { token: string; role: Role; created_at: string };
@@ -42,7 +43,7 @@ export function ShareDialog({ pageId, onClose }: { pageId: string; onClose: () =
       <div className="modal" role="dialog" aria-label="Share page" onClick={(e) => e.stopPropagation()}>
         <div className="home-head">
           <h2>Share</h2>
-          <button type="button" className="ghost" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="ghost icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
 
         <h3>Invite with a link</h3>

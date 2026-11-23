@@ -40,7 +40,7 @@ export function AiSettings({ onSaved, compact }: { onSaved?: (s: AiSettingsValue
       const r = await api<{ settings: AiSettingsValue }>('/ai/settings', { method: 'PUT', body: body() });
       setData({ ...data, settings: r.settings });
       setApiKey('');
-      setMsg({ ok: true, text: 'Saved. Open any page and press “✦ Ask AI”.' });
+      setMsg({ ok: true, text: 'Saved. Open any page and press Ask AI.' });
       onSaved?.(r.settings);
     } catch (e) { setMsg({ ok: false, text: (e as Error).message }); } finally { setBusy(''); }
   };

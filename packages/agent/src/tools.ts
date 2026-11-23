@@ -44,6 +44,7 @@ Pick the lightest block that does the job:
   they stream in that order so people see the block take shape. Controls that only change the view should
   run locally in js. To get input back from people, call livepage.send('action_name', {values}) from js,
   then poll get_block_actions and answer each with resolve_block_action.
+  Style custom UI with the Livepage design tokens so it matches the page in light and dark: var(--lp-text), var(--lp-text-secondary), var(--lp-surface), var(--lp-border), var(--lp-accent), var(--lp-radius-lg), var(--lp-space-4), var(--lp-font-sans), var(--lp-shadow-2), and var(--lp-cat-1) to var(--lp-cat-8) for chart series; the block background is transparent over the page.
 Cite sources with footnotes: write the sentence first, then add_footnote with after_text set to the words the
 citation belongs to, plus url, title and author. Footnotes number themselves and list at the bottom of the tab.
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
@@ -302,7 +303,7 @@ People comment on text, blocks or the whole page and can @mention you. Check get
     async ({ page: p, block_id, parent_node_id, text: t }) => text(`added ${(await agentFor(p)).addMindNode(block_id, parent_node_id, t)}`));
 
   server.tool('insert_custom_ui',
-    'Append a custom UI block, streamed in order: initial_height and placeholders, then css, then html (previewed while writing), then js (runs once complete). Runs in a sandbox: CDN scripts allowed, no network requests. Use livepage.send(action, values) in js to send input back.',
+    'Append a custom UI block, streamed in order: initial_height and placeholders, then css, then html (previewed while writing), then js (runs once complete). Runs in a sandbox: CDN scripts allowed, no network requests. Use livepage.send(action, values) in js to send input back. Style it with the Livepage design tokens so it matches the page in light and dark: var(--lp-text), var(--lp-text-secondary), var(--lp-surface), var(--lp-border), var(--lp-accent), var(--lp-radius-lg), var(--lp-space-4), var(--lp-font-sans), var(--lp-shadow-2), and var(--lp-cat-1) to var(--lp-cat-8) for chart series; the block background is transparent over the page.',
     {
       page,
       tab,

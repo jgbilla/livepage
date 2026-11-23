@@ -2,6 +2,7 @@
 // to filter; arrow keys move, Enter or Tab picks, Escape closes. It lists every block the editor
 // can insert (headings, lists, tables, mind maps, live HTML blocks, footnotes, page links,
 // templates...) and page actions (comment, Ask AI). On touch screens the "+" button opens it too.
+import { Icon, type IconName } from '../design/Icon';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Extension, type Editor } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
@@ -42,7 +43,7 @@ type Command = {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: IconName;
   group: string;
   /** Other words that find it: "h1", "ul", "todo", "hr"... */
   keywords: string[];
@@ -55,27 +56,27 @@ const today = () => new Date().toLocaleDateString(undefined, { year: 'numeric', 
 function baseCommands(ctx: SlashContext): Command[] {
   const c = (e: Editor) => e.chain().focus();
   const list: Command[] = [
-    { id: 'text', group: 'Basic blocks', icon: 'Aa', title: 'Text', description: 'Plain writing', keywords: ['paragraph', 'p', 'plain'], run: (e) => c(e).setParagraph().run() },
-    { id: 'h1', group: 'Basic blocks', icon: 'H1', title: 'Heading 1', description: 'Big section heading', keywords: ['h1', 'title', '#'], run: (e) => c(e).setHeading({ level: 1 }).run() },
-    { id: 'h2', group: 'Basic blocks', icon: 'H2', title: 'Heading 2', description: 'Medium section heading', keywords: ['h2', 'subtitle', '##'], run: (e) => c(e).setHeading({ level: 2 }).run() },
-    { id: 'h3', group: 'Basic blocks', icon: 'H3', title: 'Heading 3', description: 'Small section heading', keywords: ['h3', '###'], run: (e) => c(e).setHeading({ level: 3 }).run() },
-    { id: 'bullet', group: 'Basic blocks', icon: '•', title: 'Bulleted list', description: 'A simple list with bullets', keywords: ['ul', 'unordered', 'list', 'bullets', '-'], run: (e) => c(e).toggleBulletList().run() },
-    { id: 'numbered', group: 'Basic blocks', icon: '1.', title: 'Numbered list', description: 'A list with numbers', keywords: ['ol', 'ordered', 'list', 'numbers'], run: (e) => c(e).toggleOrderedList().run() },
-    { id: 'todo', group: 'Basic blocks', icon: '☑', title: 'To-do list', description: 'Track tasks with checkboxes', keywords: ['todo', 'task', 'checkbox', 'check', 'list', '[]'], run: (e) => c(e).toggleTaskList().run() },
-    { id: 'quote', group: 'Basic blocks', icon: '❝', title: 'Quote', description: 'Set off a quotation', keywords: ['blockquote', 'citation', '>'], run: (e) => c(e).toggleBlockquote().run() },
-    { id: 'divider', group: 'Basic blocks', icon: '—', title: 'Divider', description: 'A line between sections', keywords: ['hr', 'rule', 'separator', 'line', '---'], run: (e) => c(e).setHorizontalRule().run() },
-    { id: 'code', group: 'Basic blocks', icon: '</>', title: 'Code block', description: 'Code with syntax highlighting', keywords: ['code', 'snippet', 'pre', '```'], run: (e) => c(e).setCodeBlock().run() },
-    { id: 'table', group: 'Basic blocks', icon: '⊞', title: 'Table', description: 'A 3 × 3 table with a header row', keywords: ['grid', 'rows', 'columns', 'spreadsheet'], run: (e) => c(e).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-    { id: 'mindmap', group: 'Live blocks', icon: '✺', title: 'Mind map', description: 'Branching ideas you and agents edit live', keywords: ['mind', 'map', 'brainstorm', 'tree', 'diagram'], run: (e) => c(e).insertMindMap().run() },
-    { id: 'html', group: 'Live blocks', icon: '✦', title: 'HTML block', description: 'Custom UI, animations and charts in a sandbox', keywords: ['html', 'custom', 'ui', 'embed', 'widget', 'animation', 'js', 'javascript', 'iframe', 'artifact'], run: (e) => c(e).insertHtmlBlock().run() },
-    { id: 'footnote', group: 'Inline', icon: '¹', title: 'Footnote', description: 'A numbered note at the bottom of the tab', keywords: ['fn', 'footnote', 'note', 'citation', 'source', 'reference'], run: (e) => c(e).insertFootnote().run() },
-    { id: 'link', group: 'Inline', icon: '↗', title: 'Link to page', description: 'Link to a page or tab, like [[', keywords: ['link', 'page', 'mention', '[[', 'backlink', 'tab'], run: (e) => c(e).insertContent('[[').run() },
-    { id: 'date', group: 'Inline', icon: '📅', title: "Today's date", description: today(), keywords: ['date', 'today', 'now'], run: (e) => c(e).insertContent(today() + ' ').run() },
+    { id: 'text', group: 'Basic blocks', icon: 'text', title: 'Text', description: 'Plain writing', keywords: ['paragraph', 'p', 'plain'], run: (e) => c(e).setParagraph().run() },
+    { id: 'h1', group: 'Basic blocks', icon: 'heading-1', title: 'Heading 1', description: 'Big section heading', keywords: ['h1', 'title', '#'], run: (e) => c(e).setHeading({ level: 1 }).run() },
+    { id: 'h2', group: 'Basic blocks', icon: 'heading', title: 'Heading 2', description: 'Medium section heading', keywords: ['h2', 'subtitle', '##'], run: (e) => c(e).setHeading({ level: 2 }).run() },
+    { id: 'h3', group: 'Basic blocks', icon: 'heading-3', title: 'Heading 3', description: 'Small section heading', keywords: ['h3', '###'], run: (e) => c(e).setHeading({ level: 3 }).run() },
+    { id: 'bullet', group: 'Basic blocks', icon: 'list', title: 'Bulleted list', description: 'A simple list with bullets', keywords: ['ul', 'unordered', 'list', 'bullets', '-'], run: (e) => c(e).toggleBulletList().run() },
+    { id: 'numbered', group: 'Basic blocks', icon: 'list-ordered', title: 'Numbered list', description: 'A list with numbers', keywords: ['ol', 'ordered', 'list', 'numbers'], run: (e) => c(e).toggleOrderedList().run() },
+    { id: 'todo', group: 'Basic blocks', icon: 'todo', title: 'To-do list', description: 'Track tasks with checkboxes', keywords: ['todo', 'task', 'checkbox', 'check', 'list', '[]'], run: (e) => c(e).toggleTaskList().run() },
+    { id: 'quote', group: 'Basic blocks', icon: 'quote', title: 'Quote', description: 'Set off a quotation', keywords: ['blockquote', 'citation', '>'], run: (e) => c(e).toggleBlockquote().run() },
+    { id: 'divider', group: 'Basic blocks', icon: 'divider', title: 'Divider', description: 'A line between sections', keywords: ['hr', 'rule', 'separator', 'line', '---'], run: (e) => c(e).setHorizontalRule().run() },
+    { id: 'code', group: 'Basic blocks', icon: 'code', title: 'Code block', description: 'Code with syntax highlighting', keywords: ['code', 'snippet', 'pre', '```'], run: (e) => c(e).setCodeBlock().run() },
+    { id: 'table', group: 'Basic blocks', icon: 'table', title: 'Table', description: 'A 3 × 3 table with a header row', keywords: ['grid', 'rows', 'columns', 'spreadsheet'], run: (e) => c(e).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { id: 'mindmap', group: 'Live blocks', icon: 'mind-map', title: 'Mind map', description: 'Branching ideas you and agents edit live', keywords: ['mind', 'map', 'brainstorm', 'tree', 'diagram'], run: (e) => c(e).insertMindMap().run() },
+    { id: 'html', group: 'Live blocks', icon: 'html-block', title: 'HTML block', description: 'Custom UI, animations and charts in a sandbox', keywords: ['html', 'custom', 'ui', 'embed', 'widget', 'animation', 'js', 'javascript', 'iframe', 'artifact'], run: (e) => c(e).insertHtmlBlock().run() },
+    { id: 'footnote', group: 'Inline', icon: 'footnote', title: 'Footnote', description: 'A numbered note at the bottom of the tab', keywords: ['fn', 'footnote', 'note', 'citation', 'source', 'reference'], run: (e) => c(e).insertFootnote().run() },
+    { id: 'link', group: 'Inline', icon: 'arrow-up-right', title: 'Link to page', description: 'Link to a page or tab, like [[', keywords: ['link', 'page', 'mention', '[[', 'backlink', 'tab'], run: (e) => c(e).insertContent('[[').run() },
+    { id: 'date', group: 'Inline', icon: 'calendar', title: "Today's date", description: today(), keywords: ['date', 'today', 'now'], run: (e) => c(e).insertContent(today() + ' ').run() },
   ];
   if (ctx.canComment && ctx.onComment) {
     const onComment = ctx.onComment;
     list.push({
-      id: 'comment', group: 'Actions', icon: '💬', title: 'Comment', description: 'Start a comment thread on this line', keywords: ['comment', 'discuss', 'note', 'feedback', 'mention', '@'],
+      id: 'comment', group: 'Actions', icon: 'comment', title: 'Comment', description: 'Start a comment thread on this line', keywords: ['comment', 'discuss', 'note', 'feedback', 'mention', '@'],
       run: (e) => {
         // Comment on the line's text when it has some, else on the page.
         const { $from } = e.state.selection;
@@ -89,7 +90,7 @@ function baseCommands(ctx: SlashContext): Command[] {
   }
   if (ctx.onAskAi) {
     const onAskAi = ctx.onAskAi;
-    list.push({ id: 'ai', group: 'Actions', icon: '✨', title: 'Ask AI', description: 'Ask an AI or a connected agent to write here', keywords: ['ai', 'assistant', 'agent', 'claude', 'gpt', 'write', 'generate'], run: () => onAskAi() });
+    list.push({ id: 'ai', group: 'Actions', icon: 'sparkles', title: 'Ask AI', description: 'Ask an AI or a connected agent to write here', keywords: ['ai', 'assistant', 'agent', 'claude', 'gpt', 'write', 'generate'], run: () => onAskAi() });
   }
   return list;
 }
@@ -144,7 +145,7 @@ export function SlashMenu({ editor, ctx }: { editor: Editor; ctx: SlashContext }
     const all = baseCommands(ctx);
     for (const t of templates) {
       all.push({
-        id: `tpl:${t.id}`, group: 'Templates', icon: '▤', title: t.title, description: 'Insert this template here',
+        id: `tpl:${t.id}`, group: 'Templates', icon: 'template', title: t.title, description: 'Insert this template here',
         keywords: ['template', ...t.title.toLowerCase().split(/\s+/)],
         run: (e) => { void insertTemplate(e, ctx.doc, t.id).catch((err) => console.warn('template insert failed', err)); },
       });
@@ -210,7 +211,7 @@ export function SlashMenu({ editor, ctx }: { editor: Editor; ctx: SlashContext }
             {head && <div className="slash-group muted small">{head}</div>}
             <button type="button" role="option" aria-selected={i === index} className={`slash-item ${i === index ? 'active' : ''}`}
               onMouseEnter={() => setIndex(i)} onClick={() => pick(cmd)}>
-              <span className="slash-icon" aria-hidden>{cmd.icon}</span>
+              <span className={`slash-icon ${cmd.id === 'ai' ? 'agent' : ''}`} aria-hidden><Icon name={cmd.icon} /></span>
               <span className="slash-text">
                 <span className="slash-title">{cmd.title}</span>
                 <span className="slash-desc muted small">{cmd.description}</span>

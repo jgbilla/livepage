@@ -20,6 +20,8 @@ import { TemplateFields } from './TemplateFields';
 import { titleOf, workspaceSnapshot } from '../workspace';
 import { Footnote } from './Footnote';
 import { Footnotes } from './Footnotes';
+import { renderCaret } from './caret';
+import { Icon } from '../design/Icon';
 import { SlashCommands, SlashMenu, openSlashMenu, type SlashContext } from './SlashMenu';
 import { SelectionMenu } from './SelectionMenu';
 type User = { id: string; name: string; color: string };
@@ -43,7 +45,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         StarterKit.configure({ undoRedo: false, codeBlock: false }), // Yjs owns undo history
         CodeBlock,
         Collaboration.configure({ document: doc, field: fragmentName(tab) }), // one block tree per tab
-        CollaborationCaret.configure({ provider, user: { id: user.id, name: user.name, color: user.color, kind: 'human' } }),
+        CollaborationCaret.configure({ provider, user: { id: user.id, name: user.name, color: user.color, kind: 'human' }, render: renderCaret }),
         Placeholder.configure({
           placeholder: ({ editor: e }) => (e.isEmpty ? 'Write, or type / to add a heading, table, mind map, live HTML block…' : 'Type / for blocks, [[ to link a page'),
         }),
@@ -122,6 +124,6 @@ function InsertButton({ editor }: { editor: Editor }) {
   }, []);
   return (
     <button type="button" className="insert-fab" style={{ bottom: 16 + lift }} title="Insert a block" aria-label="Insert a block"
-      onMouseDown={(e) => e.preventDefault()} onPointerDown={(e) => e.preventDefault()} onClick={() => openSlashMenu(editor)}>+</button>
+      onMouseDown={(e) => e.preventDefault()} onPointerDown={(e) => e.preventDefault()} onClick={() => openSlashMenu(editor)}><Icon name="plus" /></button>
   );
 }

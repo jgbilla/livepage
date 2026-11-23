@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { appConfig } from '../config';
+import { useResolvedTheme } from '../design/theme';
+import { Icon } from '../design/Icon';
 
 // Renders untrusted HTML/JS. Security model (SPEC.md "HTML blocks"):
 //  - the iframe loads from the sandbox URL (from /api/config), a different origin from the app
@@ -24,8 +26,13 @@ export function SandboxFrame({ code, streaming, initialHeight, onAction }: Props
   const [error, setError] = useState<string | null>(null);
   const [rendered, setRendered] = useState(code);
   const ready = useRef(false);
-  const latest = useRef({ code, streaming, onAction });
-  latest.current = { code, streaming, onAction };
+  // Blocks get the design tokens and follow the page's light/dark theme (see runner.html).
+  const theme = useResolvedTheme();
+  const latest = useRef({ code, streaming, onAction, theme });
+  latest.current = { code, streaming, onAction, theme };
+  useEffect(() => {
+    if (ready.current) ref.current?.contentWindow?.postMessage({ type: 'livepage:theme', theme }, '*');
+  }, [theme]);
 
   // Final mode: debounce re-renders while someone is typing code.
   // Right after streaming ends, render at once (no flash of stale code).
@@ -40,7 +47,7 @@ export function SandboxFrame({ code, streaming, initialHeight, onAction }: Props
   // Streaming mode: push previews into the live iframe (throttled by React batching).
   useEffect(() => {
     if (streaming && ready.current) {
-      ref.current?.contentWindow?.postMessage({ type: 'livepage:preview', code }, '*');
+      ref.current?.contentWindow?.postMessage({ type: 'livepage:preview', code, theme: latest.current.theme }, '*');
     }
   }, [code, streaming]);
 
@@ -55,8 +62,8 @@ export function SandboxFrame({ code, streaming, initialHeight, onAction }: Props
       const d = e.data;
       if (d.type === 'livepage:ready') {
         ready.current = true;
-        const { streaming: s, code: c } = latest.current;
-        frame.contentWindow!.postMessage(s ? { type: 'livepage:preview', code: c } : { type: 'livepage:render', code: rendered }, '*');
+        const { streaming: s, code: c, theme: t } = latest.current;
+        frame.contentWindow!.postMessage(s ? { type: 'livepage:preview', code: c, theme: t } : { type: 'livepage:render', code: rendered, theme: t }, '*');
       }
       if (d.type === 'livepage:height') {
         const h = Number(d.height) || 0;
@@ -82,7 +89,7 @@ export function SandboxFrame({ code, streaming, initialHeight, onAction }: Props
         title="HTML block"
         style={{ height }}
       />
-      {error && <div className="sandbox-error">⚠ {error}</div>}
+      {error && <div className="sandbox-error"><Icon name="alert" />{error}</div>}
     </div>
   );
 }

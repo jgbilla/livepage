@@ -8,6 +8,7 @@ const MAIN_TAB = 'main';
 import { api } from './api';
 import { navigate } from './router';
 import { reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';
+import { Icon } from './design/Icon';
 
 type Hit = { id: string; title: string; tags: string[]; tab: string | null; snippet: string; path?: string };
 
@@ -128,7 +129,7 @@ function Switcher({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop switcher-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="switcher" role="dialog" aria-label="Search pages" onKeyDown={onKey}>
         <div className="switcher-input-row">
-          <span className="switcher-glyph" aria-hidden>⌕</span>
+          <span className="switcher-glyph" aria-hidden><Icon name="search" /></span>
           <input
             autoFocus className="switcher-input" placeholder="Search pages or jump to one…" value={q}
             onChange={(e) => setQ(e.target.value)} aria-controls="switcher-list"

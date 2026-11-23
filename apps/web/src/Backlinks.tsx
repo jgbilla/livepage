@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api';
 import { Link } from './router';
 import { linkHref } from './editor/PageLink';
+import { Icon } from './design/Icon';
 
 type Backlink = { page: string; title: string; from_tab: string; from_tab_title: string; to_tab: string | null };
 
@@ -27,7 +28,7 @@ export function Backlinks({ pageId, tab }: { pageId: string; tab: string }) {
       <ul>
         {rows.map((b, i) => (
           <li key={i}>
-            <Link to={linkHref(b.page, b.from_tab)}>↩ {b.title || 'Untitled'}{b.from_tab_title ? ` › ${b.from_tab_title}` : ''}</Link>
+            <Link to={linkHref(b.page, b.from_tab)}><Icon name="corner-up-left" />{b.title || 'Untitled'}{b.from_tab_title ? ` › ${b.from_tab_title}` : ''}</Link>
             {tab !== 'main' && toThisTab(b) && <span className="muted small"> · links to this tab</span>}
           </li>
         ))}

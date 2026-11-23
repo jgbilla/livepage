@@ -5,6 +5,7 @@ import { api } from '../api';
 import { Link } from '../router';
 import { saveBlob } from '../PageMenu';
 import { reloadWorkspace } from '../workspace';
+import { Icon } from '../design/Icon';
 
 type File2 = { path: string; content: string };
 type Report = { pages: { id: string; title: string; path: string }[]; skipped: string[]; unresolved: string[] };
@@ -68,7 +69,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       <div className="modal import-dialog" role="dialog" aria-label="Import and export" onClick={(e) => e.stopPropagation()}>
         <div className="home-head">
           <h2>Import and export</h2>
-          <button type="button" className="ghost" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="ghost icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </div>
 
         <h3>Import</h3>
@@ -109,7 +110,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
 
         <h3>Export</h3>
         <p className="muted small">Every page you can open, as Markdown files in your folders (a .zip you can open as an Obsidian vault). To export one page as Markdown or PDF, use ⋯ on the page.</p>
-        <button type="button" onClick={exportAll} disabled={!!busy}>⤓ Export everything (.zip)</button>
+        <button type="button" onClick={exportAll} disabled={!!busy}><Icon name="download" />Export everything (.zip)</button>
       </div>
     </div>
   );

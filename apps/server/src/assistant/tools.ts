@@ -87,7 +87,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'insert_custom_ui',
-    description: 'Add a custom interactive block (animation, chart, diagram, widget, game). Runs in a sandboxed iframe: CDN scripts allowed, no network requests. Give css, then html, then js, in that order; people see it take shape as you write. Only use when native blocks cannot do it.',
+    description: 'Add a custom interactive block (animation, chart, diagram, widget, game). Runs in a sandboxed iframe: CDN scripts allowed, no network requests. Give css, then html, then js, in that order; people see it take shape as you write. Only use when native blocks cannot do it. Style it with the Livepage design tokens so it matches the page in light and dark: var(--lp-text), var(--lp-text-secondary), var(--lp-surface), var(--lp-border), var(--lp-accent), var(--lp-radius-lg), var(--lp-space-4), var(--lp-font-sans), var(--lp-shadow-2), and var(--lp-cat-1) to var(--lp-cat-8) for chart series; the block background is transparent over the page.',
     parameters: {
       type: 'object',
       properties: {

@@ -5,6 +5,7 @@ import { AiSettings } from './AiSettings';
 import { Link } from '../router';
 import { SidebarToggle } from '../Sidebar';
 import { newPage, openToday, titleOf, useWorkspace } from '../workspace';
+import { Icon } from '../design/Icon';
 
 export function HomeScreen({ me }: { me: Me }) {
   const ws = useWorkspace();
@@ -22,8 +23,8 @@ export function HomeScreen({ me }: { me: Me }) {
         <div className="home-head">
           <h1>Recent pages</h1>
           <span className="row">
-            <button type="button" onClick={() => void openToday()}>☀ Today</button>
-            <button type="button" className="primary" onClick={() => void newPage(null)}>+ New page</button>
+            <button type="button" onClick={() => void openToday()}><Icon name="today" />Today</button>
+            <button type="button" className="primary" onClick={() => void newPage(null)}><Icon name="plus" />New page</button>
           </span>
         </div>
         {pages === null ? (
@@ -35,7 +36,7 @@ export function HomeScreen({ me }: { me: Me }) {
             {pages.map((p) => (
               <li key={p.id}>
                 <Link to={`/p/${p.id}`} className="page-row">
-                  <span className="page-title">{titleOf(p) || 'Untitled'}</span>
+                  <span className="page-title"><Icon name={p.role === 'owner' ? 'file' : 'users'} />{titleOf(p) || 'Untitled'}</span>
                   <span className="muted small">
                     {p.path && <>{p.path} · </>}
                     {p.role === 'owner' ? 'Yours' : `${p.owner_name} · ${p.role}`} · {new Date(p.updated_at).toLocaleDateString()}
@@ -48,7 +49,7 @@ export function HomeScreen({ me }: { me: Me }) {
         <Mentions />
         <section className="tokens">
           <h2>AI assistant</h2>
-          <p className="muted small">The “✦ Ask AI” button on every page uses this. Bring your own key for any provider, or point it at a local model.</p>
+          <p className="muted small">The Ask AI button on every page uses this. Bring your own key for any provider, or point it at a local model.</p>
           <AiSettings />
         </section>
         <AgentTokens />
@@ -73,7 +74,7 @@ function Mentions() {
         {list.map((m) => (
           <li key={m.id}>
             <Link to={`/p/${m.page_id}?comment=${m.thread_id}`}>
-              <b>{m.author_name}</b>{m.author_kind === 'agent' ? ' ✦' : ''} <span className="muted">on {m.page_title}</span>
+              <b>{m.author_name}</b>{m.author_kind === 'agent' && <> <span className="agent-tag">Agent</span></>} <span className="muted">on {m.page_title}</span>
               <div className="small">{m.text}</div>
               {m.quote && <div className="muted small">“{m.quote}”</div>}
             </Link>
@@ -118,7 +119,7 @@ function AgentTokens() {
     <section className="tokens">
       <div className="home-head">
         <h2>Agents</h2>
-        <button type="button" onClick={create}>+ Agent token</button>
+        <button type="button" onClick={create}><Icon name="key" />Agent token</button>
       </div>
       <p className="muted small">An agent token lets an AI join your pages with your access, with its own name and cursor. People can @mention it in comments.</p>
       {fresh && (
@@ -140,7 +141,7 @@ function AgentTokens() {
       <ul className="token-list">
         {tokens.map((t) => (
           <li key={t.id}>
-            <span>{t.name}</span>
+            <span className="token-name"><span className="avatar avatar-agent" aria-hidden="true"><Icon name="sparkles" size={12} /></span>{t.name}</span>
             <span className="muted small">{t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleString()}` : 'never used'}</span>
             <button type="button" className="ghost" title={t.webhook_url ?? 'Get a webhook call when this agent is @mentioned'} onClick={() => webhook(t)}>
               {t.webhook_url ? 'Webhook on' : 'Add webhook'}

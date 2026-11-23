@@ -6,6 +6,7 @@ import { HTML_NODE, actionsMap, htmlCodeText, newId, pushAction, validateAction,
 import { SandboxFrame } from './SandboxFrame';
 import { CodeArea } from './CodeArea';
 import { requestBlockComment } from './comments';
+import { Icon } from '../design/Icon';
 
 export const STARTER_CODE = `<div class="pulse">Hello from an HTML block</div>
 <style>
@@ -139,8 +140,9 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes, rea
     <NodeViewWrapper className={`html-block ${selected ? 'is-selected' : ''}`} data-drag-handle>
       <div className="html-block-bar" contentEditable={false}>
         <span className="html-block-label">
+          <Icon name="html-block" />
           {node.attrs.title || 'HTML block'}
-          {streaming && <span className="streaming-badge">writing…</span>}
+          {streaming && <span className="streaming-badge"><Icon name="sparkles" />writing…</span>}
         </span>
         <span className="html-block-actions">
           {streaming && !readOnly && (
@@ -148,19 +150,20 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes, rea
               Run now
             </button>
           )}
-          <button type="button" className="block-comment-btn" title="Comment on this block" onClick={() => requestBlockComment(blockId, node.attrs.title || 'HTML block')}>💬</button>
+          <button type="button" className="block-comment-btn" title="Comment on this block" aria-label="Comment on this block" onClick={() => requestBlockComment(blockId, node.attrs.title || 'HTML block')}><Icon name="comment" /></button>
           <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : readOnly ? 'View code' : 'Edit code'}</button>
         </span>
       </div>
       <div contentEditable={false} className="html-block-body">
         <SandboxFrame code={code} streaming={streaming} initialHeight={initialHeight} onAction={onAction} />
         {streaming && placeholders.length > 0 && (
-          <div className="html-block-placeholder">{placeholders[tick % placeholders.length]}</div>
+          <div className="html-block-placeholder"><Icon name="sparkles" />{placeholders[tick % placeholders.length]}</div>
         )}
         {lastAction && (
           <div className={`bridge-status bridge-${lastAction.status}`}>
+            {lastAction.status === 'done' ? <Icon name="sparkles" /> : <Icon name="loader" className="spin" />}
             {lastAction.status === 'done'
-              ? `✦ Agent: ${lastAction.note || 'done'}`
+              ? `Agent: ${lastAction.note || 'done'}`
               : `Sent "${lastAction.action}" to the agent${lastAction.status === 'claimed' ? ', working on it…' : '…'}`}
           </div>
         )}

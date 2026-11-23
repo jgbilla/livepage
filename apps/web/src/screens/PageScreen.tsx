@@ -4,6 +4,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { META, MAIN_TAB, listTabs, type CommentAnchor } from '@livepage/schema';
 import type { Editor } from '@tiptap/core';
+import { Icon } from '../design/Icon';
 import { api, colorFor, type Me, type Role } from '../api';
 import { collabUrl } from '../config';
 import { Link, navigate, useLocation } from '../router';
@@ -149,16 +150,16 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
         </span>
         {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
         {isTemplate && <span className="badge badge-template narrow-hide" title="New pages can start from this template">Template</span>}
-        {publishedSlug && <a className="badge badge-published narrow-hide" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Published: open the public page">●<span className="badge-label"> Published</span></a>}
+        {publishedSlug && <a className="badge badge-published narrow-hide" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Published: open the public page"><span className="dot" /><span className="badge-label">Published</span></a>}
         <Presence peers={peers} />
-        <Link to={`/graph?page=${pageId}`} className="ghost-link small narrow-hide" >◉ Graph</Link>
-        {!readOnly && <button type="button" className="ghost narrow-hide" onClick={() => setShowHistory(true)} title="Version history">History</button>}
-        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }} title="Ask AI">✦<span className="ask-ai-label"> Ask AI</span></button>}
+        <Link to={`/graph?page=${pageId}`} className="ghost-link narrow-hide" title="Graph around this page"><Icon name="graph" />Graph</Link>
+        {!readOnly && <button type="button" className="ghost narrow-hide" onClick={() => setShowHistory(true)} title="Version history"><Icon name="history" />History</button>}
+        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }} title="Ask AI" aria-label="Ask AI"><Icon name="sparkles" /><span className="ask-ai-label">Ask AI</span></button>}
         <button type="button" className="ghost narrow-hide" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
-          {copied ? 'Copied' : <>🔗<span className="copy-link-label"> Copy link</span></>}
+          {copied ? <><Icon name="check" /><span className="copy-link-label">Copied</span></> : <><Icon name="link" /><span className="copy-link-label">Copy link</span></>}
         </button>
         <button type="button" className={`comments-toggle ${commentsOpen ? 'on' : ''}`} onClick={() => { setCommentsOpen((o) => !o); setAsking(false); }} aria-pressed={commentsOpen}>
-          💬{openComments ? ` ${openComments}` : ''}<span className="sr-only"> comments</span>
+          <Icon name="comment" />{openComments ? <span className="count">{openComments}</span> : null}<span className="sr-only"> comments</span>
         </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
         <PageMenu pageId={pageId} role={role} title={title} isTemplate={isTemplate} publishedSlug={publishedSlug}

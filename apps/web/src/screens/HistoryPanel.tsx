@@ -2,6 +2,7 @@
 // what changed, and a button to bring the page back to that version.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, colorFor } from '../api';
+import { Icon } from '../design/Icon';
 
 type Author = { id: string; name: string; kind: 'human' | 'agent' };
 type Version = {
@@ -34,7 +35,7 @@ function AuthorChip({ a }: { a: Author }) {
   return (
     <span className={`vh-author vh-${a.kind}`} style={{ '--c': colorFor(a.id) } as React.CSSProperties}
       title={a.kind === 'agent' ? `${a.name} (agent)` : a.name}>
-      {a.kind === 'agent' ? '✦' : '●'} {a.name}
+      {a.kind === 'agent' ? <Icon name="sparkles" size={11} /> : <span className="who" />}{a.name}
     </span>
   );
 }
@@ -214,7 +215,7 @@ export function HistoryPanel({ pageId, canRestore, onClose }: { pageId: string; 
           <h2>Version history</h2>
           <span className="spacer" />
           <button type="button" className="ghost" onClick={() => void load()} title="Refresh">Refresh</button>
-          <button type="button" className="ghost" onClick={onClose} aria-label="Close">✕</button>
+          <button type="button" className="ghost icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
         </header>
         {error && <p className="form-error vh-pad">{error}</p>}
         {notice && <p className="vh-notice vh-pad">{notice}</p>}

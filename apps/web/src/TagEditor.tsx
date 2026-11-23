@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from './router';
 import { cleanTag, setTags, useWorkspace } from './workspace';
+import { Icon } from './design/Icon';
 
 // Tags under the page title. Everyone with access sees the same tags; editors can change them.
 export function TagEditor({ pageId, initial, readOnly }: { pageId: string; initial: string[]; readOnly: boolean }) {
@@ -26,7 +27,7 @@ export function TagEditor({ pageId, initial, readOnly }: { pageId: string; initi
       {tags.map((t) => (
         <span key={t} className="chip">
           <Link to={`/tag/${encodeURIComponent(t)}`}>#{t}</Link>
-          {!readOnly && <button type="button" className="chip-x" aria-label={`Remove tag ${t}`} onClick={() => void commit(tags.filter((x) => x !== t))}>×</button>}
+          {!readOnly && <button type="button" className="chip-x" aria-label={`Remove tag ${t}`} onClick={() => void commit(tags.filter((x) => x !== t))}><Icon name="x" /></button>}
         </span>
       ))}
       {!readOnly && (adding ? (

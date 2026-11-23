@@ -1,6 +1,7 @@
 // The small menu that floats over selected text, like Notion's: bold, italic, strikethrough, code,
 // link, comment, footnote and Ask AI. It replaces the fixed toolbar; blocks come from the "/" menu.
 // On touch screens it sits under the selection so the phone's own copy/paste bar stays visible.
+import { Icon } from '../design/Icon';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
@@ -69,18 +70,18 @@ export function SelectionMenu({ editor, wrapRef, readOnly, canComment, onComment
       ) : (
         <>
           {!readOnly && <>
-            {btn(<b>B</b>, 'Bold (Ctrl/⌘+B)', () => c().toggleBold().run(), editor.isActive('bold'))}
-            {btn(<i>I</i>, 'Italic (Ctrl/⌘+I)', () => c().toggleItalic().run(), editor.isActive('italic'))}
-            {btn(<s>S</s>, 'Strikethrough', () => c().toggleStrike().run(), editor.isActive('strike'))}
-            {btn(<code>{'<>'}</code>, 'Inline code (Ctrl/⌘+E)', () => c().toggleCode().run(), editor.isActive('code'))}
-            {btn('↗ Link', 'Link to a web address', () => setLinking(String(editor.getAttributes('link').href ?? '')), editor.isActive('link'))}
+            {btn(<Icon name="bold" strokeWidth={2.25} />, 'Bold (Ctrl/⌘+B)', () => c().toggleBold().run(), editor.isActive('bold'))}
+            {btn(<Icon name="italic" />, 'Italic (Ctrl/⌘+I)', () => c().toggleItalic().run(), editor.isActive('italic'))}
+            {btn(<Icon name="strike" />, 'Strikethrough', () => c().toggleStrike().run(), editor.isActive('strike'))}
+            {btn(<Icon name="code" />, 'Inline code (Ctrl/⌘+E)', () => c().toggleCode().run(), editor.isActive('code'))}
+            {btn(<><Icon name="link" />Link</>, 'Link to a web address', () => setLinking(String(editor.getAttributes('link').href ?? '')), editor.isActive('link'))}
             <span className="sep" aria-hidden />
           </>}
-          {canComment && btn('💬 Comment', 'Comment (Ctrl/⌘+Alt+M)', onComment)}
-          {!readOnly && btn('¹', 'Footnote after the selection (Ctrl/⌘+Alt+F)', () => {
+          {canComment && btn(<><Icon name="comment" />Comment</>, 'Comment (Ctrl/⌘+Alt+M)', onComment)}
+          {!readOnly && btn(<Icon name="footnote" />, 'Footnote after the selection (Ctrl/⌘+Alt+F)', () => {
             editor.chain().focus().setTextSelection(editor.state.selection.to).insertFootnote().run();
           })}
-          {!readOnly && onAskAi && btn('✨ Ask AI', 'Ask AI about the selection', onAskAi, false, 'ask')}
+          {!readOnly && onAskAi && btn(<><Icon name="sparkles" />Ask AI</>, 'Ask AI about the selection', onAskAi, false, 'ask')}
         </>
       )}
     </div>

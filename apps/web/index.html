@@ -3,18 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Livepage: a writing canvas where people and AI agents edit one live page together." />
+    <meta name="theme-color" content="#fcfbf9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161514" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Livepage</title>
+    <!-- Apply the saved light/dark choice before first paint (see src/design/theme.tsx). -->
+    <script src="/theme-init.js"></script>
+    <meta name="description" content="Livepage: a writing canvas where people and AI agents edit one live page together." />
     <!-- Painted by the browser straight away, before any script has loaded. React replaces it. -->
     <style>
       html { color-scheme: light dark; }
-      body { margin: 0; background: #fbfaf8; }
+      body { margin: 0; background: #fcfbf9; }
       .boot0 { display: flex; min-height: 100vh; }
-      .boot0 i { display: block; height: 14px; margin: 14px 0; border-radius: 6px; background: #e6e3de; opacity: .6; }
-      .boot0 .s { width: 260px; flex: none; border-right: 1px solid #e6e3de; }
+      .boot0 i { display: block; height: 14px; margin: 14px 0; border-radius: 6px; background: #e7e4de; opacity: .6; }
+      .boot0 .s { width: 260px; flex: none; border-right: 1px solid #e7e4de; }
       .boot0 .m { flex: 1; max-width: 760px; margin: 0 auto; padding: 72px 24px; }
       @media (max-width: 760px) { .boot0 .s { display: none; } }
-      @media (prefers-color-scheme: dark) { body { background: #191919; } .boot0 i { background: #333; } .boot0 .s { border-color: #333; } }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) body { background: #161514; } html:not([data-theme="light"]) .boot0 i { background: #302e2b; } html:not([data-theme="light"]) .boot0 .s { border-color: #302e2b; } }
+      html[data-theme="dark"] body { background: #161514; } html[data-theme="dark"] .boot0 i { background: #302e2b; } html[data-theme="dark"] .boot0 .s { border-color: #302e2b; }
     </style>
   </head>
   <body>
