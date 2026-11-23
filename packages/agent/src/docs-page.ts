@@ -363,6 +363,8 @@ table(ag, [
   ['open_daily_page', 'Get or create the daily page at YYYY/MM/DD/daily'],
   ['set_page_tags / list_tags / create_view', 'Tag pages, list tags, save a sidebar view of pages by tag'],
   ['get_backlinks', 'Pages and tabs that link to a page'],
+  ['search_pages', 'Full-text search across every page you can open, with snippets'],
+  ['get_link_graph', 'Every page you can open and the links between them'],
   ['read_page', 'The whole page as markdown, every tab, with block and node ids'],
   ['write_paragraph / add_heading', 'Append text; paragraphs are typed out live. Link with [[p_id]] or [[p_id#tab_id]]'],
   ['insert_table', 'A native, editable table'],
