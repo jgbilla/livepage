@@ -134,7 +134,7 @@ export const assistantTokens = new Map<string, Principal>();
 export async function resolvePrincipal(db: Db, opts: { cookie?: string | null; token?: string | null }): Promise<Principal | null> {
   const assistant = opts.token ? assistantTokens.get(opts.token) : undefined;
   if (assistant) return assistant;
-  const devToken = process.env.NODE_ENV !== 'production' ? process.env.AGENT_TOKEN ?? 'dev-agent-token' : null;
+  const devToken = devAgentToken();
   if (opts.token && devToken && opts.token === devToken) {
     return { id: 'dev-agent', email: '', name: 'Agent', kind: 'agent', superAgent: true };
   }
@@ -143,6 +143,24 @@ export async function resolvePrincipal(db: Db, opts: { cookie?: string | null; t
   const viaSession = await userFromSession(db, readCookie(opts.cookie));
   if (viaSession) return { ...viaSession, kind: 'human' };
   return null;
+}
+
+/**
+ * The shared development token, or null when it must not work. It opens every page, so it only
+ * works on a development server that is not reachable as a public site: never with
+ * NODE_ENV=production, and never when PUBLIC_URL (or Render's address) is a real host name.
+ * Someone running `pnpm start` on a VPS without NODE_ENV would otherwise publish a master key.
+ */
+export function devAgentToken(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NODE_ENV === 'production') return null;
+  const pub = env.PUBLIC_URL || env.RENDER_EXTERNAL_URL;
+  if (pub) {
+    let host = '';
+    try { host = new URL(pub).hostname; } catch { return null; }
+    if (!['localhost', '127.0.0.1', '[::1]', '::1'].includes(host)) return null;
+  }
+  if (env.RENDER) return null;
+  return env.AGENT_TOKEN || 'dev-agent-token';
 }
 
 export function bearer(req: IncomingMessage): string | null {

@@ -64,6 +64,13 @@ The agent joins the page, types with its own caret, adds a table and a mind map,
 
 ![The agent typing with its own caret](docs/agent-typing.png)
 
+## Tests
+
+- `pnpm test` runs the unit tests (Node's built-in test runner).
+- `pnpm test:e2e` runs the browser smoke tests in `e2e/`: sign-up, writing and saving, two browsers editing live, an agent writing through the HTTP API and MCP, comments, footnotes, the `/` menu and tabs. It starts `pnpm dev:memory` for you unless the app is already running on port 5173. Run `pnpm exec playwright install chromium` once first.
+
+Every pull request and push to main runs all of these on GitHub (`.github/workflows/ci.yml`): typecheck, unit tests and build, then the smoke tests and the layout check against the production build and a real Postgres. A failed run attaches its screenshots and server log under Summary > Artifacts.
+
 ## Self-host with Docker
 
 ```bash
@@ -184,8 +191,9 @@ packages/agent  Live agent client, demo script, MCP server
 - Every live connection is authenticated and checked against the page's members; viewers and commenters connect read-only, so the server drops their edits.
 - HTML blocks run on a separate origin in a sandboxed iframe with a strict CSP (see SPEC.md §6). The app itself is served with a CSP that only allows frames from the sandbox.
 - AI API keys for the built-in assistant are encrypted at rest (AES-256-GCM, bound to the user) with `AI_KEY_SECRET` and only ever used server-side. The endpoint URLs people enter are checked so the server can't be pointed at private networks (unless `AI_ALLOW_PRIVATE_ENDPOINTS=1`).
-- The shared `AGENT_TOKEN` exists for local development only and is ignored when `NODE_ENV=production`.
+- The shared `AGENT_TOKEN` exists for local development only: it is ignored when `NODE_ENV=production` or when the server has a public address.
 - Not yet: email verification, password reset, and two-factor sign-in.
+- Full review, known limits and how to report a problem: [SECURITY.md](SECURITY.md).
 
 ## License
 

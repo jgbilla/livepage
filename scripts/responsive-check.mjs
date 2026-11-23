@@ -39,10 +39,17 @@ const VIEWPORTS = [
 
 // ---------- seed: a user, a long-titled page with tabs and every block type, a published copy ----------
 async function api(path, { cookie, body, method } = {}) {
-  const res = await fetch(`${BASE}/api${path}`, {
+  const init = {
     method: method ?? (body ? 'POST' : 'GET'),
     headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
     body: body ? JSON.stringify(body) : undefined,
+  };
+  // The docs-page writer below blocks this process for a few seconds, long enough for the server to
+  // close the idle keep-alive connection. fetch then reuses the dead socket ("other side closed")
+  // before the request is sent, so one retry is safe.
+  const res = await fetch(`${BASE}/api${path}`, init).catch((e) => {
+    if (e?.cause?.code !== 'UND_ERR_SOCKET') throw e;
+    return fetch(`${BASE}/api${path}`, init);
   });
   if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
   return { json: await res.json(), cookie: res.headers.get('set-cookie')?.split(';')[0] };

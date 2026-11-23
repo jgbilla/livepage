@@ -82,7 +82,7 @@ export async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<an
 
 export function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
   const json = body === null ? '' : JSON.stringify(body);
-  const out: Record<string, string | string[]> = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers };
+  const out: Record<string, string | string[]> = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers };
   // Page lists, search results and comments can be large; compress them (fast settings).
   const accept = String(res.req?.headers['accept-encoding'] ?? '');
   if (json.length > 1400 && /\b(br|gzip)\b/.test(accept)) {
