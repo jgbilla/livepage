@@ -60,12 +60,28 @@ async function seed() {
   const id = (run.stdout + run.stderr).match(/writing (p_[\w-]+)/)?.[1];
   if (!id) throw new Error(`could not write the docs page:\n${run.stdout}\n${run.stderr}`);
   const { json: pub } = await api(`/pages/${id}/publish`, { cookie, body: {} });
-  await api('/pages', { cookie, body: { title: 'A page with a fairly long name that needs to wrap on phones' } });
-  return { cookie, pageId: id, pubUrl: pub.url };
+  const { json: other } = await api('/pages', { cookie, body: { title: 'A page with a fairly long name that needs to wrap on phones' } });
+  return { cookie, pageId: id, otherId: other.page.id, pubUrl: pub.url };
 }
 
 // ---------- the screens ----------
 const isNarrow = (vp) => vp.width <= 800;
+
+// Several open workspace tabs (one pinned), optionally split into two sides, saved the way the app saves them.
+async function openTabs(p, s, split) {
+  await p.goto(`${BASE}/`);
+  await p.waitForSelector('.home');
+  await p.evaluate(async ({ pageId, otherId, split }) => {
+    const me = (await (await fetch('/api/me')).json()).user;
+    const t = (id, path, pinned) => ({ id, path, ...(pinned ? { pinned: true } : {}) });
+    const tabs = [t('a', `/p/${pageId}`, true), t('b', '/'), t('c', '/graph'), t('d', `/p/${otherId}`), t('e', `/p/${pageId}`)];
+    const groups = split
+      ? [{ id: 'g1', tabs: tabs.slice(0, 3), active: 'a' }, { id: 'g2', tabs: tabs.slice(3), active: 'd' }]
+      : [{ id: 'g1', tabs, active: 'e' }];
+    localStorage.setItem(`lp.wtabs.${me.id}`, JSON.stringify({ groups, focus: split ? 1 : 0, split: 0.5 }));
+  }, { pageId: s.pageId, otherId: s.otherId, split });
+  await p.goto(`${BASE}/`); // the bare app URL brings the saved tabs back
+}
 const SCREENS = [
   { name: 'sign-in', auth: false, go: (p) => p.goto(`${BASE}/login`), ready: '.auth-card' },
   { name: 'home', go: (p) => p.goto(`${BASE}/`), ready: '.home' },
@@ -132,6 +148,15 @@ const SCREENS = [
     }, ready: '.switcher',
   },
   { name: 'graph', go: (p) => p.goto(`${BASE}/graph`), ready: '.graph-canvas' },
+  { name: 'tabs', go: (p, s) => openTabs(p, s, false), ready: '.wt-visible .ProseMirror' },
+  { name: 'split', go: (p, s) => openTabs(p, s, true), ready: '.wt-visible .ProseMirror' },
+  {
+    name: 'tab-switcher', go: async (p, s, vp) => {
+      await openTabs(p, s, false);
+      await p.waitForSelector('.wt-visible .ProseMirror');
+      if (isNarrow(vp)) await p.click('.wt-mobilebar');
+    }, ready: '.wt-visible .ProseMirror',
+  },
   { name: 'published', auth: false, go: (p, s) => p.goto(`${BASE}${s.pubUrl}`), ready: 'body' },
 ].filter((s) => !process.env.SCREENS || process.env.SCREENS.split(',').includes(s.name));
 
@@ -174,14 +199,18 @@ function measure() {
       problems.push(`${label(top)} spills past the edge (${Math.round(tr.left)}..${Math.round(tr.right)} of ${W}px)`);
     }
   }
-  const names = [...document.querySelectorAll('.topbar .peer[title]')].map((e) => e.getAttribute('title'));
-  const dup = names.find((n, i) => names.indexOf(n) !== i);
-  if (dup) problems.push(`"${dup}" shows more than once in the presence avatars`);
-  const title = document.querySelector('.page-title-input');
-  if (title && title.scrollWidth > title.clientWidth + 2) problems.push(`page title is cut off (${title.scrollWidth}px of text in ${title.clientWidth}px)`);
-  // Side panels: either start at (or below) the top bar's bottom edge, or cover the whole bar (phone sheets).
-  const topbar = document.querySelector('.topbar');
+  // Per top bar: two open tabs side by side each have their own.
+  for (const bar of document.querySelectorAll('.topbar')) {
+    const names = [...bar.querySelectorAll('.peer[title]')].map((e) => e.getAttribute('title'));
+    const dup = names.find((n, i) => names.indexOf(n) !== i);
+    if (dup) problems.push(`"${dup}" shows more than once in the presence avatars`);
+  }
+  for (const title of document.querySelectorAll('.page-title-input')) {
+    if (title.clientWidth && title.scrollWidth > title.clientWidth + 2) problems.push(`page title is cut off (${title.scrollWidth}px of text in ${title.clientWidth}px)`);
+  }
+  // Side panels: either start at (or below) their top bar's bottom edge, or cover the whole bar (phone sheets).
   for (const panel of document.querySelectorAll('.assistant, .comments')) {
+    const topbar = panel.closest('.shell')?.querySelector('.topbar') ?? document.querySelector('.topbar');
     if (!topbar) break;
     const pr = panel.getBoundingClientRect(), br = topbar.getBoundingClientRect();
     if (!pr.width || !pr.height) continue;
@@ -189,8 +218,14 @@ function measure() {
     const covers = pr.top <= br.top + 0.5 && Number(getComputedStyle(panel).zIndex) > Number(getComputedStyle(topbar).zIndex);
     if (!below && !covers) problems.push(`${label(panel)} overlaps the top bar (panel starts at ${Math.round(pr.top)}px, the bar ends at ${Math.round(br.bottom)}px)`);
   }
-  const bar = document.querySelector('.topbar');
-  if (bar && bar.getBoundingClientRect().height > 64) problems.push(`top bar is ${Math.round(bar.getBoundingClientRect().height)}px tall (wraps onto more rows)`);
+  for (const bar of document.querySelectorAll('.topbar')) {
+    if (bar.getBoundingClientRect().height > 64) problems.push(`top bar is ${Math.round(bar.getBoundingClientRect().height)}px tall (wraps onto more rows)`);
+  }
+  // Open workspace tabs: one row.
+  for (const strip of document.querySelectorAll('.wt-strip')) {
+    const h = strip.getBoundingClientRect().height;
+    if (h > 44) problems.push(`open tabs strip is ${Math.round(h)}px tall`);
+  }
   return problems;
 }
 

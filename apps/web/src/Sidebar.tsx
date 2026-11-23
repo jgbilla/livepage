@@ -27,7 +27,7 @@ const NARROW = '(max-width: 800px)';
 const narrowNow = () => typeof matchMedia !== 'undefined' && matchMedia(NARROW).matches;
 
 /** True at phone width; follows the window as it is resized or rotated. */
-function useNarrow() {
+export function useNarrow() {
   const [narrow, setNarrow] = useState(narrowNow);
   useEffect(() => {
     if (typeof matchMedia === 'undefined') return;
@@ -160,6 +160,7 @@ function useExpanded() {
 function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const ws = useWorkspace();
   const { path } = useLocation();
+  const narrow = useNarrow();
   const activePage = path.match(/^\/p\/([\w-]+)/)?.[1] ?? null;
   const expanded = useExpanded();
   const [creating, setCreating] = useState<{ parentId: string | null } | null>(null);
@@ -241,6 +242,9 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
         <Link to="/graph" className={`sb-row ${path === '/graph' ? 'active' : ''}`}>
           <span className="sb-glyph"><Icon name="graph" /></span><span className="sb-row-label">Graph</span>
         </Link>
+        {narrow && <button type="button" className="sb-row" onClick={() => dispatchEvent(new Event('livepage:tab-switcher'))} title="Your open tabs">
+          <span className="sb-glyph"><Icon name="tabs" /></span><span className="sb-row-label">Open tabs</span>
+        </button>}
       </nav>
       {error && <p className="form-error small sb-error" onClick={() => setError(null)}>{error}</p>}
 
