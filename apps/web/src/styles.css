@@ -224,3 +224,8 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
 .backlinks ul { list-style: none; margin: 0; padding: 0; }
 .backlinks li { padding: 3px 0; }
 .backlinks a { color: #7048e8; text-decoration: none; }
+.assistant-target { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.assistant-target select { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 14px; }
+.turn-status { font-size: 13px; color: #7048e8; margin-bottom: 6px; }
+.agent-hint { margin: 0; border-bottom: 1px solid var(--line); }
+.agent-hint code.copy { margin: 6px 0; }

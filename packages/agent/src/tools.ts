@@ -49,7 +49,10 @@ Pages live in folders in each person's sidebar (like Obsidian) and can have tags
 create_page, move_page, set_page_tags and open_daily_page (folder YYYY/MM/DD, page "daily") organize them.
 Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]; the link shows the target's current title
 and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
-Use list_pages to find page ids, and call read_page first to see what is there.`,
+Use list_pages to find page ids, and call read_page first to see what is there.
+People can also ask you from the Ask AI panel inside Livepage. When asked to listen for Livepage requests, loop on
+wait_for_requests: for each request, work on its page (read_page first; use its tab), using your own context and tools
+as needed, then answer with reply_to_request. Send short progress with reply_to_request(done=false) on long tasks.`,
     },
   );
 
@@ -71,6 +74,27 @@ Use list_pages to find page ids, and call read_page first to see what is there.`
   type PageRow = { id: string; title: string; role?: string; path?: string; tags?: string[] };
   const pageLine = (p: PageRow) =>
     `${p.id}  ${p.path ? `${p.path}/` : ''}${p.title || 'Untitled'}${p.tags?.length ? `  ${p.tags.map((t) => `#${t}`).join(' ')}` : ''}${p.role && p.role !== 'owner' ? `  (${p.role})` : ''}`;
+
+  type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
+  server.tool('wait_for_requests',
+    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and claim them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. Call it in a loop when asked to listen.',
+    { wait_seconds: z.number().min(0).max(30).default(25) },
+    async ({ wait_seconds }) => tryText(async () => {
+      const { requests } = await http<{ requests: AgentReq[] }>('GET', `/agent-requests?wait=${wait_seconds}`);
+      if (!requests.length) return 'no requests yet; call wait_for_requests again to keep listening';
+      return requests.map((r) => [
+        `request ${r.id}`,
+        `page: ${r.page_id} (${r.page_title || 'Untitled'})${r.tab && r.tab !== 'main' ? `, tab ${r.tab}` : ''}`,
+        r.history?.length ? `earlier in this chat:\n${r.history.map((h) => `  ${h.role}: ${h.text}`).join('\n')}` : '',
+        r.selection ? `selected text:\n${r.selection}` : '',
+        `asks: ${r.prompt}`,
+      ].filter(Boolean).join('\n')).join('\n\n---\n\n');
+    }));
+
+  server.tool('reply_to_request',
+    'Answer a request from the Ask AI panel. The text shows in the person\'s chat. Use done=false for a short progress note while you are still working; done=true (default) finishes it.',
+    { request_id: z.string().regex(/^ar_[\w-]+$/), text: z.string(), done: z.boolean().default(true) },
+    async ({ request_id, text: t, done }) => tryText(async () => { await http('POST', `/agent-requests/${request_id}/reply`, { text: t, done }); return 'ok'; }));
 
   server.tool('list_pages',
     'List the pages this agent token can open: id, folder path/title, tags, and your role if not owner. Optionally only one folder (path) or pages with some tags.',

@@ -19,6 +19,7 @@ import { META } from '@livepage/schema';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
+import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
 const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
@@ -108,6 +109,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     const who = await resolvePrincipal(db, { cookie: req.headers.cookie, token: bearer(req) });
     if (path === '/api/me' && method === 'GET' && !who) return send(res, 200, { user: null }); // signed out is a normal state
     if (!who) return send(res, 401, { error: 'Sign in first.' });
+    touchAgent(who);
+    if ((path === '/api/agents' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });
 
@@ -329,6 +332,7 @@ async function pageRoutes(c: PageCtx): Promise<void> {
     }
   }
 
+  if (sub === 'agent-requests' && !id && method === 'POST') return createAgentRequest(req, res, db, who, pageId);
   if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
 
   if (sub && CONTENT.has(sub)) {

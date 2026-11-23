@@ -80,6 +80,24 @@ create table if not exists ai_settings (
   key_hint    text not null default '',
   updated_at  timestamptz not null default now()
 );
+-- Ask AI requests handed to a person's own connected agent (Claude Code, Cursor... over MCP or HTTP).
+create table if not exists agent_requests (
+  id         text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  token_id   text not null references api_tokens(id) on delete cascade,
+  page_id    text not null references pages(id) on delete cascade,
+  tab        text not null default 'main',
+  prompt     text not null,
+  selection  text not null default '',
+  history    jsonb not null default '[]',
+  status     text not null default 'pending' check (status in ('pending','working','done','cancelled')),
+  progress   text not null default '',
+  reply      text not null default '',
+  created_at timestamptz not null default now(),
+  claimed_at timestamptz,
+  done_at    timestamptz
+);
+create index if not exists agent_requests_token_idx on agent_requests (token_id, status);
 -- Folders: each person's own tree (like an Obsidian vault). A page sits in one folder per
 -- member, so a page someone shared with you can live wherever you like in your tree.
 create table if not exists folders (
