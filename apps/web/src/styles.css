@@ -304,3 +304,10 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
 .graph-filter { width: 180px; max-width: 40vw; }
 .graph-opt { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 @media (max-width: 600px) { .switcher-backdrop { padding-top: 16px; } .graph-filter { width: 120px; } }
+/* Phone width: the drawer is over the page, so keep the page's own ☰ visible, and keep the top bar on one tidy row */
+.layout-narrow .layout-main .topbar .sidebar-toggle { display: inline-block; }
+@media (max-width: 800px) {
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .topbar .crumbs { display: none; }
+  .copy-link-label { display: none; }
+}

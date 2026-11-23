@@ -18,19 +18,48 @@ const store = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
-const narrow = () => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 800px)').matches;
+const NARROW = '(max-width: 800px)';
+const narrowNow = () => typeof matchMedia !== 'undefined' && matchMedia(NARROW).matches;
 
+/** True at phone width; follows the window as it is resized or rotated. */
+function useNarrow() {
+  const [narrow, setNarrow] = useState(narrowNow);
+  useEffect(() => {
+    if (typeof matchMedia === 'undefined') return;
+    const mq = matchMedia(NARROW);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
+// Wide screens: the sidebar sits beside the page, open or closed as you last left it.
+// Phone width: it is a drawer over the page that always starts closed (so the top bar,
+// Share and History stay tappable), opens from ☰, and closes on picking a page or tapping outside.
 export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => void; children: React.ReactNode }) {
-  const [open, setOpen] = useState(() => !narrow() && store.get('lp.sidebar') !== 'closed');
-  const toggle = () => setOpen((o) => { store.set('lp.sidebar', o ? 'closed' : 'open'); return !o; });
-  const { path } = useLocation();
-  useEffect(() => { if (narrow()) setOpen(false); }, [path]); // on phones, picking a page closes the drawer
+  const narrow = useNarrow();
+  const [docked, setDocked] = useState(() => store.get('lp.sidebar') !== 'closed');
+  const [drawer, setDrawer] = useState(false);
+  const open = narrow ? drawer : docked;
+  const toggle = () => {
+    if (narrow) setDrawer((o) => !o);
+    else setDocked((o) => { store.set('lp.sidebar', o ? 'closed' : 'open'); return !o; });
+  };
+  const { path, search } = useLocation();
+  useEffect(() => setDrawer(false), [path, search, narrow]);
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [drawer]);
   return (
     <SidebarCtx.Provider value={{ open, toggle }}>
       <SwitcherProvider>
-      <div className={`layout ${open ? 'sidebar-open' : 'sidebar-closed'}`}>
+      <div className={`layout ${open ? 'sidebar-open' : 'sidebar-closed'} ${narrow ? 'layout-narrow' : ''}`}>
         {open && <Sidebar me={me} onLogout={onLogout} />}
-        {open && <div className="sidebar-scrim" onClick={toggle} />}
+        {open && narrow && <div className="sidebar-scrim" onClick={toggle} />}
         <div className="layout-main">{children}</div>
       </div>
       </SwitcherProvider>
