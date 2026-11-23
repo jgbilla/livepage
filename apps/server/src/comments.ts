@@ -17,6 +17,7 @@ import type { Db } from './db.ts';
 import { randomId, type Principal } from './auth.ts';
 import { atLeast, type Role } from './pages.ts';
 import { config } from './config.ts';
+import { aiAvailable } from './assistant/settings.ts';
 
 export type CommentRow = {
   id: string; page_id: string; thread_id: string; tab: string; anchor: CommentAnchor | null; body: string;
@@ -43,10 +44,14 @@ export async function mentionables(db: Db, pageId: string): Promise<Mentionable[
        join page_members m on m.user_id = t.user_id and m.page_id = $1 and m.role in ('owner','editor','commenter')
        join users u on u.id = t.user_id order by t.name`, [pageId]);
   return [
+    // The built-in assistant: mentioning it runs it as whoever wrote the comment, with their own key.
+    ...(aiAvailable() ? [{ kind: 'agent' as const, id: ASSISTANT_ID, name: 'AI', detail: 'Built-in assistant · uses your own key' }] : []),
     ...agents.map((a) => ({ kind: 'agent' as const, id: a.id, name: a.name, detail: `Agent · ${a.owner_name}` })),
     ...people.map((p) => ({ kind: 'user' as const, id: p.id, name: p.name, detail: p.role })),
   ];
 }
+
+export const ASSISTANT_ID = 'assistant';
 
 export async function listThreads(db: Db, pageId: string, status: 'open' | 'resolved' | 'all' = 'all', doc?: Y.Doc): Promise<Thread[]> {
   const rows = await db.query<CommentRow>(`select ${COLS} from comments where page_id = $1 order by created_at, id`, [pageId]);
@@ -138,6 +143,7 @@ export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role
       [threadId, me[0], me[1]]);
     for (const m of mentions) {
       if (m.kind === me[0] && m.id === me[1]) continue; // mentioning yourself does nothing
+      if (m.kind === 'agent' && m.id === ASSISTANT_ID) continue; // the built-in assistant runs right away, no inbox
       await q(`insert into comment_mentions (id, comment_id, page_id, thread_id, target_kind, target_id) values ($1,$2,$3,$4,$5,$6)`,
         [randomId('mn', 10), id, pageId, threadId, m.kind, m.id]);
     }
@@ -148,7 +154,10 @@ export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role
   broadcast(hp, pageId);
   const targets = mentions.filter((m) => !(m.kind === 'agent' && m.id === who.tokenId) && !(m.kind === 'user' && who.kind === 'human' && m.id === who.id));
   for (const m of targets) wake(`${m.kind}:${m.id}`);
-  const agentIds = targets.filter((m) => m.kind === 'agent').map((m) => m.id);
+  if (who.kind === 'human' && targets.some((m) => m.kind === 'agent' && m.id === ASSISTANT_ID)) {
+    void answerWithAssistant(db, hp, who, role, pageId, threadId).catch((e) => console.warn('[comments] assistant:', e.message));
+  }
+  const agentIds = targets.filter((m) => m.kind === 'agent' && m.id !== ASSISTANT_ID).map((m) => m.id);
   if (agentIds.length) void notifyAgents(db, hp, pageId, row, agentIds).catch((e) => console.warn('[comments] webhook:', e.message));
   return row;
 }
@@ -359,4 +368,53 @@ export async function threadsWithText(db: Db, hp: Hocuspocus, who: Principal, pa
     for (const t of rows) if (t.anchor?.kind === 'text') t.current_text = currentAnchorText(doc, t.anchor);
     return rows;
   });
+}
+
+// ---------------------------------------------------------------------------
+// @AI in a comment: run the built-in assistant as the comment's author (their key, their access),
+// on the thread's tab with the commented text as the selection, and answer in the thread.
+
+const ASSISTANT_TIMEOUT_MS = 5 * 60_000;
+
+async function answerWithAssistant(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, threadId: string) {
+  const { runAssistant, assistantName } = await import('./assistant/run.ts');
+  const { canEdit } = await import('./pages.ts');
+  const bot: Principal = { id: who.id, email: who.email, name: assistantName(who), kind: 'agent' };
+  const reply = await createComment(db, hp, bot, role, pageId, { body: 'Working on it…', threadId });
+  const setBody = async (text: string) => {
+    await db.query('update comments set body = $2, edited_at = now() where id = $1', [reply.id, text.slice(0, COMMENT_LIMITS.bodyMax) || 'Done.']);
+    broadcast(hp, pageId);
+  };
+  if (!canEdit(role)) return setBody('I can only work on pages you can edit. Ask the page owner for edit access.');
+
+  const thread = await getThread(db, pageId, threadId);
+  if (!thread) return;
+  const quote = thread.anchor?.kind === 'text'
+    ? await withDoc(hp, pageId, null, (doc) => currentAnchorText(doc, thread.anchor!)).catch(() => (thread.anchor as { quote?: string }).quote ?? '')
+    : '';
+  const all = [thread, ...thread.replies].filter((c) => c.id !== reply.id);
+  const last = all[all.length - 1];
+  const history = all.slice(0, -1).map((c) => ({
+    role: (c.author_kind === 'agent' && c.author_id === who.id && !c.token_id ? 'assistant' : 'user') as 'user' | 'assistant',
+    text: `${c.author_kind === 'human' ? `${c.author_name}: ` : ''}${plainBody(c.body)}`,
+  }));
+  const prompt = `${who.name} mentioned you in a comment on this page${quote ? ' (on the selected text)' : ''}. ` +
+    `Do what the comment asks, on the page if it asks for changes. Your final message is posted as your reply in the comment thread, so keep it short.\n\n` +
+    `Comment: ${plainBody(last.body).replace(/@AI\b/g, '').trim()}`;
+
+  let text = '';
+  const errors: string[] = [];
+  try {
+    await runAssistant({
+      db, user: who, pageId, tab: thread.tab, prompt, history, selection: quote || '',
+      signal: AbortSignal.timeout(ASSISTANT_TIMEOUT_MS),
+      emit: (e) => {
+        if (e.type === 'done') text = e.text || (e.changes.length ? `Done: ${e.changes.join(', ')}.` : 'Done.');
+        else if (e.type === 'error') errors.push(e.message);
+      },
+    });
+  } catch (e) {
+    errors.push((e as Error).message);
+  }
+  await setBody([text, ...errors.map((m) => `(${m})`)].filter(Boolean).join('\n\n') || 'Done.');
 }
