@@ -3,7 +3,7 @@ import type * as Y from 'yjs';
 
 // A textarea bound to a Y.Text, so several people and agents can edit block code at once.
 // (A CodeMirror 6 + y-codemirror.next binding is the planned upgrade: SPEC.md "Roadmap".)
-export function CodeArea({ text }: { text: Y.Text }) {
+export function CodeArea({ text, readOnly = false }: { text: Y.Text; readOnly?: boolean }) {
   const [value, setValue] = useState(() => text.toString());
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -32,6 +32,7 @@ export function CodeArea({ text }: { text: Y.Text }) {
       ref={ref}
       className="code-area"
       spellCheck={false}
+      readOnly={readOnly}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       rows={Math.min(24, Math.max(6, value.split('\n').length + 1))}

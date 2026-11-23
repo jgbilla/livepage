@@ -19,7 +19,7 @@ declare module '@tiptap/core' {
   }
 }
 
-type Options = { doc: Y.Doc | null; getUserName: () => string };
+type Options = { doc: Y.Doc | null; getUserName: () => string; readOnly: boolean };
 
 // The block itself only stores { blockId, title } in the ProseMirror tree.
 // Its code lives in the doc's "htmlCode" map as a Y.Text (see packages/schema).
@@ -31,7 +31,7 @@ export const HtmlBlock = Node.create<Options>({
   selectable: true,
 
   addOptions() {
-    return { doc: null, getUserName: () => 'Someone' };
+    return { doc: null, getUserName: () => 'Someone', readOnly: false };
   },
 
   addAttributes() {
@@ -67,8 +67,8 @@ export const HtmlBlock = Node.create<Options>({
   },
 
   addNodeView() {
-    const { doc, getUserName } = this.options;
-    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <HtmlBlockView {...props} doc={doc} getUserName={getUserName} />);
+    const { doc, getUserName, readOnly } = this.options;
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <HtmlBlockView {...props} doc={doc} getUserName={getUserName} readOnly={readOnly} />);
   },
 });
 
@@ -81,9 +81,9 @@ function parsePlaceholders(raw: unknown): string[] {
   }
 }
 
-type ViewProps = ReactNodeViewProps & { doc: Y.Doc | null; getUserName: () => string };
+type ViewProps = ReactNodeViewProps & { doc: Y.Doc | null; getUserName: () => string; readOnly: boolean };
 
-function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes }: ViewProps) {
+function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes, readOnly }: ViewProps) {
   const blockId = node.attrs.blockId as string;
   const streaming = node.attrs.status === 'streaming';
   const initialHeight = Math.max(40, Math.min(2000, Number(node.attrs.initialHeight) || 120));
@@ -125,7 +125,7 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes }: V
 
   // Host side of the bridge: everything from the sandbox is untrusted.
   const onAction = (action: unknown, values: unknown) => {
-    if (!doc) return;
+    if (!doc || readOnly) return; // viewers can look, not send
     const ok = validateAction(action, values);
     if (!ok) return console.warn('[livepage] rejected block action', action);
     const now = Date.now();
@@ -142,12 +142,12 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes }: V
           {streaming && <span className="streaming-badge">writing…</span>}
         </span>
         <span className="html-block-actions">
-          {streaming && (
+          {streaming && !readOnly && (
             <button type="button" title="Run the block now, even if the agent has not finished" onClick={() => updateAttributes({ status: 'ready' })}>
               Run now
             </button>
           )}
-          <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : 'Edit code'}</button>
+          <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : readOnly ? 'View code' : 'Edit code'}</button>
         </span>
       </div>
       <div contentEditable={false} className="html-block-body">
@@ -162,7 +162,7 @@ function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes }: V
               : `Sent "${lastAction.action}" to the agent${lastAction.status === 'claimed' ? ', working on it…' : '…'}`}
           </div>
         )}
-        {showCode && text && <CodeArea text={text} />}
+        {showCode && text && <CodeArea text={text} readOnly={readOnly} />}
       </div>
     </NodeViewWrapper>
   );

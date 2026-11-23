@@ -1,0 +1,35 @@
+# Render Blueprint: New > Blueprint > pick this repo. Render asks for DATABASE_URL (paste your Neon URL).
+# Two services, on two different *.onrender.com hosts (onrender.com is on the Public Suffix List,
+# so they are different sites and HTML blocks can't reach the app's cookies).
+services:
+  - type: web
+    name: livepage
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: pnpm --filter @livepage/server start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # paste your hosted Postgres URL (Neon) when Render asks
+      - key: SANDBOX_HOST
+        fromService:
+          type: web
+          name: livepage-sandbox
+          property: host
+      - key: PG_POOL_MAX
+        value: "5"
+
+  - type: web
+    name: livepage-sandbox
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: pnpm --filter @livepage/sandbox start
+    healthCheckPath: /health
+    envVars:
+      - key: APP_HOST
+        fromService:
+          type: web
+          name: livepage
+          property: host

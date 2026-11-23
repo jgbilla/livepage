@@ -12,6 +12,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.6.0
+        version: 0.6.0
       '@hocuspocus/extension-database':
         specifier: ^4.9.0
         version: 4.9.0(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
@@ -227,6 +230,9 @@ packages:
   '@babel/types@7.29.15':
     resolution: {integrity: sha512-/XKpKDakL//LZ66bq1XsZOswuqeI5MZqPLDu18o3XdkU1fNJ7bdPtzgnc4ZNS+bBGHV0FJG8jjb8SwcC3nNVQQ==}
     engines: {node: '>=6.9.0'}
+
+  '@electric-sql/pglite@0.6.0':
+    resolution: {integrity: sha512-g3tAPFjRLEdN1g5FvawTl4ETo9LtmVwBRUJYnH6Erl6mhlKFRGB2mYhPABffIuXMYxki64mX0Al8U4UFUhuYDQ==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -1621,6 +1627,8 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.15
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@electric-sql/pglite@0.6.0': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

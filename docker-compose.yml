@@ -7,9 +7,8 @@
 # Local-only alternative (data lives in a Docker volume on this machine, so it dies with it):
 #   DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --profile local-db up --build
 #
-# Web app:   http://localhost:5173
+# App:       http://localhost:1234   (web app, API and live sync)
 # Sandbox:   http://localhost:5174   (separate origin for HTML blocks, keep it that way)
-# Collab:    ws://localhost:1234
 services:
   # Optional bundled Postgres, only started with --profile local-db.
   db:
@@ -26,32 +25,27 @@ services:
       interval: 2s
       retries: 20
 
-  server:
+  # Web app + API + live sync, one port (http://localhost:1234)
+  app:
     build: .
     command: pnpm --filter @livepage/server start
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env to your hosted Postgres connection string (see docker-compose.yml)}
       PG_POOL_MAX: ${PG_POOL_MAX:-5}
-      SERVER_PORT: "1234"
-      AGENT_TOKEN: ${AGENT_TOKEN:-dev-agent-token}
+      PORT: "1234"
+      SANDBOX_URL: ${SANDBOX_URL:-http://localhost:5174}
+      SECURE_COOKIES: ${SECURE_COOKIES:-0} # set to 1 behind HTTPS
     ports: ["1234:1234"]
     depends_on:
       db: { condition: service_healthy, required: false }
 
-  web:
-    build:
-      context: .
-      args:
-        VITE_COLLAB_URL: ${VITE_COLLAB_URL:-ws://localhost:1234}
-        VITE_SANDBOX_URL: ${VITE_SANDBOX_URL:-http://localhost:5174}
-    command: pnpm --filter @livepage/web preview --host 0.0.0.0 --port 5173
-    ports: ["5173:5173"]
-
+  # HTML block runner. In production give it a different domain from the app.
   sandbox:
     build: .
     command: pnpm --filter @livepage/sandbox start
     environment:
-      SANDBOX_PORT: "5174"
+      PORT: "5174"
+      SANDBOX_FRAME_ANCESTORS: ${APP_ORIGIN:-http://localhost:1234}
     ports: ["5174:5174"]
 
 volumes:

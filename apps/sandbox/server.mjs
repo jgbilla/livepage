@@ -5,9 +5,12 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 
-const port = Number(process.env.SANDBOX_PORT ?? 5174);
+const port = Number(process.env.PORT ?? process.env.SANDBOX_PORT ?? 5174);
 // Which pages may embed the sandbox. Space-separated origins.
-const frameAncestors = process.env.SANDBOX_FRAME_ANCESTORS ?? 'http://localhost:5173 http://127.0.0.1:5173';
+// On Render, APP_HOST is the app service's host name (set in render.yaml).
+const frameAncestors =
+  process.env.SANDBOX_FRAME_ANCESTORS ??
+  (process.env.APP_HOST ? `https://${process.env.APP_HOST}` : 'http://localhost:5173 http://127.0.0.1:5173');
 // CDNs block code may load libraries from (GSAP, three.js, d3...).
 const scriptHosts = process.env.SANDBOX_SCRIPT_HOSTS ?? 'https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com';
 
@@ -38,5 +41,6 @@ createServer((req, res) => {
     res.end(runner);
     return;
   }
+  if (req.url === '/health') return void res.writeHead(200).end('ok');
   res.writeHead(404).end();
 }).listen(port, () => console.log(`[sandbox] http://localhost:${port}`));

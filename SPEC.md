@@ -158,7 +158,7 @@ documents (name pk, data bytea, updated_at)          -- Yjs state per page
 blocks    (doc_name, id, position, type, text, attrs jsonb)  -- rewritten on every save
 ```
 
-Planned (M1 to M4):
+Built in M1: `users`, `sessions`, `pages`, `page_members`, `share_links`, `api_tokens` (schema in `apps/server/src/db.ts`). Still planned, roughly:
 
 ```sql
 users        (id, email, name, avatar, password_hash | oauth_subject)
@@ -250,13 +250,20 @@ Planned tools: `insert_after(block_id, ...)`, `replace_text(range)`, `comment(an
 
 ---
 
-## 9. Accounts, permissions and sharing (M1)
+## 9. Accounts, permissions and sharing (M1, built)
 
-- Email + password and OAuth (GitHub, Google) via a small auth module, sessions in an httpOnly cookie on the app origin.
-- Hocuspocus `onAuthenticate` checks the session or API token and the page role, and sets the connection read-only for viewers and commenters.
-- Roles: owner, editor, commenter, viewer. Per workspace, overridable per page.
-- **Share links:** a token URL with a role and optional expiry. A public "publish to web" mode renders a read-only page (HTML blocks still sandboxed).
-- **Agent tokens:** created per user or workspace, scoped to pages, revocable. Today the server has one shared `AGENT_TOKEN` and every other connection is a guest.
+- **Accounts:** email and password (scrypt). Sessions are random tokens, stored as SHA-256 hashes, sent in an HttpOnly, SameSite=Lax cookie (Secure in production), 30 days. Login and sign-up are rate limited per IP. Mutating requests with a foreign `Origin` are rejected. `SIGNUP_OPEN=0` closes sign-ups.
+- **One origin:** in production one server serves the web app, the API (`/api`) and live sync (`/collab`), so the cookie also authenticates the WebSocket. In development Vite proxies `/api` and `/collab` to the server, so the code path is the same.
+- **Pages and roles:** `pages` + `page_members (owner | editor | commenter | viewer)`. Hocuspocus `onAuthenticate` resolves the caller (cookie or agent token), looks up the role, rejects non-members, and sets `readOnly` for viewers and commenters, so the server drops any edit they send (tested by forcing edits from a viewer's browser). Commenters become comment-capable in M2.
+- **Share links:** the owner creates a link with a role; anyone who opens it and signs in becomes a member with that role (never lowering an existing role). Links can be turned off. The owner can change or remove members.
+- **Agent tokens:** a person creates `lp_...` tokens in the app (shown once, stored hashed, revocable, last-used time). An agent using one acts with that person's access, under the token's name. Agents can't mint tokens. The shared `AGENT_TOKEN` is development-only.
+- **Later:** OAuth (GitHub, Google), email verification and password reset (needs an email provider), workspaces with default roles, public "publish to web" pages, link expiry, 2FA.
+
+## 9b. Hosting (built)
+
+- **Default:** Render Blueprint (`render.yaml`) with two Docker services from one image: `livepage` (app + API + live sync) and `livepage-sandbox` (HTML block runner), plus a hosted Neon Postgres. Each service learns the other's host from Render (`SANDBOX_HOST`, `APP_HOST`). `*.onrender.com` is on the Public Suffix List, so the two services are different sites. Step-by-step: `DEPLOY.md`.
+- **Production server:** serves `apps/web/dist` with a strict CSP (`script-src 'self'`, `frame-src` = sandbox origin, `frame-ancestors 'none'`).
+- **Anywhere else:** the same image runs on Railway, Fly.io or a VPS with `docker compose`.
 
 ---
 
@@ -293,7 +300,7 @@ Scaling later: Hocuspocus Redis extension for several server instances.
 | | Milestone | Done when |
 |---|-----------|-----------|
 | **M0** | **Live demo** (this scaffold) | Two browsers and an agent edit one page live. The agent types with its own caret, adds a table and a mind map, streams in a custom UI block, answers a button press from it, and writes in a second tab. Pages persist in hosted Postgres. ✅ |
-| M1 | Accounts and sharing | Sign up, workspaces, page tree sidebar, roles, share links, agent tokens. |
+| M1 | Accounts, sharing, hosting | Sign up, page list, roles, share links, agent tokens, one-click deploy (Render + Neon). ✅ (page tree sidebar and workspaces moved to M3) |
 | M2 | Comments | Comment on a selection, threads, agents can read and reply. |
 | M3 | Writing quality | Slash menu, drag handles, drawing block, CodeMirror block editor, suggestions, version history. |
 | M4 | Databases and design | Collections with properties and views, read bridge for custom UI, design frame block. |

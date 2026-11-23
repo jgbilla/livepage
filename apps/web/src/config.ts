@@ -1,3 +1,11 @@
-export const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:1234';
-// Must be a different origin from the app. HTML blocks run there.
-export const SANDBOX_URL = import.meta.env.VITE_SANDBOX_URL ?? 'http://localhost:5174';
+// Runtime config comes from the server (/api/config), so one build works on any domain.
+export type AppConfig = { sandboxUrl: string; signupOpen: boolean };
+
+export const collabUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/collab`;
+
+let cached: AppConfig | null = null;
+export async function loadConfig(): Promise<AppConfig> {
+  if (!cached) cached = await (await fetch('/api/config')).json();
+  return cached!;
+}
+export const appConfig = () => cached!;
