@@ -129,6 +129,13 @@
   --lp-agent-soft-strong: rgb(110 86 207 / .18);
   --lp-agent-gradient: linear-gradient(135deg, #8b6cf6 0%, #6e56cf 55%, #5741b8 100%);
   --lp-on-agent: #ffffff;
+  /* Agent shades: when several agents are on one page each gets its own violet, so their avatars,
+     carets and tab dots tell them apart. All stay in the violet family and hold white text at AA. */
+  --lp-agent-1: #6e56cf; --lp-agent-gradient-1: linear-gradient(135deg, #8b6cf6 0%, #6e56cf 55%, #5741b8 100%);
+  --lp-agent-2: #8a46c4; --lp-agent-gradient-2: linear-gradient(135deg, #a564e0 0%, #8a46c4 55%, #7034a8 100%);
+  --lp-agent-3: #4f46c8; --lp-agent-gradient-3: linear-gradient(135deg, #6d66e6 0%, #4f46c8 55%, #3d35a8 100%);
+  --lp-agent-4: #a1399f; --lp-agent-gradient-4: linear-gradient(135deg, #bd56ba 0%, #a1399f 55%, #852b83 100%);
+  --lp-agent-5: #5b3a9e; --lp-agent-gradient-5: linear-gradient(135deg, #7a58c4 0%, #5b3a9e 55%, #472c82 100%);
 
   /* Comments: a highlighter, so amber. */
   --lp-comment: #e9a700;
@@ -191,6 +198,11 @@
     --lp-agent: #9d87ff; --lp-agent-strong: #b3a1ff; --lp-agent-text: #b6a6ff;
     --lp-agent-soft: rgb(157 135 255 / .14); --lp-agent-soft-strong: rgb(157 135 255 / .24);
     --lp-agent-gradient: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+    --lp-agent-1: #9d87ff; --lp-agent-gradient-1: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+    --lp-agent-2: #c28af0; --lp-agent-gradient-2: linear-gradient(135deg, #c48cf2 0%, #9c5cd6 55%, #7f44ba 100%);
+    --lp-agent-3: #8f8cff; --lp-agent-gradient-3: linear-gradient(135deg, #9592ff 0%, #6a64e8 55%, #5048cc 100%);
+    --lp-agent-4: #e08ad9; --lp-agent-gradient-4: linear-gradient(135deg, #e08ad9 0%, #b453b0 55%, #963c93 100%);
+    --lp-agent-5: #ab8fef; --lp-agent-gradient-5: linear-gradient(135deg, #a88ae8 0%, #7a58c4 55%, #5f41a6 100%);
     --lp-comment: #f0b730; --lp-comment-soft: rgb(240 183 48 / .22); --lp-comment-strong: rgb(240 183 48 / .42);
     --lp-success: #4cc173; --lp-success-soft: rgb(76 193 115 / .14); --lp-warning: #f0a33a; --lp-warning-soft: rgb(240 163 58 / .15);
     --lp-danger: #ff6b6f; --lp-danger-soft: rgb(255 107 111 / .14); --lp-info: #5aa9ff;
@@ -220,6 +232,11 @@
   --lp-agent: #9d87ff; --lp-agent-strong: #b3a1ff; --lp-agent-text: #b6a6ff;
   --lp-agent-soft: rgb(157 135 255 / .14); --lp-agent-soft-strong: rgb(157 135 255 / .24);
   --lp-agent-gradient: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+  --lp-agent-1: #9d87ff; --lp-agent-gradient-1: linear-gradient(135deg, #a08bff 0%, #7c63e6 55%, #6249d0 100%);
+  --lp-agent-2: #c28af0; --lp-agent-gradient-2: linear-gradient(135deg, #c48cf2 0%, #9c5cd6 55%, #7f44ba 100%);
+  --lp-agent-3: #8f8cff; --lp-agent-gradient-3: linear-gradient(135deg, #9592ff 0%, #6a64e8 55%, #5048cc 100%);
+  --lp-agent-4: #e08ad9; --lp-agent-gradient-4: linear-gradient(135deg, #e08ad9 0%, #b453b0 55%, #963c93 100%);
+  --lp-agent-5: #ab8fef; --lp-agent-gradient-5: linear-gradient(135deg, #a88ae8 0%, #7a58c4 55%, #5f41a6 100%);
   --lp-comment: #f0b730; --lp-comment-soft: rgb(240 183 48 / .22); --lp-comment-strong: rgb(240 183 48 / .42);
   --lp-success: #4cc173; --lp-success-soft: rgb(76 193 115 / .14); --lp-warning: #f0a33a; --lp-warning-soft: rgb(240 163 58 / .15);
   --lp-danger: #ff6b6f; --lp-danger-soft: rgb(255 107 111 / .14); --lp-info: #5aa9ff;

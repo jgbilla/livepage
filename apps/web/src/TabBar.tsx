@@ -1,10 +1,11 @@
+import { agentShade } from './agents';
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { MAIN_TAB, addTab, listTabs, removeTab, renameTab, tabsMap, type Tab } from '@livepage/schema';
 import { Icon } from './design/Icon';
 import { HScrollEdges, useHScroll } from './HScroll';
 
-type Peer = { name: string; color: string; tab?: string };
+import type { Peer } from './Presence';
 
 // Page tabs: a page's own sections, under its title (not the workspace tabs of open pages, see tabs.ts).
 // Optional tabs at the top of a page. With one tab, only a small "+ Add tab" shows,
@@ -47,7 +48,9 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced 
               <button type="button" className="tab-title" onClick={() => onSelect(t.id)} onDoubleClick={() => !readOnly && setEditing(t.id)} title="Double-click to rename">
                 {t.title}
                 {peers.filter((p) => p.tab === t.id).map((p, i) => (
-                  <span key={i} className="tab-dot" style={{ background: p.color }} title={p.name} />
+                  p.kind === 'agent'
+                    ? <span key={i} className={`tab-dot tab-dot-agent agent-shade-${agentShade(p)}`} title={`${p.name} (agent)`} />
+                    : <span key={i} className="tab-dot" style={{ background: p.color }} title={p.name} />
                 ))}
               </button>
             )}
