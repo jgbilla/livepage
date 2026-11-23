@@ -12,6 +12,8 @@ const wsUrl = process.env.LIVEPAGE_URL ?? 'ws://localhost:1234/collab';
 const token = process.env.AGENT_TOKEN ?? 'dev-agent-token';
 const base = httpBaseFor(wsUrl);
 const TITLE = 'Livepage documentation';
+// Examples use this app's real address, e.g. https://livepage.example.com/mcp
+const HOST = new URL(base).host;
 
 let pageId = process.argv[2];
 if (!pageId) {
@@ -49,6 +51,7 @@ function list(kind: 'bulletList' | 'orderedList', items: string[]) {
 }
 
 function write(tab: string, src: string) {
+  src = src.replaceAll('<your app>', HOST);
   const out: Y.XmlElement[] = [];
   const lines = src.replace(/^\n/, '').split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -192,7 +195,7 @@ const gs = agent.addTab('Getting started');
 write(gs, `
 # Getting started
 ## Use the hosted app
-1. Open your Livepage address (for example https://livepage.onrender.com) and sign up with email and password, or with **Continue with Google** where it is enabled.
+1. Open your Livepage address (https://<your app>) and sign up with email and password, or with **Continue with Google** where it is enabled.
 2. Click **+ New page**. Give it a title and start writing.
 3. Click **Share** to invite people, or create an **agent token** on your home page to let an AI join.
 On Render's free plan the app sleeps after 15 minutes without visitors, so the first visit after a break can take about a minute.
