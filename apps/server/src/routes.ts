@@ -4,14 +4,21 @@ import type { Hocuspocus } from '@hocuspocus/server';
 import type { Db } from './db.ts';
 import {
   bearer, clearCookie, createApiToken, createSession, createUser, destroySession, login, readCookie, resolvePrincipal,
-  sessionCookie, validateSignup, type Principal,
+  randomId, sessionCookie, validateSignup, type Principal,
 } from './auth.ts';
 import {
-  acceptShareLink, atLeast, canEdit, createPage, createShareLink, deletePage, isPageId, listPages, members, pageInfo,
-  revokeShareLink, roleFor, setMemberRole, shareLinks, type Role,
+  acceptShareLink, atLeast, backlinks, canEdit, cleanTag, createPage, createShareLink, dailyPage, deletePage, isPageId, listPages, members,
+  pageInfo, pageTags, revokeShareLink, roleFor, setMemberRole, setPageTags, setTitle, shareLinks, tagsByPage, tagsFor, type Role,
 } from './pages.ts';
+import {
+  cleanName, createFolder, dailySegments, deleteFolder, ensureFolderPath, folderAtPath, folderPaths, FolderError, isFolderId,
+  listFolders, movePage, splitPath, updateFolder,
+} from './folders.ts';
+import * as Y from 'yjs';
+import { META } from '@livepage/schema';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
+import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import {
   HttpError, createComment, deleteComment, isCommentId, listMentions, markMentionDone, mentionables, setWebhook, threadsWithText,
   updateComment, waitForMention,
@@ -151,14 +158,94 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       return send(res, 200, { ok: true });
     }
 
+    if (path.startsWith('/api/ai/')) return handleAiApi(req, res, db, who, path);
+
     if (path === '/api/pages' && method === 'GET') {
       if (who.superAgent) return send(res, 200, { pages: await db.query('select id, title, updated_at from pages order by updated_at desc limit 500') });
-      return send(res, 200, { pages: await listPages(db, who.id) });
+      return send(res, 200, await workspace(db, who.id, url));
     }
     if (path === '/api/pages' && method === 'POST') {
       if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token to create pages.' });
       const b = await readJson(req);
-      return send(res, 201, { page: await createPage(db, who.id, String(b.title ?? '')) });
+      const where = await placement(b);
+      if ('error' in where) return send(res, 400, { error: where.error });
+      const page = await createPage(db, who.id, String(b.title ?? ''), where);
+      const tags = Array.isArray(b.tags) ? await setPageTags(db, page.id, b.tags) : [];
+      return send(res, 201, { page: { ...page, tags } });
+    }
+
+    // Today's page: folder YYYY/MM/DD, page "daily". The browser sends its local date.
+    if (path === '/api/daily' && method === 'POST') {
+      if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token for daily pages.' });
+      const b = await readJson(req);
+      const segments = dailySegments(b.date);
+      if (!segments) return send(res, 400, { error: 'date must be YYYY-MM-DD' });
+      const r = await dailyPage(db, who.id, segments);
+      return send(res, r.created ? 201 : 200, { page: { id: r.id, title: 'daily', path: segments.join('/') }, created: r.created });
+    }
+
+    // ---------- folders (each person's own tree) ----------
+    if (path.startsWith('/api/folders') || path === '/api/tags') {
+      if (who.superAgent) return send(res, 400, { error: 'Folders and tags need a personal agent token.' });
+    }
+    if (path.startsWith('/api/views') && who.superAgent) return send(res, 400, { error: 'Views need a personal agent token.' });
+    if (path === '/api/views' && method === 'GET') return send(res, 200, { views: await listViews(db, who.id) });
+    if (path === '/api/views' && method === 'POST') {
+      const v = viewInput(await readJson(req));
+      if ('error' in v) return send(res, 400, { error: v.error });
+      const id = randomId('v', 9);
+      await db.query('insert into views (id, owner_id, name, tags, match) values ($1,$2,$3,$4,$5)', [id, who.id, v.name, JSON.stringify(v.tags), v.match]);
+      return send(res, 201, { view: { id, ...v } });
+    }
+    const viewM = path.match(/^\/api\/views\/(v_[\w-]{8,40})$/);
+    if (viewM && method === 'PATCH') {
+      const [cur] = await db.query('select name, tags, match from views where id = $1 and owner_id = $2', [viewM[1], who.id]);
+      if (!cur) return send(res, 404, { error: 'View not found.' });
+      const v = viewInput({ ...cur, ...(await readJson(req)) });
+      if ('error' in v) return send(res, 400, { error: v.error });
+      await db.query('update views set name = $3, tags = $4, match = $5 where id = $1 and owner_id = $2', [viewM[1], who.id, v.name, JSON.stringify(v.tags), v.match]);
+      return send(res, 200, { view: { id: viewM[1], ...v } });
+    }
+    if (viewM && method === 'DELETE') {
+      await db.query('delete from views where id = $1 and owner_id = $2', [viewM[1], who.id]);
+      return send(res, 200, { ok: true });
+    }
+    if (path === '/api/tags' && method === 'GET') return send(res, 200, { tags: await tagsFor(db, who.id) });
+    if (path === '/api/folders' && method === 'GET') {
+      const folders = await listFolders(db.query, who.id);
+      const paths = folderPaths(folders);
+      return send(res, 200, { folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })) });
+    }
+    if (path === '/api/folders' && method === 'POST') {
+      const b = await readJson(req);
+      if (b.path !== undefined) {
+        // mkdir -p
+        const segments = splitPath(b.path);
+        if (!segments?.length) return send(res, 400, { error: 'path must look like "Projects/Book" (no empty parts)' });
+        const id = await db.tx((q) => ensureFolderPath(q, who.id, segments));
+        return send(res, 201, { folder: { id, path: segments.join('/') } });
+      }
+      const name = cleanName(b.name);
+      if (!name) return send(res, 400, { error: 'Folder names cannot be empty or contain "/".' });
+      const parent = b.parent_id ? String(b.parent_id) : null;
+      return send(res, 201, { folder: await createFolder(db, who.id, name, parent) });
+    }
+    const folderM = path.match(/^\/api\/folders\/([\w-]+)$/);
+    if (folderM && isFolderId(folderM[1])) {
+      if (method === 'PATCH') {
+        const b = await readJson(req);
+        const patch: { name?: string; parentId?: string | null } = {};
+        if (b.name !== undefined) {
+          const name = cleanName(b.name);
+          if (!name) return send(res, 400, { error: 'Folder names cannot be empty or contain "/".' });
+          patch.name = name;
+        }
+        if (b.parent_id !== undefined) patch.parentId = b.parent_id ? String(b.parent_id) : null;
+        return send(res, 200, { folder: await updateFolder(db, who.id, folderM[1], patch) });
+      }
+      if (method === 'DELETE') {
+        return (await deleteFolder(db, who.id, folderM[1])) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'Folder not found.' });
+      }
     }
 
     const share = path.match(/^\/api\/share\/([\w-]{10,64})$/);
@@ -180,6 +267,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
   } catch (e) {
     if (e instanceof HttpError) return send(res, e.status, { error: e.message });
     const msg = (e as Error).message;
+    if (e instanceof FolderError) return send(res, e.status, { error: msg });
     if (msg === 'body too large' || e instanceof SyntaxError) return send(res, 400, { error: msg });
     console.error('[api]', e);
     return send(res, 500, { error: 'server error' });
@@ -194,7 +282,50 @@ type PageCtx = {
 async function pageRoutes(c: PageCtx): Promise<void> {
   const { req, res, db, hp, url, who, role, pageId, sub, id, method } = c;
 
-  if (!sub && method === 'GET') return send(res, 200, { page: await pageInfo(db, pageId), role });
+  if (!sub && method === 'GET') {
+    const [m] = who.superAgent ? [] : await db.query('select folder_id from page_members where page_id = $1 and user_id = $2', [pageId, who.id]);
+    const folderId: string | null = m?.folder_id ?? null;
+    const folderPath = folderId && !who.superAgent ? folderPaths(await listFolders(db.query, who.id)).get(folderId) ?? '' : '';
+    return send(res, 200, { page: { ...(await pageInfo(db, pageId)), folder_id: folderId, path: folderPath, tags: await pageTags(db, pageId) }, role });
+  }
+
+  // Rename, move (in your own tree) and retag. Moving is yours alone, so any role can do it.
+  if (!sub && method === 'PATCH') {
+    const b = await readJson(req);
+    if (b.folder_id !== undefined || b.path !== undefined) {
+      if (who.superAgent) return send(res, 400, { error: 'Moving pages needs a personal agent token.' });
+      const where = await placement(b);
+      if ('error' in where) return send(res, 400, { error: where.error });
+      await db.tx(async (q) => {
+        const folderId = where.path ? await ensureFolderPath(q, who.id, where.path) : where.folderId ?? null;
+        await movePage(q, who.id, pageId, folderId);
+      });
+    }
+    if (b.title !== undefined || b.tags !== undefined) {
+      if (!canEdit(role)) return send(res, 403, { error: 'You can only view this page.' });
+    }
+    if (b.title !== undefined) await renamePage(hp, db, pageId, String(b.title), who);
+    if (b.tags !== undefined) {
+      if (!Array.isArray(b.tags)) return send(res, 400, { error: 'tags must be a list' });
+      await setPageTags(db, pageId, b.tags);
+    }
+    return send(res, 200, { ok: true });
+  }
+
+  if (sub === 'backlinks' && method === 'GET') return send(res, 200, { backlinks: await backlinks(db, who, pageId) });
+
+  if (sub === 'tags') {
+    if (method === 'GET') return send(res, 200, { tags: await pageTags(db, pageId) });
+    if (!canEdit(role)) return send(res, 403, { error: 'You can only view this page.' });
+    const b = method === 'DELETE' ? {} : await readJson(req);
+    const current = await pageTags(db, pageId);
+    if (method === 'PUT') {
+      if (!Array.isArray(b.tags)) return send(res, 400, { error: 'tags must be a list' });
+      return send(res, 200, { tags: await setPageTags(db, pageId, b.tags) });
+    }
+    if (method === 'POST') return send(res, 200, { tags: await setPageTags(db, pageId, [...current, ...(Array.isArray(b.tags) ? b.tags : [b.tag])]) });
+    if (method === 'DELETE' && id) return send(res, 200, { tags: await setPageTags(db, pageId, current.filter((t) => t !== cleanTag(id))) });
+  }
   if (!sub && method === 'DELETE') {
     if (role !== 'owner') return send(res, 403, { error: 'Only the owner can delete a page.' });
     await deletePage(db, pageId);
@@ -227,6 +358,7 @@ async function pageRoutes(c: PageCtx): Promise<void> {
     }
   }
 
+  if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
   if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId) });
 
   if (sub === 'comments') {
@@ -261,4 +393,69 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   }
 
   return send(res, 404, { error: 'not found' });
+}
+
+/** Where a new or moved page goes: { folder_id } (null = top level) or { path: "a/b" } (created if missing). */
+async function placement(b: any): Promise<{ folderId?: string | null; path?: string[] } | { error: string }> {
+  if (b.path !== undefined && b.path !== null) {
+    const segments = splitPath(b.path);
+    if (!segments) return { error: 'path must look like "Projects/Book" (no empty parts)' };
+    return { path: segments };
+  }
+  if (b.folder_id !== undefined) {
+    const folderId = b.folder_id ? String(b.folder_id) : null;
+    if (folderId && !isFolderId(folderId)) return { error: 'bad folder_id' };
+    return { folderId };
+  }
+  return {};
+}
+
+/** Everything the sidebar needs: folders, pages (with folder, path and tags) and tag counts. ?path= and ?tag= filter pages. */
+async function workspace(db: Db, userId: string, url: URL) {
+  const [folders, pages, tagMap, tags] = await Promise.all([
+    listFolders(db.query, userId), listPages(db, userId), tagsByPage(db, userId), tagsFor(db, userId),
+  ]);
+  const paths = folderPaths(folders);
+  let out = pages.map((p: any) => ({ ...p, path: p.folder_id ? paths.get(p.folder_id) ?? '' : '', tags: tagMap.get(p.id) ?? [] }));
+  const wantPath = url.searchParams.get('path');
+  if (wantPath !== null) {
+    const segments = splitPath(wantPath) ?? [];
+    const folderId = segments.length ? await folderAtPath(db.query, userId, segments) : null;
+    out = segments.length && !folderId ? [] : out.filter((p) => p.folder_id === folderId);
+  }
+  // ?tag=a&tag=b (or ?tag=a,b) with ?match=all|any (default any). A tag also matches its nested tags (a/x).
+  const wantTags = url.searchParams.getAll('tag').flatMap((t) => t.split(',')).map(cleanTag).filter((t): t is string => !!t);
+  if (wantTags.length) out = out.filter((p) => matchesTags(p.tags, wantTags, url.searchParams.get('match') === 'all' ? 'all' : 'any'));
+  return { pages: out, folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })), tags, views: await listViews(db, userId) };
+}
+
+/** Title lives in the live document (so open editors update at once) and in pages.title (for lists). */
+async function renamePage(hp: Hocuspocus, db: Db, pageId: string, title: string, who: Principal) {
+  title = title.slice(0, 200);
+  const conn = await hp.openDirectConnection(pageId, { user: { id: who.id, name: who.name, kind: who.kind } });
+  try {
+    await conn.transact((d) => { (d as unknown as Y.Doc).getMap(META).set('title', title); });
+  } finally {
+    await conn.disconnect();
+  }
+  await setTitle(db, pageId, title);
+}
+
+export function matchesTags(pageTags: string[], want: string[], match: 'any' | 'all'): boolean {
+  const has = (w: string) => pageTags.some((t) => t === w || t.startsWith(`${w}/`));
+  return match === 'all' ? want.every(has) : want.some(has);
+}
+
+async function listViews(db: Db, userId: string) {
+  const rows = await db.query('select id, name, tags, match from views where owner_id = $1 order by lower(name)', [userId]);
+  return rows.map((r) => ({ ...r, tags: typeof r.tags === 'string' ? JSON.parse(r.tags) : r.tags }));
+}
+
+function viewInput(b: any): { name: string; tags: string[]; match: 'any' | 'all' } | { error: string } {
+  const name = String(b.name ?? '').trim().slice(0, 80);
+  if (!name) return { error: 'A view needs a name.' };
+  const raw = Array.isArray(b.tags) ? b.tags : typeof b.tags === 'string' ? b.tags.split(/[,\s]+/) : [];
+  const tags = [...new Set(raw.map(cleanTag).filter(Boolean))].slice(0, 20) as string[];
+  if (!tags.length) return { error: 'Pick at least one tag for the view.' };
+  return { name, tags, match: b.match === 'all' ? 'all' : 'any' };
 }

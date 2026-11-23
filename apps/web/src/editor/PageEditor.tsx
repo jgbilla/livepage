@@ -13,15 +13,17 @@ import { HtmlBlock } from './HtmlBlock';
 import { MindMap } from './MindMap';
 import { CommentHighlights, anchorFromSelection, type CommentStore } from './comments';
 import type { CommentAnchor } from '@livepage/schema';
+import { LinkMenu, PageLink, PageLinkInput } from './PageLink';
+import { titleOf, workspaceSnapshot } from '../workspace';
 type User = { id: string; name: string; color: string };
 
 type Props = {
-  doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean;
+  doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean; pageId: string;
   /** Comments: highlights come from the store; onComment opens the composer for an anchor. */
   comments?: CommentStore; canComment?: boolean; onComment?: (anchor: CommentAnchor) => void; onEditor?: (e: Editor | null) => void;
 };
 
-export function PageEditor({ doc, provider, user, tab, readOnly, comments, canComment, onComment, onEditor }: Props) {
+export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comments, canComment, onComment, onEditor }: Props) {
   const meRef = useRef(user);
   meRef.current = user;
   const editor = useEditor(
@@ -38,10 +40,12 @@ export function PageEditor({ doc, provider, user, tab, readOnly, comments, canCo
         TableCell,
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
+        PageLink.configure({ doc, currentPage: pageId }),
+        PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
         CommentHighlights.configure({ store: comments ?? null }),
       ],
     },
-    [doc, provider, tab, readOnly],
+    [doc, provider, tab, readOnly, pageId],
   );
 
   useEffect(() => { onEditor?.(editor); return () => onEditor?.(null); }, [editor, onEditor]);
@@ -104,6 +108,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, comments, canCo
       </div>}
       <div className={`editor-wrap ${canComment ? 'can-comment' : ''}`} ref={wrapRef}>
         <EditorContent editor={editor} className="editor" />
+        {!readOnly && <LinkMenu editor={editor} doc={doc} currentPage={pageId} />}
         {bubble && (
           <button type="button" className="comment-bubble" style={{ top: bubble.top, left: bubble.left }}
             onMouseDown={(e) => e.preventDefault()} onClick={startComment}>💬 Comment</button>
