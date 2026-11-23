@@ -6,7 +6,7 @@ type Peer = { name: string; color: string; tab?: string };
 
 // Optional tabs at the top of a page. With one tab, only a small "+ Add tab" shows,
 // so the page looks like a normal page. Each tab is its own live block document.
-export function TabBar({ doc, active, onSelect, peers }: { doc: Y.Doc; active: string; onSelect: (id: string) => void; peers: Peer[] }) {
+export function TabBar({ doc, active, onSelect, peers, readOnly = false }: { doc: Y.Doc; active: string; onSelect: (id: string) => void; peers: Peer[]; readOnly?: boolean }) {
   const [tabs, setTabs] = useState<Tab[]>(() => listTabs(doc));
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -38,14 +38,14 @@ export function TabBar({ doc, active, onSelect, peers }: { doc: Y.Doc; active: s
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }}
               />
             ) : (
-              <button type="button" className="tab-title" onClick={() => onSelect(t.id)} onDoubleClick={() => setEditing(t.id)} title="Double-click to rename">
+              <button type="button" className="tab-title" onClick={() => onSelect(t.id)} onDoubleClick={() => !readOnly && setEditing(t.id)} title="Double-click to rename">
                 {t.title}
                 {peers.filter((p) => p.tab === t.id).map((p, i) => (
                   <span key={i} className="tab-dot" style={{ background: p.color }} title={p.name} />
                 ))}
               </button>
             )}
-            {t.id !== MAIN_TAB && t.id === active && editing !== t.id && (
+            {!readOnly && t.id !== MAIN_TAB && t.id === active && editing !== t.id && (
               <button
                 type="button"
                 className="tab-close"
@@ -57,9 +57,9 @@ export function TabBar({ doc, active, onSelect, peers }: { doc: Y.Doc; active: s
             )}
           </div>
         ))}
-      <button type="button" className="tab-add" onClick={() => { const id = addTab(doc, `Tab ${tabs.length + 1}`); onSelect(id); setEditing(id); }}>
+      {!readOnly && <button type="button" className="tab-add" onClick={() => { const id = addTab(doc, `Tab ${tabs.length + 1}`); onSelect(id); setEditing(id); }}>
         + Add tab
-      </button>
+      </button>}
     </nav>
   );
 }

@@ -4,7 +4,8 @@
 //
 //   claude mcp add livepage -- pnpm --dir /path/to/livepage agent:mcp
 //
-// Env: LIVEPAGE_URL (default ws://localhost:1234), AGENT_TOKEN, LIVEPAGE_AGENT_NAME
+// Env: LIVEPAGE_URL (default ws://localhost:1234/collab; hosted: wss://<your app>/collab),
+//      AGENT_TOKEN (an lp_... token from the app's Agents section), LIVEPAGE_AGENT_NAME
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -20,7 +21,7 @@ async function agentFor(page: string, tab?: string) {
   return a.useTab(tab);
 }
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
-const page = z.string().regex(/^[\w.-]{1,128}$/).describe('Page id, as in ?page=<id> in the app URL');
+const page = z.string().regex(/^p_[\w-]{8,40}$/).describe('Page id, from the app URL: /p/<page id>');
 const tab = z.string().optional().describe('Tab id or title to write in (see read_page). Omit for the main tab.');
 
 const server = new McpServer(
@@ -36,12 +37,20 @@ Pick the lightest block that does the job:
   run locally in js. To get input back from people, call livepage.send('action_name', {values}) from js,
   then poll get_block_actions and answer each with resolve_block_action.
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
-Call read_page first to see what is there.`,
+Use list_pages to find page ids, and call read_page first to see what is there.`,
   },
 );
 
 server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code.',
   { page }, async ({ page: p }) => text((await agentFor(p)).read() || '(empty page)'));
+
+server.tool('list_pages', 'List the pages this agent token can open (id, title, your role).', {}, async () => {
+  const base = (process.env.LIVEPAGE_URL ?? 'ws://localhost:1234/collab').replace(/^ws/, 'http').replace(/\/collab\/?$/, '');
+  const res = await fetch(`${base}/api/pages`, { headers: { authorization: `Bearer ${process.env.AGENT_TOKEN ?? 'dev-agent-token'}` } });
+  if (!res.ok) return text(`could not list pages: ${res.status} ${await res.text()}`);
+  const { pages } = (await res.json()) as { pages: { id: string; title: string; role?: string }[] };
+  return text(pages.map((p) => `${p.id}  ${p.title || 'Untitled'}${p.role ? `  (${p.role})` : ''}`).join('\n') || 'no pages');
+});
 
 server.tool('add_tab', 'Add a tab to the page (tabs show at the top; each tab is its own scrolling document). Returns the tab id.',
   { page, title: z.string() }, async ({ page: p, title }) => text(`added tab ${(await agentFor(p)).addTab(title)}`));

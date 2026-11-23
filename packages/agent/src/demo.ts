@@ -1,5 +1,7 @@
-// The demo: open http://localhost:5173/?page=demo in two browsers, then run
-//   pnpm agent:demo demo
+// The demo: sign in at http://localhost:5173, create a page, open it in two browsers, then run
+//   pnpm agent:demo <page id from the URL, like p_AbC123...>
+// Locally the shared dev token works. Against a hosted server, set LIVEPAGE_URL and an agent token:
+//   LIVEPAGE_URL=wss://your-app.onrender.com/collab AGENT_TOKEN=lp_... pnpm agent:demo p_...
 // An agent joins the page and shows every kind of block living on one page:
 //   text it types with its own caret, a native table, a native mind map, and a custom UI
 //   block that streams in (height, placeholders, CSS, HTML, then JS), and a second tab.
@@ -8,7 +10,11 @@
 import { htmlSections } from '@livepage/schema';
 import { LiveAgent } from './client.ts';
 
-const page = process.argv[2] ?? 'demo';
+const page = process.argv[2];
+if (!page) {
+  console.error('usage: pnpm agent:demo <page id> [listen seconds]');
+  process.exit(1);
+}
 const listenSeconds = Number(process.argv[3] ?? 60);
 const agent = await LiveAgent.connect({ page, name: 'Claude (demo agent)' });
 console.log(`[agent] joined page "${page}"`);

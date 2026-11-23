@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { SANDBOX_URL } from '../config';
+import { appConfig } from '../config';
 
 // Renders untrusted HTML/JS. Security model (SPEC.md "HTML blocks"):
-//  - the iframe loads from SANDBOX_URL, a different origin from the app
+//  - the iframe loads from the sandbox URL (from /api/config), a different origin from the app
 //  - sandbox="allow-scripts" WITHOUT allow-same-origin gives it an opaque origin:
 //    no cookies, no storage, no access to the parent page or the user's session
 //  - the sandbox server sends a strict CSP (no fetch/XHR/WebSocket, CDN scripts only)
@@ -75,7 +75,7 @@ export function SandboxFrame({ code, streaming, initialHeight, onAction }: Props
       <iframe
         key={frameKey}
         ref={ref}
-        src={`${SANDBOX_URL}/runner.html`}
+        src={`${appConfig().sandboxUrl}/runner.html`}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         loading="lazy"

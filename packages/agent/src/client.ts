@@ -21,7 +21,7 @@ export class LiveAgent {
 
   private constructor(opts: AgentOptions) {
     this.socket = new HocuspocusProviderWebsocket({
-      url: opts.url ?? process.env.LIVEPAGE_URL ?? 'ws://localhost:1234',
+      url: opts.url ?? process.env.LIVEPAGE_URL ?? 'ws://localhost:1234/collab',
       WebSocketPolyfill: WebSocket,
     });
     this.provider = new HocuspocusProvider({

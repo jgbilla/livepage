@@ -4,10 +4,15 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 
 ![One page mixing text, a table, a mind map and agent custom UI](docs/mixed-page.png)
 
-> Early scaffold (Milestone 0). See **[SPEC.md](SPEC.md)** for the full design and roadmap.
+> Early but usable: accounts, sharing and hosting are in (Milestone 1). See **[SPEC.md](SPEC.md)** for the design and roadmap.
+>
+> **Put it on the web:** follow **[DEPLOY.md](DEPLOY.md)** (Neon + Render, about 15 minutes).
 
 ## What works today
 
+- Accounts (email and password), your own page list, live page titles
+- Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
+- Personal agent tokens, so any AI joins your pages with your access
 - Real-time collaborative editor (TipTap + Yjs + Hocuspocus) with live carets and a presence bar
 - Any mix of blocks on one page: text, tables, mind maps and custom UI, all editable by people and agents
 - Optional tabs at the top of a page, each its own live document
@@ -28,16 +33,18 @@ Livepage stores pages in **a hosted Postgres by default**, so nothing is lost if
 ```bash
 pnpm install
 cp .env.example .env        # paste your hosted DATABASE_URL (keep ?sslmode=require)
-pnpm dev                    # web :5173, collab server :1234, sandbox :5174
+pnpm dev                    # open http://localhost:5173 (server :1234 and sandbox :5174 run behind it)
 ```
 
-Just want to look around? `pnpm dev:memory` runs without a database, and pages are lost when the server stops.
+Just want to look around? `pnpm dev:memory` runs with an in-memory Postgres, and everything is lost when the server stops.
 
-Open http://localhost:5173/?page=demo in **two browser windows**, then in a third terminal:
+Sign up at http://localhost:5173, create a page, click **Share** and open the link in a second (private) window as another user. Then, with the page id from the URL:
 
 ```bash
-pnpm agent:demo demo
+pnpm agent:demo p_xxxxxxxxxxxx
 ```
+
+Locally the demo uses the shared development token. On a hosted server, create an agent token in the app and run `LIVEPAGE_URL=wss://<your app>/collab AGENT_TOKEN=lp_... pnpm agent:demo <page id>`.
 
 The agent joins the page, types with its own caret, adds a table and a mind map, streams in an orbit explorer, and writes its sources in a second tab. The slider in the block runs locally. **Ask the agent to add a planet** goes back to the agent, which updates the block. Edit the mind map, the table or the block's code in either window and both update live.
 
@@ -50,7 +57,7 @@ cp .env.example .env        # set DATABASE_URL to your hosted Postgres
 docker compose up --build
 ```
 
-Then open http://localhost:5173. The server refuses to start without `DATABASE_URL`.
+Then open http://localhost:1234. The server refuses to start without `DATABASE_URL`. For a public deployment see [DEPLOY.md](DEPLOY.md).
 
 Prefer a database on the same machine? The bundled Postgres is an opt-in profile. Its data lives in a Docker volume, so back it up yourself:
 
@@ -63,34 +70,40 @@ DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --prof
 
 **MCP** (Claude Code example):
 
+Create an agent token in the app (**Agents > + Agent token**), then:
+
 ```bash
-claude mcp add livepage -- pnpm --dir /path/to/livepage agent:mcp
+claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --dir /path/to/livepage agent:mcp
 ```
 
-Tools: `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`. Set `LIVEPAGE_URL`, `AGENT_TOKEN` and `LIVEPAGE_AGENT_NAME` in the environment if needed.
+Tools: `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`. Set `LIVEPAGE_URL`, `AGENT_TOKEN` and `LIVEPAGE_AGENT_NAME` in the environment if needed.
 
 **HTTP**:
 
 ```bash
-curl -H "Authorization: Bearer dev-agent-token" localhost:1234/api/pages/demo
-curl -X POST -H "Authorization: Bearer dev-agent-token" -H "content-type: application/json" \
-  -d '{"title":"Hello","code":"<h1 style=\"color:tomato\">Hi</h1>"}' \
-  localhost:1234/api/pages/demo/html-blocks
+curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages
+curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages/p_xxx/content
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"rows":[["Planet","Moons"],["Mars","2"]]}' https://<your app>/api/pages/p_xxx/tables
 ```
 
 ## Layout
 
 ```
 apps/web        React + TipTap editor, HTML block node view, sandbox iframe
-apps/server     Hocuspocus collab server, Postgres storage, agent HTTP API
+apps/server     One server: web app (prod), accounts, sharing, API, live sync (Hocuspocus), Postgres
 apps/sandbox    Serves the HTML block runner on its own origin with a strict CSP
 packages/schema The shared page model (Yjs) used by editor, server and agents
 packages/agent  Live agent client, demo script, MCP server
 ```
 
-## Security note
+## Security notes
 
-The current auth is a placeholder: one shared `AGENT_TOKEN`, everyone else is a guest. Don't expose this to the internet yet. Accounts and permissions are Milestone 1.
+- Passwords are hashed with scrypt; sessions are random tokens stored hashed, in an HttpOnly, SameSite=Lax cookie (Secure in production). Cross-site writes are rejected by an Origin check.
+- Every live connection is authenticated and checked against the page's members; viewers and commenters connect read-only, so the server drops their edits.
+- HTML blocks run on a separate origin in a sandboxed iframe with a strict CSP (see SPEC.md §6). The app itself is served with a CSP that only allows frames from the sandbox.
+- The shared `AGENT_TOKEN` exists for local development only and is ignored when `NODE_ENV=production`.
+- Not yet: email verification, password reset, and two-factor sign-in.
 
 ## License
 

@@ -14,7 +14,7 @@ declare module '@tiptap/core' {
 
 // A native mind map block. Like HTML blocks, the tree stores only { blockId, title };
 // the nodes live in the doc's "mindMaps" map, so people and agents edit the same map live.
-export const MindMap = Node.create<{ doc: Y.Doc | null }>({
+export const MindMap = Node.create<{ doc: Y.Doc | null; readOnly: boolean }>({
   name: MIND_NODE,
   group: 'block',
   atom: true,
@@ -22,7 +22,7 @@ export const MindMap = Node.create<{ doc: Y.Doc | null }>({
   selectable: true,
 
   addOptions() {
-    return { doc: null };
+    return { doc: null, readOnly: false };
   },
   addAttributes() {
     return { blockId: { default: null }, title: { default: '' } };
@@ -50,12 +50,12 @@ export const MindMap = Node.create<{ doc: Y.Doc | null }>({
     };
   },
   addNodeView() {
-    const doc = this.options.doc;
-    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <MindMapView {...props} doc={doc} />);
+    const { doc, readOnly } = this.options;
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <MindMapView {...props} doc={doc} readOnly={readOnly} />);
   },
 });
 
-function MindMapView({ node, selected, doc }: ReactNodeViewProps & { doc: Y.Doc | null }) {
+function MindMapView({ node, selected, doc, readOnly }: ReactNodeViewProps & { doc: Y.Doc | null; readOnly: boolean }) {
   const blockId = node.attrs.blockId as string;
   const map = doc && blockId ? mindMapNodes(doc, blockId) : null;
   const [nodes, setNodes] = useState<MindNode[]>(() => (map ? [...map.values()] : []));
@@ -74,17 +74,17 @@ function MindMapView({ node, selected, doc }: ReactNodeViewProps & { doc: Y.Doc 
     <NodeViewWrapper className={`mind-map ${selected ? 'is-selected' : ''}`} data-drag-handle>
       <div className="html-block-bar" contentEditable={false}>
         <span className="html-block-label">{node.attrs.title || 'Mind map'}</span>
-        <span className="mm-hint">Tab adds a child, Enter adds a sibling</span>
+        {!readOnly && <span className="mm-hint">Tab adds a child, Enter adds a sibling</span>}
       </div>
       <div className="mm-canvas" contentEditable={false}>
-        {mindChildren(nodes, null).map((r) => <Branch key={r.id} n={r} isRoot nodes={nodes} doc={doc} blockId={blockId} />)}
+        {mindChildren(nodes, null).map((r) => <Branch key={r.id} n={r} isRoot nodes={nodes} doc={doc} blockId={blockId} readOnly={readOnly} />)}
       </div>
     </NodeViewWrapper>
   );
 }
 
 // Top-level (not nested in the view) so inputs keep focus across re-renders.
-function Branch({ n, isRoot, nodes, doc, blockId }: { n: MindNode; isRoot: boolean; nodes: MindNode[]; doc: Y.Doc; blockId: string }) {
+function Branch({ n, isRoot, nodes, doc, blockId, readOnly }: { n: MindNode; isRoot: boolean; nodes: MindNode[]; doc: Y.Doc; blockId: string; readOnly: boolean }) {
   const kids = mindChildren(nodes, n.id);
   return (
     <div className="mm-branch">
@@ -99,12 +99,12 @@ function Branch({ n, isRoot, nodes, doc, blockId }: { n: MindNode; isRoot: boole
             if (e.key === 'Enter' && n.parent) { e.preventDefault(); addMindNode(doc, blockId, n.parent, ''); }
           }}
         />
-        <button type="button" title="Add child (Tab)" onClick={() => addMindNode(doc, blockId, n.id, 'New idea')}>+</button>
-        {!isRoot && <button type="button" title="Remove" onClick={() => removeMindNode(doc, blockId, n.id)}>×</button>}
+        {!readOnly && <button type="button" title="Add child (Tab)" onClick={() => addMindNode(doc, blockId, n.id, 'New idea')}>+</button>}
+        {!isRoot && !readOnly && <button type="button" title="Remove" onClick={() => removeMindNode(doc, blockId, n.id)}>×</button>}
       </div>
       {kids.length > 0 && (
         <div className="mm-children">
-          {kids.map((k) => <Branch key={k.id} n={k} isRoot={false} nodes={nodes} doc={doc} blockId={blockId} />)}
+          {kids.map((k) => <Branch key={k.id} n={k} isRoot={false} nodes={nodes} doc={doc} blockId={blockId} readOnly={readOnly} />)}
         </div>
       )}
     </div>

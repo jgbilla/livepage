@@ -2,7 +2,7 @@
 // without speaking the Yjs protocol. Changes go through a Hocuspocus direct
 // connection, so they show up live in every open browser.
 //
-//   GET  /api/pages/:page                          -> { markdown, blocks }
+//   GET  /api/pages/:page/content                  -> { markdown, tabs, blocks }
 //   POST /api/pages/:page/paragraphs   { text }    -> { ok }
 //   POST /api/pages/:page/headings     { text, level }
 //   POST /api/pages/:page/html-blocks  { code, title } -> { id }
@@ -15,7 +15,8 @@
 //   POST /api/pages/:page/tabs         { title }   -> { id }
 // Writes go to the main tab unless ?tab=<id or title> is given.
 //
-// Auth: "Authorization: Bearer <AGENT_TOKEN>".
+// Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
+// gets that person's access to the page). In development the shared AGENT_TOKEN also works.
 // For a live cursor and typing animation, agents use the WebSocket client in packages/agent instead.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Hocuspocus } from '@hocuspocus/server';
@@ -25,10 +26,10 @@ import {
   addTab, listTabs, pendingActions, resolveTab, setHtmlCode, updateAction,
 } from '@livepage/schema';
 
-const MAX_BODY = 512 * 1024;
+export const MAX_BODY = 512 * 1024;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-async function readJson(req: IncomingMessage): Promise<any> {
+export async function readJson(req: IncomingMessage): Promise<any> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -39,29 +40,30 @@ async function readJson(req: IncomingMessage): Promise<any> {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
 }
 
-function send(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  });
-  res.end(JSON.stringify(body));
+export function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string | string[]> = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
+  res.end(body === null ? '' : JSON.stringify(body));
 }
 
-export async function handleAgentApi(req: IncomingMessage, res: ServerResponse, hp: Hocuspocus, token: string): Promise<boolean> {
-  const url = new URL(req.url ?? '/', 'http://x');
-  const m = url.pathname.match(/^\/api\/pages\/([\w.-]{1,128})(?:\/(paragraphs|headings|html-blocks|ui|tables|mind-maps|actions|tabs)(?:\/([\w-]{1,64}))?)?$/);
-  if (!url.pathname.startsWith('/api')) return false;
-  if (req.method === 'OPTIONS') return send(res, 204, null), true;
-  if (url.pathname === '/api/health') return send(res, 200, { ok: true }), true;
-  if (req.headers.authorization !== `Bearer ${token}`) return send(res, 401, { error: 'unauthorized' }), true;
-  if (!m) return send(res, 404, { error: 'not found' }), true;
+export type ContentCall = {
+  req: IncomingMessage;
+  res: ServerResponse;
+  hp: Hocuspocus;
+  url: URL;
+  page: string;
+  collection: string | undefined;
+  id: string | undefined;
+  who: { id: string; name: string; kind: 'human' | 'agent' };
+  writable: boolean;
+};
 
-  const [, page, collection, id] = m;
+/** Content operations on one page. The caller has already checked the principal can read it. */
+export async function handleContent({ req, res, hp, url, page, collection, id, who, writable }: ContentCall): Promise<void> {
+  const isRead = req.method === 'GET' && (!collection || collection === 'actions');
+  if (!isRead && !writable) return send(res, 403, { error: 'read-only access to this page' });
   try {
     const body = req.method === 'GET' ? {} : await readJson(req);
-    const conn = await hp.openDirectConnection(page, { user: { id: 'agent-http', name: 'Agent', kind: 'agent' } });
+    const conn = await hp.openDirectConnection(page, { user: who });
     let result: unknown = { ok: true };
     try {
       await conn.transact((d) => {
@@ -69,8 +71,7 @@ export async function handleAgentApi(req: IncomingMessage, res: ServerResponse, 
         const tab = resolveTab(doc, url.searchParams.get('tab'));
         if (req.method === 'GET' && !collection) {
           result = { markdown: pageAsMarkdown(doc), tabs: listTabs(doc), blocks: listBlocks(doc) };
-        } else if (req.method === 'POST' && collection === 'paragraphs') {
-          appendParagraph(doc, String(body.text ?? ''), tab);
+        } else if (req.method === 'POST' && collection === 'paragraphs') {          appendParagraph(doc, String(body.text ?? ''), tab);
         } else if (req.method === 'POST' && collection === 'headings') {
           appendHeading(doc, String(body.text ?? ''), Number(body.level ?? 2), tab);
         } else if (req.method === 'POST' && collection === 'html-blocks') {
@@ -106,5 +107,4 @@ export async function handleAgentApi(req: IncomingMessage, res: ServerResponse, 
   } catch (e) {
     send(res, 400, { error: String((e as Error).message) });
   }
-  return true;
 }

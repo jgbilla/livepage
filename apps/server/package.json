@@ -9,6 +9,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.6.0",
     "@hocuspocus/extension-database": "^4.9.0",
     "@hocuspocus/server": "^4.9.0",
     "@livepage/schema": "workspace:*",
@@ -16,5 +17,9 @@
     "tsx": "^4.23.15",
     "yjs": "^13.6.33"
   },
-  "devDependencies": { "@types/node": "^22.10.0", "@types/pg": "^8.15.0", "typescript": "^5.9.3" }
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.15.0",
+    "typescript": "^5.9.3"
+  }
 }
