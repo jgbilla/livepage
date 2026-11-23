@@ -1,23 +1,51 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>block</title></head>
+<head><meta charset="utf-8"><title>block</title><style>html,body{margin:0}body{display:flow-root}</style></head>
 <body>
 <script>
-  // Waits for the parent page to send block code, then replaces this document with it.
-  // A small reporter is appended so the block can tell the parent its height.
+  // The HTML block runtime. Two modes, driven by the parent page over postMessage:
+  //
+  //  livepage:preview  { code }  while an agent is still streaming the block. The markup is
+  //                               put into <body> with scripts removed, so the block takes shape
+  //                               as it is written without running half-written JS.
+  //  livepage:render   { code }  the block is complete. This document is replaced with the code,
+  //                               plus a small bridge (window.livepage) and a height reporter.
+  //
+  // Messages back to the parent: livepage:ready, livepage:height, livepage:error, livepage:action.
+  const BRIDGE = `<script>window.livepage = Object.freeze({
+    // Send values from this block's controls to the page's agent (validated by the host).
+    send: function (action, values) { parent.postMessage({ type: 'livepage:action', action: action, values: values || {} }, '*'); }
+  });<\/script>`;
   const REPORTER = `<script>(function(){
     function send(){ var b=document.body; if(!b) return; parent.postMessage({ type: 'livepage:height', height: Math.ceil(Math.max(b.scrollHeight, b.getBoundingClientRect().height)) }, '*'); }
     new ResizeObserver(send).observe(document.body);
     addEventListener('load', send); send();
     addEventListener('error', function(e){ parent.postMessage({ type: 'livepage:error', message: String(e.message) }, '*'); });
   })();<\/script>`;
-  addEventListener('message', function (event) {
-    if (event.source !== parent || !event.data || event.data.type !== 'livepage:render') return;
+  const BASE = '<!doctype html><meta charset="utf-8"><style>html,body{margin:0}body{display:flow-root}</style><body>';
+
+  function reportHeight() {
+    parent.postMessage({ type: 'livepage:height', height: Math.ceil(document.body.scrollHeight) }, '*');
+  }
+  function stripScripts(code) {
+    return code.replace(/<script[\s\S]*?(<\/script>|$)/gi, '');
+  }
+  const preview = document.createElement('div');
+  document.body.appendChild(preview);
+  new ResizeObserver(reportHeight).observe(document.body);
+
+  addEventListener('message', function onMessage(event) {
+    if (event.source !== parent || !event.data) return;
     const code = String(event.data.code || '');
-    document.open();
-    document.write('<!doctype html><meta charset="utf-8"><style>html,body{margin:0}body{display:flow-root}</style>' + code + REPORTER);
-    document.close();
-  }, { once: true });
+    if (event.data.type === 'livepage:preview') {
+      preview.innerHTML = stripScripts(code);
+    } else if (event.data.type === 'livepage:render') {
+      removeEventListener('message', onMessage);
+      document.open();
+      document.write(BASE + BRIDGE + code + REPORTER);
+      document.close();
+    }
+  });
   parent.postMessage({ type: 'livepage:ready' }, '*');
 </script>
 </body>

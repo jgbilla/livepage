@@ -1,8 +1,8 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
-import { HTML_NODE, htmlCodeText, newId } from '@livepage/schema';
+import { HTML_NODE, actionsMap, htmlCodeText, newId, pushAction, validateAction, ACTION_LIMITS, type BlockAction } from '@livepage/schema';
 import { SandboxFrame } from './SandboxFrame';
 import { CodeArea } from './CodeArea';
 
@@ -19,7 +19,7 @@ declare module '@tiptap/core' {
   }
 }
 
-type Options = { doc: Y.Doc | null };
+type Options = { doc: Y.Doc | null; getUserName: () => string };
 
 // The block itself only stores { blockId, title } in the ProseMirror tree.
 // Its code lives in the doc's "htmlCode" map as a Y.Text (see packages/schema).
@@ -31,13 +31,16 @@ export const HtmlBlock = Node.create<Options>({
   selectable: true,
 
   addOptions() {
-    return { doc: null };
+    return { doc: null, getUserName: () => 'Someone' };
   },
 
   addAttributes() {
     return {
       blockId: { default: null },
       title: { default: '' },
+      status: { default: 'ready' },
+      initialHeight: { default: 120 },
+      placeholders: { default: '[]' },
     };
   },
 
@@ -64,16 +67,33 @@ export const HtmlBlock = Node.create<Options>({
   },
 
   addNodeView() {
-    const doc = this.options.doc;
-    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <HtmlBlockView {...props} doc={doc} />);
+    const { doc, getUserName } = this.options;
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => <HtmlBlockView {...props} doc={doc} getUserName={getUserName} />);
   },
 });
 
-function HtmlBlockView({ node, selected, doc }: ReactNodeViewProps & { doc: Y.Doc | null }) {
+function parsePlaceholders(raw: unknown): string[] {
+  try {
+    const v = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(v) ? v.map(String).slice(0, 10) : [];
+  } catch {
+    return [];
+  }
+}
+
+type ViewProps = ReactNodeViewProps & { doc: Y.Doc | null; getUserName: () => string };
+
+function HtmlBlockView({ node, selected, doc, getUserName, updateAttributes }: ViewProps) {
   const blockId = node.attrs.blockId as string;
+  const streaming = node.attrs.status === 'streaming';
+  const initialHeight = Math.max(40, Math.min(2000, Number(node.attrs.initialHeight) || 120));
+  const placeholders = parsePlaceholders(node.attrs.placeholders);
   const text = doc && blockId ? htmlCodeText(doc, blockId) : null;
   const [code, setCode] = useState(() => text?.toString() ?? '');
   const [showCode, setShowCode] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [lastAction, setLastAction] = useState<BlockAction | null>(null);
+  const lastSent = useRef(0);
 
   useEffect(() => {
     if (!text) return;
@@ -83,14 +103,65 @@ function HtmlBlockView({ node, selected, doc }: ReactNodeViewProps & { doc: Y.Do
     return () => text.unobserve(update);
   }, [text]);
 
+  // Cycle the agent's placeholder messages while the block is being written.
+  useEffect(() => {
+    if (!streaming || placeholders.length < 2) return;
+    const t = setInterval(() => setTick((n) => n + 1), 1400);
+    return () => clearInterval(t);
+  }, [streaming, placeholders.length]);
+
+  // Show the latest bridge action for this block and what the agent did with it.
+  useEffect(() => {
+    if (!doc) return;
+    const map = actionsMap(doc);
+    const update = () => {
+      const mine = [...map.values()].filter((a) => a.blockId === blockId).sort((a, b) => b.at - a.at);
+      setLastAction(mine[0] ?? null);
+    };
+    map.observe(update);
+    update();
+    return () => map.unobserve(update);
+  }, [doc, blockId]);
+
+  // Host side of the bridge: everything from the sandbox is untrusted.
+  const onAction = (action: unknown, values: unknown) => {
+    if (!doc) return;
+    const ok = validateAction(action, values);
+    if (!ok) return console.warn('[livepage] rejected block action', action);
+    const now = Date.now();
+    if (now - lastSent.current < 1000 / ACTION_LIMITS.perBlockPerSecond) return;
+    lastSent.current = now;
+    pushAction(doc, { blockId, action: ok.action, values: ok.values, by: getUserName() });
+  };
+
   return (
     <NodeViewWrapper className={`html-block ${selected ? 'is-selected' : ''}`} data-drag-handle>
       <div className="html-block-bar" contentEditable={false}>
-        <span className="html-block-label">{node.attrs.title || 'HTML block'}</span>
-        <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : 'Edit code'}</button>
+        <span className="html-block-label">
+          {node.attrs.title || 'HTML block'}
+          {streaming && <span className="streaming-badge">writing…</span>}
+        </span>
+        <span className="html-block-actions">
+          {streaming && (
+            <button type="button" title="Run the block now, even if the agent has not finished" onClick={() => updateAttributes({ status: 'ready' })}>
+              Run now
+            </button>
+          )}
+          <button type="button" onClick={() => setShowCode((s) => !s)}>{showCode ? 'Hide code' : 'Edit code'}</button>
+        </span>
       </div>
-      <div contentEditable={false}>
-        <SandboxFrame code={code} />
+      <div contentEditable={false} className="html-block-body">
+        <SandboxFrame code={code} streaming={streaming} initialHeight={initialHeight} onAction={onAction} />
+        {streaming && placeholders.length > 0 && (
+          <div className="html-block-placeholder">{placeholders[tick % placeholders.length]}</div>
+        )}
+        {lastAction && (
+          <div className={`bridge-status bridge-${lastAction.status}`}>
+            {lastAction.status === 'done'
+              ? `✦ Agent: ${lastAction.note || 'done'}`
+              : `Sent "${lastAction.action}" to the agent${lastAction.status === 'claimed' ? ', working on it…' : '…'}`}
+          </div>
+        )}
         {showCode && text && <CodeArea text={text} />}
       </div>
     </NodeViewWrapper>

@@ -22,6 +22,9 @@ One scrolling page per document. You write in it like Notion. An AI agent sits i
 | 5 | Sharing | Required: share links and per-page permissions. |
 | 6 | Collaboration | Multi-user, real-time (CRDT). |
 | 7 | Hosting | Anyone can self-host: `docker compose up`. |
+| 8 | What goes on a page | **Anything, mixed freely**: your text, tables, mind maps, drawings and designs, and agent custom UI, all as first-class blocks on the same page, editable by people and agents. |
+| 9 | Tabs | **Optional tabs per page**, shown at the top. A page with one tab looks like a normal page. Each tab is its own scrolling page. |
+| 10 | Agent UI patterns | Borrowed from CopilotKit's OpenIntelligentUI (MIT): the agent picks text vs native component vs custom UI, custom UI streams in a fixed order, and a validated host bridge sends input back to the agent. Patterns only, no code embedded (it is a chat app). |
 
 ---
 
@@ -75,18 +78,54 @@ So yes, it is "just" HTML and JavaScript. The hard parts are the isolation and m
 
 ---
 
+## 3b. Blocks: everything on one page
+
+A page is a stack of blocks, and **every block type is first-class**: same drag handle, same live merging, same agent access, and any mix on the same page or tab. There is no "AI area" and "human area".
+
+| Block | Kind | Who edits | Where its data lives | Status |
+|-------|------|-----------|----------------------|--------|
+| Paragraph, heading, list, quote, code | Native text | People and agents, character by character | Tab's block tree | ✅ |
+| Table | Native component | People (cells are normal text) and agents (`insert_table`) | Tab's block tree | ✅ |
+| Mind map | Native component | People (click a node, Tab for child, Enter for sibling) and agents (`insert_mind_map`, `add_mind_map_node`) | `mindMaps` map, node by node | ✅ |
+| Custom UI / HTML block | Sandboxed code | People ("Edit code") and agents (`insert_custom_ui`, `update_html_block`) | `htmlCode` map, one `Y.Text` per block | ✅ |
+| Drawing / whiteboard | Native component | People draw, agents add shapes and arrows | `drawings` map: shapes keyed by id (an Excalidraw- or tldraw-style scene, both MIT, both Yjs-friendly) | Planned (M3) |
+| Design frame | Native component | Layout of boxes, text and images for mockups and covers; agents can generate or tweak it | `designs` map | Planned (M4) |
+| Image, file, embed | Native | People and agents | `assets` table + block attrs | Planned (M1) |
+| Database view | Native | See §10 | `databases` / `rows` | Planned (M4) |
+
+**Rule of thumb for native vs custom UI.** Native blocks are editable, searchable, exportable and accessible like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers, one-off visualizations. A drawing someone wants to keep editing by hand should be a drawing block, not an HTML block.
+
+**Adding a new block type** takes three pieces: a TipTap node holding `{ blockId, ...attrs }`, a data structure in the page's Y.Doc keyed by `blockId`, and helpers in `packages/schema` so the server projection and agents understand it. `mindMap` is the reference example.
+
+---
+
+## 3c. Tabs
+
+Tabs are optional, like Google Docs tabs. They show as a bar at the top of the page. With one tab, only a small "+ Add tab" link shows and the page looks normal.
+
+- **Model:** one Y.Doc per page. A `tabs` map holds `{ id, title, order }`. Each tab has its own block tree (`XmlFragment`): `default` for the main tab (so pages made before tabs keep working) and `tab:<id>` for the rest. Block data maps (`htmlCode`, `mindMaps`, `actions`) are page-wide and keyed by block id, so a block can later move between tabs without copying its data.
+- **Why one doc, not one doc per tab:** a single sync connection, one permission check, one history, and agents read the whole page in one call. Sub-docs per tab are the fallback if very large pages make loading slow.
+- **UI:** click to switch, double-click to rename, × to delete (not the main tab). The active tab is in the URL (`?tab=<id>`) so links can point at a tab. Dots on each tab show who is on it.
+- **Agents:** `read_page` returns every tab as a `<tab id title>` section. Every writing tool takes an optional `tab` (id or title), and `add_tab` creates one. The HTTP API takes `?tab=`.
+- **Storage:** the `blocks` projection has a `tab` column.
+
+---
+
 ## 4. Document model
 
 Each page is one `Y.Doc`:
 
 | Shared type | Name | Holds |
 |-------------|------|-------|
-| `XmlFragment` | `default` | The block tree: paragraphs, headings, lists, quotes, code, `htmlBlock` nodes |
+| `Map` | `tabs` | `tabId → { id, title, order }`. Empty means one implicit main tab |
+| `XmlFragment` | `default`, `tab:<id>` | One block tree per tab: text, tables, `htmlBlock` and `mindMap` nodes, mixed freely |
 | `Map<Y.Text>` | `htmlCode` | `blockId → Y.Text` with each HTML block's source |
+| `Map<Y.Map>` | `mindMaps` | `blockId → (nodeId → { text, parent, order })` |
+| `Map` | `actions` | Host-bridge actions sent from custom UI controls to agents |
 | `Map<Y.Map>` | `comments` | Comment threads (M2) |
 | `Map` | `meta` | Title, icon, cover (M1) |
 
-An HTML block in the tree stores only `{ blockId, title }`. Its code lives in `htmlCode` as a `Y.Text`, so two people and an agent can edit the same block's code at the same time, character by character, and the merge is automatic. The rendered iframe follows the code with a 400 ms debounce.
+An HTML block in the tree stores only `{ blockId, title, status, initialHeight, placeholders }`. Its code lives in `htmlCode` as a `Y.Text`, so two people and an agent can edit the same block's code at the same time, character by character, and the merge is automatic. The rendered iframe follows the code with a 400 ms debounce.
 
 `packages/schema` is the single definition of this model. The editor, the server's projection and every agent use it, so "a page" means the same thing to all of them.
 
@@ -148,6 +187,27 @@ assets       (id, workspace_id, key, mime, size)         -- S3/MinIO or local di
 
 Known gap: `img-src https:` still allows a beacon-style leak of what the block's code itself contains. Pages are shared with collaborators anyway, so this is accepted for M0. A stricter "offline" CSP can be a per-workspace setting.
 
+### Streaming custom UI (from OpenIntelligentUI)
+
+An agent sends a custom UI as separate parts and they arrive **in a fixed order**:
+
+1. `initialHeight` and `placeholders`: the block appears at once with the right size and a rotating status line ("Sketching the orbits…"), so the page doesn't jump.
+2. `css`
+3. `html`: while the block is `streaming`, the runner shows the markup as it grows, with scripts stripped, in one long-lived iframe.
+4. `js`: last, so scripts run once, on complete markup. The block flips to `ready` and a fresh iframe runs the final code.
+
+Anyone can press **Run now** if an agent dies mid-stream. Code from people (Edit code) still renders the old way, debounced.
+
+### Host bridge (from OpenIntelligentUI)
+
+Controls inside a block that only change the view (sliders, toggles, tabs inside the widget) **run locally** in the sandbox, with no agent round trip. When a person's input should reach the agent, the block calls:
+
+```js
+livepage.send('add_planet', { current: 3 })
+```
+
+The host page **validates** it before anything happens: the message must come from that exact iframe, the action name must match `^[\w.-]{1,64}$`, values must be a JSON object of 8 KB or less, and each block may send at most one action per second. Valid actions are written to the page's `actions` map with the block id and the person's name, which also makes them visible to everyone. Agents pick them up (`get_block_actions` in MCP, `onAction` in the live client, `GET /actions` over HTTP), and answer with `resolve_block_action`. The note shows under the block ("✦ Agent: added Mars"). This replaces the "data bridge" idea for the write direction. The read direction (a block asking the host for page data, such as database rows) is still planned.
+
 ### Roadmap for blocks
 
 - CodeMirror 6 with `y-codemirror.next` instead of the textarea (syntax highlighting, remote cursors in code).
@@ -168,7 +228,9 @@ An agent is a **participant**, not a feature. Three ways to connect, from riches
 | **MCP server** | Yes (uses the live client) | Claude Desktop/Code, ChatGPT and any MCP client | `packages/agent/src/mcp.ts` |
 | **HTTP API** | No caret, edits still appear live | Scripts, webhooks, any language | `apps/server/src/agent-api.ts` |
 
-MCP tools today: `read_page`, `write_paragraph`, `add_heading`, `insert_html_block`, `update_html_block`.
+MCP tools today: `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+
+**Choosing the output (from OpenIntelligentUI).** For each request the agent picks the lightest form that works: plain text, then a native component (table, mind map, later drawing or database), and custom UI only for motion or interaction. The MCP server's instructions spell this out for any model that connects.
 
 Planned tools: `insert_after(block_id, ...)`, `replace_text(range)`, `comment(anchor, body)`, `suggest_edit(range, text)` (shown as a suggestion you accept or reject), `list_pages`, `search`, `query_database`.
 
@@ -229,11 +291,11 @@ Scaling later: Hocuspocus Redis extension for several server instances.
 
 | | Milestone | Done when |
 |---|-----------|-----------|
-| **M0** | **Live demo** (this scaffold) | Two browsers and an agent edit one page live. The agent types with its own caret and inserts an animated HTML block. Pages persist in hosted Postgres. ✅ |
+| **M0** | **Live demo** (this scaffold) | Two browsers and an agent edit one page live. The agent types with its own caret, adds a table and a mind map, streams in a custom UI block, answers a button press from it, and writes in a second tab. Pages persist in hosted Postgres. ✅ |
 | M1 | Accounts and sharing | Sign up, workspaces, page tree sidebar, roles, share links, agent tokens. |
 | M2 | Comments | Comment on a selection, threads, agents can read and reply. |
-| M3 | Writing quality | Slash menu, drag handles, CodeMirror block editor, suggestions, version history. |
-| M4 | Databases | Collections with properties and views, data bridge for HTML blocks. |
+| M3 | Writing quality | Slash menu, drag handles, drawing block, CodeMirror block editor, suggestions, version history. |
+| M4 | Databases and design | Collections with properties and views, read bridge for custom UI, design frame block. |
 | M5 | Obsidian + integrations | Wikilinks, backlinks, markdown round-trip, Google Drive. |
 
 ---

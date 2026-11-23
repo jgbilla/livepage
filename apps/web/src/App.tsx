@@ -1,22 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { COLLAB_URL } from './config';
 import { getIdentity, saveIdentity, type Identity } from './identity';
 import { PageEditor } from './editor/PageEditor';
+import { TabBar } from './TabBar';
+import { MAIN_TAB } from '@livepage/schema';
 
 function pageIdFromUrl(): string {
   const p = new URLSearchParams(location.search).get('page');
   return p && /^[\w.-]{1,128}$/.test(p) ? p : 'welcome';
 }
 
-type Peer = { name: string; color: string; kind?: string };
+type Peer = { name: string; color: string; kind?: string; tab?: string };
 
 export function App() {
   const pageId = pageIdFromUrl();
   const [me, setMe] = useState<Identity>(getIdentity);
   const [status, setStatus] = useState('connecting');
   const [peers, setPeers] = useState<Peer[]>([]);
+  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
+
+  const selectTab = useCallback((id: string) => {
+    setTab(id);
+    const url = new URL(location.href);
+    if (id === MAIN_TAB) url.searchParams.delete('tab');
+    else url.searchParams.set('tab', id);
+    history.replaceState(null, '', url);
+  }, []);
 
   const { doc, provider } = useMemo(() => {
     const doc = new Y.Doc();
@@ -30,7 +41,7 @@ export function App() {
     const awareness = provider.awareness!;
     const onAwareness = () => {
       const list: Peer[] = [];
-      awareness.getStates().forEach((s) => s.user && list.push(s.user));
+      awareness.getStates().forEach((s) => s.user && list.push({ ...s.user, tab: s.tab ?? MAIN_TAB }));
       setPeers(list);
     };
     provider.on('status', onStatus);
@@ -42,6 +53,9 @@ export function App() {
   }, [provider]);
 
   useEffect(() => () => { provider.destroy(); doc.destroy(); }, [provider, doc]);
+
+  // Tell others which tab we are on (shown as dots in the tab bar).
+  useEffect(() => { provider.setAwarenessField('tab', tab); }, [provider, tab]);
 
   return (
     <div className="shell">
@@ -64,7 +78,8 @@ export function App() {
         />
       </header>
       <main className="page">
-        <PageEditor doc={doc} provider={provider} me={me} />
+        <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} />
+        <PageEditor key={tab} doc={doc} provider={provider} me={me} tab={tab} />
       </main>
     </div>
   );

@@ -20,6 +20,7 @@ create table if not exists blocks (
   attrs     jsonb not null default '{}',
   primary key (doc_name, id)
 );
+alter table blocks add column if not exists tab text not null default 'main';
 create index if not exists blocks_type_idx on blocks (type);
 `;
 
@@ -77,8 +78,8 @@ export async function createStore(url: string | undefined): Promise<Store> {
         await client.query('delete from blocks where doc_name = $1', [name]);
         for (const b of blocks) {
           await client.query(
-            'insert into blocks (doc_name, id, position, type, text, attrs) values ($1,$2,$3,$4,$5,$6) on conflict do nothing',
-            [name, b.id, b.position, b.type, b.text, JSON.stringify(b.attrs)],
+            'insert into blocks (doc_name, id, tab, position, type, text, attrs) values ($1,$2,$3,$4,$5,$6,$7) on conflict do nothing',
+            [name, b.id, b.tab, b.position, b.type, b.text, JSON.stringify(b.attrs)],
           );
         }
         await client.query('commit');
