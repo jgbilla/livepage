@@ -10,9 +10,11 @@ import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { fragmentName } from '@livepage/schema';
 import { HtmlBlock } from './HtmlBlock';
 import { MindMap } from './MindMap';
+import { LinkMenu, PageLink, PageLinkInput } from './PageLink';
+import { titleOf, workspaceSnapshot } from '../workspace';
 type User = { id: string; name: string; color: string };
 
-export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean }) {
+export function PageEditor({ doc, provider, user, tab, readOnly, pageId }: { doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean; pageId: string }) {
   const meRef = useRef(user);
   meRef.current = user;
   const editor = useEditor(
@@ -29,9 +31,11 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
         TableCell,
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
+        PageLink.configure({ doc, currentPage: pageId }),
+        PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
       ],
     },
-    [doc, provider, tab, readOnly],
+    [doc, provider, tab, readOnly, pageId],
   );
 
   useEffect(() => {
@@ -51,6 +55,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly }: { doc: Y.Doc;
         <button type="button" onClick={() => editor.chain().focus().insertHtmlBlock().run()}>✦ HTML block</button>
       </div>}
       <EditorContent editor={editor} className="editor" />
+      {!readOnly && <LinkMenu editor={editor} doc={doc} currentPage={pageId} />}
     </>
   );
 }

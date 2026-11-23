@@ -98,6 +98,16 @@ create table if not exists views (
   created_at timestamptz not null default now()
 );
 create index if not exists views_owner_idx on views (owner_id);
+-- Links between pages, rebuilt from each page's document when it is saved (for backlinks).
+create table if not exists page_links (
+  from_page text not null references pages(id) on delete cascade,
+  from_tab  text not null default 'main',
+  from_tab_title text not null default '',
+  to_page   text not null,
+  to_tab    text
+);
+create index if not exists page_links_to_idx on page_links (to_page);
+create index if not exists page_links_from_idx on page_links (from_page);
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

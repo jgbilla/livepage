@@ -108,6 +108,8 @@ Write like in Notion, keep notes like in Obsidian, and drop in live HTML/JS bloc
 - **Real-time collaboration:** live carets and presence for every person and agent.
 - **Any AI:** agents connect over MCP or a plain HTTP API. No model is built in.
 - **Sharing:** invite links with editor, commenter or viewer access, enforced on the server.
+- **Organized like Obsidian:** your own folders in a sidebar, a Today button for \`YYYY/MM/DD/daily\`, tags, and saved tag views.
+- **Links:** type \`[[\` to link a page or one of its tabs. Links survive renames and moves, and every page lists what links to it.
 - **Yours to run:** MIT licensed, self-hostable with Docker, or one-click on Render with a Neon Postgres database.
 
 ## How it fits together
@@ -355,9 +357,14 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 `);
 table(ag, [
   ['Tool', 'What it does'],
-  ['list_pages', 'Pages the token can open, with your role'],
+  ['list_pages', 'Pages the token can open, with folder path, tags and your role; filter by path or tags'],
+  ['list_folders / create_folder', 'Your folder tree; create a path like Projects/Book'],
+  ['create_page / move_page / rename_page', 'Create a page in a folder path with tags, move it, rename it'],
+  ['open_daily_page', 'Get or create the daily page at YYYY/MM/DD/daily'],
+  ['set_page_tags / list_tags / create_view', 'Tag pages, list tags, save a sidebar view of pages by tag'],
+  ['get_backlinks', 'Pages and tabs that link to a page'],
   ['read_page', 'The whole page as markdown, every tab, with block and node ids'],
-  ['write_paragraph / add_heading', 'Append text; paragraphs are typed out live'],
+  ['write_paragraph / add_heading', 'Append text; paragraphs are typed out live. Link with [[p_id]] or [[p_id#tab_id]]'],
   ['insert_table', 'A native, editable table'],
   ['insert_mind_map / add_mind_map_node', 'A native mind map, then grow it node by node'],
   ['insert_custom_ui', 'A sandboxed block streamed as height and placeholders, CSS, HTML, then JS'],
