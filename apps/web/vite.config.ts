@@ -14,6 +14,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': { target: server, changeOrigin: false },
+      '/mcp': { target: server, changeOrigin: false },
       '/collab': { target: server.replace(/^http/, 'ws'), ws: true, changeOrigin: false },
     },
   },
