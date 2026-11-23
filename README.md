@@ -86,6 +86,7 @@ Every page has a **✦ Ask AI** button. Pick a provider on your home page (or ri
 - **Any model:** Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, or any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Groq, Together…). **Test & list models** checks the key and lists what you can use.
 - **Your key stays on the server:** encrypted with AES-256-GCM using `AI_KEY_SECRET`, only decrypted to make your own requests, never sent to the browser or to HTML blocks.
 - **Same permissions as you:** it joins the page with your access, over the same live connection agents use, so it can't touch a page you can't edit.
+- **From comments:** type `@AI` in a comment and the assistant answers in the thread, as you (your key, your access). It works on the commented text, and edits the page if the comment asks for changes.
 - **Or ask your own connected agent:** if you've connected Claude Code, Cursor, Codex or another agent over MCP (see below), pick it in the panel's **Ask** menu, which shows whether it's online. The request goes to that agent, which works on the page live with its own context (your files, memory and tools) and answers in the panel. In the agent, say *"Listen for Livepage requests and handle them"*: it loops on the `wait_for_requests` MCP tool and answers with `reply_to_request` (HTTP: `GET /api/agent-requests?wait=20`, `POST /api/agent-requests/:id/reply`).
 
   ![Asking a connected agent from the panel](docs/ask-agent.png)
