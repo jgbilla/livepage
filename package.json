@@ -6,8 +6,8 @@
   "description": "Open-source, self-hostable writing canvas where people and AI agents edit one live page together, with sandboxed HTML/JS blocks.",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "pnpm -r --parallel --filter ./apps/* dev",
-    "dev:memory": "LIVEPAGE_MEMORY_STORE=1 pnpm -r --parallel --filter ./apps/* dev",
+    "dev": "pnpm -r --parallel --filter './apps/*' dev",
+    "dev:memory": "LIVEPAGE_MEMORY_STORE=1 pnpm -r --parallel --filter './apps/*' dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "agent:demo": "pnpm --filter @livepage/agent demo",
