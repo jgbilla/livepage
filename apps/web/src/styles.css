@@ -1003,3 +1003,35 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   border: 0; background: transparent; color: var(--lp-text); font: inherit; font-size: var(--lp-text-base); text-align: left; cursor: pointer; }
 .wt-sheet-list .wt-close { visibility: visible; width: 44px; height: 44px; }
 .wt-sheet-new { display: inline-flex; align-items: center; justify-content: center; gap: var(--lp-space-1-5); margin-top: var(--lp-space-3); min-height: 44px; }
+
+/* ---------- Installed app (home screen, desktop install) ----------
+   viewport-fit=cover (index.html) lets the page reach under the iPhone's rounded corners, notch
+   and home bar, so content keeps clear of them with the safe-area insets. In a browser tab, and
+   on screens without a notch, the insets are 0 and nothing changes. */
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+.sb-foot { height: calc(48px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+.assistant-input { padding-bottom: max(var(--lp-space-4), env(safe-area-inset-bottom)); }
+.comments-list { padding-bottom: max(var(--lp-space-3), env(safe-area-inset-bottom)); }
+.insert-fab { margin-bottom: env(safe-area-inset-bottom); }
+.comments, .assistant { right: env(safe-area-inset-right); }
+/* No rubber-band bounce of the whole app and no long-press callout on app chrome in standalone mode. */
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: none; }
+  .sidebar, .topbar, .wt-strip, .wt-mobilebar { -webkit-touch-callout: none; }
+}
+
+/* "New version ready" and "Install Livepage" cards, floating at the bottom of the screen. */
+.pwa-card { position: fixed; z-index: var(--lp-z-toast); left: 0; right: 0; margin: 0 auto;
+  bottom: calc(var(--lp-space-4) + env(safe-area-inset-bottom)); width: min(440px, calc(100vw - 2 * var(--lp-space-4)));
+  display: flex; align-items: center; gap: var(--lp-space-3); padding: var(--lp-space-3) var(--lp-space-2) var(--lp-space-3) var(--lp-space-4);
+  background: var(--lp-surface-overlay); color: var(--lp-text); border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-xl);
+  box-shadow: var(--lp-shadow-3); font-size: var(--lp-text-md); line-height: var(--lp-leading-ui); animation: lp-rise var(--lp-duration-slow) var(--lp-ease-out); }
+.pwa-card-icon { flex: none; color: var(--lp-accent); font-size: 18px; }
+.pwa-card-app { flex: none; border-radius: 9px; }
+.pwa-card-text { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.pwa-card-text span { color: var(--lp-text-secondary); font-size: var(--lp-text-sm); }
+.pwa-card-text .icon { vertical-align: -2px; color: var(--lp-accent); }
+.pwa-card-text b { font-weight: var(--lp-weight-semibold); color: var(--lp-text); }
+.pwa-card .primary { flex: none; }
+.pwa-card-close { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0 !important; color: var(--lp-text-tertiary); }
+@media print { .pwa-card { display: none !important; } }

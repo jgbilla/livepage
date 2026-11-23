@@ -1,7 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { PwaPrompts } from './PwaPrompts';
 import { preloadForLocation } from './preload';
+import { startPwa } from './pwa';
 import './styles.css';
 
 preloadForLocation();
-createRoot(document.getElementById('root')!).render(<App />);
+startPwa();
+createRoot(document.getElementById('root')!).render(<><App /><PwaPrompts /></>);
