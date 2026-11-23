@@ -14,6 +14,7 @@ import type { Db } from './db.ts';
 import { bearer, resolvePrincipal } from './auth.ts';
 import { canEdit, isPageId, roleFor } from './pages.ts';
 import { send } from './agent-api.ts';
+import { sameOrigin } from './origin.ts';
 import { revertUpdate, type Author, type History } from './history.ts';
 
 const ROUTE = /^\/api\/pages\/(p_[\w-]{8,40})\/versions(?:\/(v_[\w-]+))?(?:\/(restore))?\/?(?:\?.*)?$/;
@@ -24,10 +25,7 @@ export async function handleVersions(req: IncomingMessage, res: ServerResponse, 
   const [, pageId, versionId, action] = url.pathname.match(ROUTE) ?? (req.url ?? '').match(ROUTE)!;
   const method = req.method ?? 'GET';
   try {
-    if (method !== 'GET' && req.headers.origin) {
-      try { if (new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'cross-site request blocked' }); }
-      catch { return send(res, 403, { error: 'cross-site request blocked' }); }
-    }
+    if (method !== 'GET' && !sameOrigin(req.headers.origin, req.headers.host)) return send(res, 403, { error: 'cross-site request blocked' });
     const who = await resolvePrincipal(db, { cookie: req.headers.cookie, token: bearer(req) });
     if (!who) return send(res, 401, { error: 'Sign in first.' });
     if (!isPageId(pageId)) return send(res, 404, { error: 'not found' });

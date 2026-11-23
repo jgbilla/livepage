@@ -1,0 +1,145 @@
+# Checks every pull request and every push to main.
+#
+#   checks      install, typecheck, design tokens, unit tests, build             (~1 min)
+#   browser     the production build against a real Postgres, in three parallel parts:
+#                 e2e             Playwright smoke tests (pnpm test:e2e)
+#                 layout-phones   pnpm check:responsive at phone widths
+#                 layout-wide     pnpm check:responsive at tablet and desktop widths
+#
+# When a browser part fails, its screenshots, Playwright report and server log are attached
+# to the run (Summary > Artifacts).
+#
+# The keep-alive workflow (keep-alive.yml) is separate and unaffected.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run still going for the previous push.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Design tokens in sync
+        run: pnpm check:tokens
+      - name: Unit tests
+        run: pnpm test
+      - run: pnpm build
+
+  browser:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: End-to-end tests
+            suite: e2e
+          - name: Layout check (phones)
+            suite: layout
+            widths: 320,375,390,430
+          - name: Layout check (tablet, desktop)
+            suite: layout
+            widths: 844,768,1024,1180,1440
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: livepage
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      LIVEPAGE_BASE: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache the Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium's system libraries
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Build the web app
+        run: pnpm --filter @livepage/web build
+
+      # The same setup as Render: one server for app, API and live sync, plus the sandbox origin.
+      - name: Start Livepage
+        env:
+          NODE_ENV: production
+          PORT: 5173
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/livepage
+          PUBLIC_URL: http://localhost:5173
+          SANDBOX_URL: http://localhost:5174
+          SECURE_COOKIES: '0' # plain http on localhost
+          TRUST_PROXY: '0'
+          AI_KEY_SECRET: ci-only-not-a-secret
+        run: |
+          mkdir -p logs
+          nohup pnpm --filter @livepage/sandbox start > logs/sandbox.log 2>&1 &
+          nohup pnpm --filter @livepage/server start > logs/server.log 2>&1 &
+          for i in $(seq 60); do
+            curl -sf http://localhost:5173/api/health > /dev/null && curl -sf http://localhost:5174/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Livepage did not start:"; cat logs/*.log; exit 1
+
+      - name: End-to-end tests
+        if: matrix.suite == 'e2e'
+        run: pnpm test:e2e
+      - name: Layout check
+        if: matrix.suite == 'layout'
+        env:
+          ONLY: ${{ matrix.widths }}
+          SHOTS_DIR: responsive-shots
+        run: pnpm check:responsive
+
+      - name: Attach screenshots, report and logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-${{ strategy.job-index }}-failure
+          path: |
+            responsive-shots/
+            e2e-report/
+            e2e-results/
+            !e2e-results/.auth/
+            logs/
+          retention-days: 14
+          if-no-files-found: ignore

@@ -384,8 +384,16 @@ function inlineNodes(tokens: Token[] | undefined, b: Builder): (Y.XmlText | Y.Xm
 }
 
 const decode = (s: string) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" } as Record<string, string>)[e]);
-/** Only web and mail links. A javascript: href never reaches the page. */
-export const safeHref = (href: string) => (/^(https?:|mailto:|#|\/)/i.test(href.trim()) ? href.trim() : null);
+/**
+ * Only web and mail links, in-page anchors and paths on this site. A javascript: href never
+ * reaches the page, and neither does "//other.site" or "/\\other.site", which browsers treat
+ * as links to another site.
+ */
+export const safeHref = (href: string) => {
+  const h = href.trim();
+  if (/^[/\\][/\\]/.test(h)) return null;
+  return /^(https?:|mailto:|#|\/)/i.test(h) ? h : null;
+};
 
 function elementWith(name: string, children: (Y.XmlText | Y.XmlElement)[], attrs: Record<string, unknown> = {}): Y.XmlElement {
   const el = new Y.XmlElement(name);

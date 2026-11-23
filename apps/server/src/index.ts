@@ -12,6 +12,7 @@ import { staticHandler } from './static.ts';
 import { createHistory, VERSIONS_SQL, type Author } from './history.ts';
 import { handleVersions, isVersionsPath } from './versions-api.ts';
 import { config } from './config.ts';
+import { sameOriginHeaders } from './origin.ts';
 
 const db = await connect(process.env.DATABASE_URL);
 for (const stmt of VERSIONS_SQL.split(';').map((x) => x.trim()).filter(Boolean)) await db.query(stmt);
@@ -20,7 +21,7 @@ const serveStatic = config.webDist
   ? staticHandler(config.webDist, config.sandboxUrl, config.neonAuthUrl ? new URL(config.neonAuthUrl).origin : null)
   : null;
 
-export type Context = { user: { id: string; name: string; kind: 'human' | 'agent' }; role: Role };
+export type Context = { user: { id: string; name: string; kind: 'human' | 'agent'; tokenId?: string }; role: Role };
 
 const server = new Server<Context>({
   port: config.port,
@@ -84,11 +85,15 @@ const server = new Server<Context>({
   // connect read-only, so the server drops any edits they send.
   async onAuthenticate({ token, requestHeaders, documentName, connectionConfig }) {
     if (!isPageId(documentName)) throw new Error('not a page');
+    // Browsers send Origin on WebSocket upgrades and attach cookies even across origins, so a
+    // page on another origin (for example a sibling subdomain of a self-hosted install) could
+    // otherwise open your pages with your session. Agents (Node clients) send no Origin.
+    if (!sameOriginHeaders(requestHeaders)) throw new Error('cross-site connection blocked');
     const who = await resolvePrincipal(db, { cookie: requestHeaders.get('cookie'), token });
     const role = await roleFor(db, who, documentName);
     if (!who || !role) throw new Error('forbidden');
     if (!canEdit(role)) connectionConfig.readOnly = true;
-    return { user: { id: who.id, name: who.name, kind: who.kind }, role };
+    return { user: { id: who.id, name: who.name, kind: who.kind, tokenId: who.tokenId }, role };
   },
 
   // Version history: credit each change to the person or agent who made it, and cut versions.
@@ -129,5 +134,8 @@ const server = new Server<Context>({
   },
 });
 
+if (!config.production) {
+  console.warn('[server] Development mode (NODE_ENV is not "production"): cookies are not Secure and the shared dev agent token works on localhost. Set NODE_ENV=production on any server other people can reach.');
+}
 await server.listen();
 console.log(`[server] http://localhost:${config.port}  (sandbox: ${config.sandboxUrl}${config.webDist ? `, serving ${config.webDist}` : ''})`);
