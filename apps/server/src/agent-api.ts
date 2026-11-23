@@ -15,6 +15,15 @@
 //   POST /api/pages/:page/tabs         { title }   -> { id }
 // Writes go to the main tab unless ?tab=<id or title> is given.
 //
+// Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
+//   GET    /api/pages?path=a/b&tag=x&tag=y&match=any|all -> { pages (with folder_id, path, tags), folders, tags, views }
+//   POST   /api/pages          { title, path? | folder_id?, tags? } -> { page }
+//   PATCH  /api/pages/:page    { title?, path? | folder_id?, tags? }   (move only changes your own tree)
+//   PUT    /api/pages/:page/tags { tags }    POST { tag }    DELETE /tags/:tag
+//   POST   /api/daily          { date: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily")
+//   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
+//   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
+//
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
 // For a live cursor and typing animation, agents use the WebSocket client in packages/agent instead.

@@ -1,30 +1,29 @@
 import { useEffect, useState } from 'react';
-import { api, type Me, type PageSummary } from '../api';
+import { api, type Me } from '../api';
 import { collabUrl } from '../config';
-import { Link, navigate } from '../router';
+import { Link } from '../router';
+import { SidebarToggle } from '../Sidebar';
+import { newPage, openToday, titleOf, useWorkspace } from '../workspace';
 
-export function HomeScreen({ me, onLogout }: { me: Me; onLogout: () => void }) {
-  const [pages, setPages] = useState<PageSummary[] | null>(null);
-
-  useEffect(() => { api<{ pages: PageSummary[] }>('/pages').then((r) => setPages(r.pages)); }, []);
-
-  const newPage = async () => {
-    const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: '' } });
-    navigate(`/p/${page.id}`);
-  };
+export function HomeScreen({ me }: { me: Me }) {
+  const ws = useWorkspace();
+  const pages = ws ? [...ws.pages].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)).slice(0, 30) : null;
+  useEffect(() => { document.title = 'Livepage'; }, []);
 
   return (
     <div className="shell">
       <header className="topbar">
-        <span className="brand">Livepage</span>
+        <SidebarToggle />
         <span className="spacer" />
         <span className="muted">{me.name}</span>
-        <button type="button" className="ghost" onClick={onLogout}>Log out</button>
       </header>
       <main className="home">
         <div className="home-head">
-          <h1>Your pages</h1>
-          <button type="button" className="primary" onClick={newPage}>+ New page</button>
+          <h1>Recent pages</h1>
+          <span className="row">
+            <button type="button" onClick={() => void openToday()}>☀ Today</button>
+            <button type="button" className="primary" onClick={() => void newPage(null)}>+ New page</button>
+          </span>
         </div>
         {pages === null ? (
           <p className="muted">Loading…</p>
@@ -35,8 +34,9 @@ export function HomeScreen({ me, onLogout }: { me: Me; onLogout: () => void }) {
             {pages.map((p) => (
               <li key={p.id}>
                 <Link to={`/p/${p.id}`} className="page-row">
-                  <span className="page-title">{p.title || 'Untitled'}</span>
+                  <span className="page-title">{titleOf(p) || 'Untitled'}</span>
                   <span className="muted small">
+                    {p.path && <>{p.path} · </>}
                     {p.role === 'owner' ? 'Yours' : `${p.owner_name} · ${p.role}`} · {new Date(p.updated_at).toLocaleDateString()}
                   </span>
                 </Link>
