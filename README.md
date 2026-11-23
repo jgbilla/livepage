@@ -36,6 +36,10 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Postgres persistence (hosted by default) plus a queryable `blocks` table
 - Docker Compose for self-hosting
 
+## Install it as an app
+
+Livepage installs from the browser on iPhone, iPad, Android and desktop (Share > Add to Home Screen in Safari, or the browser's Install button), opens full screen, starts instantly, and keeps working offline on pages you have opened. See [docs/INSTALL-APP.md](docs/INSTALL-APP.md), which also covers what a native App Store build would take.
+
 ## Run it locally
 
 Needs Node 22+ and pnpm 10 (`corepack enable`).

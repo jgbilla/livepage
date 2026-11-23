@@ -13,6 +13,7 @@ import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { forgetLocalPage, localPageName, noteLocalPage } from '../offline';
 import { PageSkeleton } from '../Skeleton';
+import { useOnline } from '../pwa';
 
 // Opened on demand, so they are not part of what every page view downloads.
 const ShareDialog = lazy(() => import('./ShareDialog').then((m) => ({ default: m.ShareDialog })));
@@ -71,6 +72,8 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
   const readOnly = role === 'viewer' || role === 'commenter';
   const user = useMemo(() => ({ id: me.id, name: me.name, color: colorFor(me.id) }), [me]);
   const [status, setStatus] = useState('connecting');
+  const online = useOnline();
+  const shown = online || status === 'connected' ? status : 'offline';
   const [peers, setPeers] = useState<Peer[]>([]);
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
@@ -130,6 +133,8 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
     const meta = doc.getMap(META);
     const onMeta = () => { const t = String(meta.get('title') ?? ''); setTitle(t); setLiveTitle(pageId, t); };
     provider.on('status', onStatus);
+    // The connection starts before this screen mounts and may already be up (fast networks, the installed app).
+    setStatus(provider.configuration.websocketProvider.status);
     const offSynced = () => provider.off('synced', onSynced);
     awareness.on('change', onAwareness);
     meta.observe(onMeta);
@@ -151,9 +156,9 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
       <header className="topbar page-topbar">
         <SidebarToggle />
         {folderPath && <span className="crumbs muted small">{folderPath.split('/').join(' / ')}</span>}
-        <span className={`status status-${status}`} role="status" title={status === 'connected' ? 'Connected: changes sync live' : status}>
+        <span className={`status status-${shown}`} role="status" title={shown === 'connected' ? 'Connected: changes sync live' : shown === 'offline' ? 'Offline: your edits are kept on this device and sync when you are back online' : shown}>
           <span className="status-dot" aria-hidden="true" />
-          <span className={status === 'connected' ? 'sr-only' : 'status-label'}>{status === 'connected' ? 'Connected' : status}</span>
+          <span className={shown === 'connected' ? 'sr-only' : 'status-label'}>{shown === 'connected' ? 'Connected' : shown}</span>
         </span>
         {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
         {isTemplate && <span className="badge badge-template narrow-hide" title="New pages can start from this template">Template</span>}

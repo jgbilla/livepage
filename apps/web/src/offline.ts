@@ -36,5 +36,7 @@ export async function clearLocalPages() {
   const names = readIndex();
   writeIndex([]);
   try { localStorage.removeItem('lp.workspace'); } catch { /* storage blocked */ }
-  await Promise.all(names.map(drop));
+  // The installed app's offline copies of /api/me, /api/pages and page details (apps/web/pwa/sw.js).
+  const apiCache = typeof caches === 'undefined' ? Promise.resolve() : caches.delete('lp-api').then(() => {}, () => {});
+  await Promise.all([...names.map(drop), apiCache]);
 }
