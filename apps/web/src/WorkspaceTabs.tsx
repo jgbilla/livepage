@@ -50,6 +50,9 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
   const narrow = useNarrow();
   const ws = useWorkspace();
   const split = !narrow && st.groups.length > 1;
+  // On wider screens the app shell is fixed: the window never scrolls, each side's body scrolls itself.
+  // Phones keep the window scrolling so the browser's address bar can collapse.
+  const inner = !narrow;
   const shown = split ? st.groups.map((_, i) => i) : [st.focus];
   const visible = shown.map((gi) => st.groups[gi].active);
   const allTabs = useMemo(() => st.groups.flatMap((g) => g.tabs), [st]);
@@ -85,7 +88,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
   const bodies = useRef<(HTMLDivElement | null)[]>([]);
   const scroller = (gi: number): { get: () => number; set: (y: number) => void } => {
     const el = bodies.current[gi];
-    return split && el ? { get: () => el.scrollTop, set: (y) => { el.scrollTop = y; } } : { get: () => scrollY, set: (y) => scrollTo(0, y) };
+    return inner && el ? { get: () => el.scrollTop, set: (y) => { el.scrollTop = y; } } : { get: () => scrollY, set: (y) => scrollTo(0, y) };
   };
   const shownRef = useRef<string[]>([]);
   useLayoutEffect(() => {
@@ -96,7 +99,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
     shownRef.current = visible;
   });
   const current = useRef('');
-  current.current = split ? '' : visible[0];
+  current.current = inner ? '' : visible[0];
   useEffect(() => {
     const on = () => { if (current.current) scrolls.current.set(current.current, scrollY); };
     addEventListener('scroll', on, { passive: true });
@@ -145,7 +148,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
   };
 
   return (
-    <div ref={panesRef} className={`wt ${split ? 'wt-split' : 'wt-single'} ${narrow ? 'wt-narrow' : ''} ${narrow && allTabs.length > 1 ? 'wt-has-bar' : ''}`}
+    <div ref={panesRef} className={`wt ${split ? 'wt-split' : 'wt-single'} ${inner ? 'wt-inner' : 'wt-narrow'} ${narrow && allTabs.length > 1 ? 'wt-has-bar' : ''}`}
       style={split ? ({ '--wt-ratio': st.split } as React.CSSProperties) : undefined}>
       {narrow && allTabs.length > 1 && (
         <button type="button" className="wt-mobilebar" onClick={() => setSwitcher(true)} aria-label={`${allTabs.length} open tabs. Show tabs`}>
@@ -173,7 +176,7 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
               </Strip>
             )}
             <div className="wt-body" ref={(el) => { bodies.current[gi] = el; }}
-              onScroll={split ? (e) => scrolls.current.set(g.active, e.currentTarget.scrollTop) : undefined}>
+              onScroll={inner ? (e) => scrolls.current.set(g.active, e.currentTarget.scrollTop) : undefined}>
               {g.tabs.filter((t) => lastSeen.current.has(t.id) || t.id === g.active && isShown).map((t) => (
                 <TabView key={t.id} tab={t} visible={isShown && t.id === g.active} focused={gi === st.focus} screenFor={screenFor} />
               ))}
