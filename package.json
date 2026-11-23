@@ -11,7 +11,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "agent:demo": "pnpm --filter @livepage/agent demo",
-    "agent:mcp": "pnpm --filter @livepage/agent mcp"
+    "agent:mcp": "pnpm --filter @livepage/agent mcp",
+    "agent:docs": "pnpm --filter @livepage/agent docs"
   },
   "dependencies": {
     "@neon/config": "^1.14.6",
