@@ -51,7 +51,7 @@ function list(kind: 'bulletList' | 'orderedList', items: string[]) {
 }
 
 function write(tab: string, src: string) {
-  src = src.replaceAll('<your app>', HOST);
+  src = src.replaceAll('https://<your app>', base).replaceAll('wss://<your app>', wsUrl.replace(/\/collab\/?$/, '')).replaceAll('<your app>', HOST);
   const out: Y.XmlElement[] = [];
   const lines = src.replace(/^\n/, '').split('\n');
   for (let i = 0; i < lines.length; i++) {
