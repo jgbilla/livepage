@@ -24,7 +24,7 @@ Every push to `main` redeploys automatically.
 - **Google sign-in (Neon Auth):** add your app's address as a trusted domain, or Neon Auth refuses to redirect back: `neon neon-auth domain add https://livepage-xxxx.onrender.com` (or Neon Console > Auth > Domains). Neon's shared Google credentials are for testing; for real users add your own Google OAuth app in Neon Console > Auth.
 
 - **Your own domain:** in the `livepage` service, **Settings > Custom Domains**, add e.g. `write.yourdomain.com` and create the DNS record Render shows. Give the sandbox a domain that is **not** under the same main domain (or keep its `onrender.com` address), so HTML blocks can never reach the app's cookies. If you change domains, set `SANDBOX_URL` on the app and `SANDBOX_FRAME_ANCESTORS` on the sandbox to the new `https://` addresses.
-- **Close sign-ups** once your people have accounts: add `SIGNUP_OPEN=0` to the `livepage` service's environment.
+- **Sign-ups close by themselves:** Livepage belongs to one person, so the first account you create is the only one. Anyone else who wants Livepage clones the repo and deploys their own. (To run a shared server instead, set `SIGNUP_OPEN=1`.)
 - **Built-in assistant (✦ Ask AI):** needs `AI_KEY_SECRET` on the `livepage` service. New Blueprints generate it; on an existing service add it under **Environment** with a long random value (`openssl rand -base64 32`). Then each person adds their own API key on their home page.
 - **Connect an agent:** in the app, **Agents > + Agent token**. It shows the exact command for Claude Code or any MCP client.
 

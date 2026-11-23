@@ -29,8 +29,12 @@ export const config = {
   webDist: env.WEB_DIST ?? (production ? new URL('../../web/dist/', import.meta.url).pathname : ''),
   secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' : production,
   trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY === '1' : production,
-  /** Set SIGNUP_OPEN=0 to stop new sign-ups (people can still join through share links if they already have accounts). */
-  signupOpen: env.SIGNUP_OPEN !== '0',
+  /**
+   * Who can create an account. Livepage is single-person by default: only the first account can
+   * be created (the person who cloned and deployed it), then sign-ups close by themselves.
+   * SIGNUP_OPEN=1 lets anyone sign up (a shared server); SIGNUP_OPEN=0 closes sign-ups entirely.
+   */
+  signupMode: (env.SIGNUP_OPEN === '1' ? 'open' : env.SIGNUP_OPEN === '0' ? 'closed' : 'first-account') as 'open' | 'closed' | 'first-account',
   /** Neon Auth (Managed Better Auth). `neon deploy` writes these. When set, the app offers "Continue with Google". */
   neonAuthUrl: env.NEON_AUTH_BASE_URL?.replace(/\/$/, '') || null,
   neonAuthJwksUrl: env.NEON_AUTH_JWKS_URL || (env.NEON_AUTH_BASE_URL ? `${env.NEON_AUTH_BASE_URL.replace(/\/$/, '')}/.well-known/jwks.json` : null),

@@ -257,7 +257,7 @@ Planned tools: `insert_after(block_id, ...)`, `replace_text(range)`, `comment(an
 
 ## 9. Accounts, permissions and sharing (M1, built)
 
-- **Accounts:** email and password (scrypt). Sessions are random tokens, stored as SHA-256 hashes, sent in an HttpOnly, SameSite=Lax cookie (Secure in production), 30 days. Login and sign-up are rate limited per IP. Mutating requests with a foreign `Origin` are rejected. `SIGNUP_OPEN=0` closes sign-ups.
+- **Accounts:** email and password (scrypt). Sessions are random tokens, stored as SHA-256 hashes, sent in an HttpOnly, SameSite=Lax cookie (Secure in production), 30 days. Login and sign-up are rate limited per IP. Mutating requests with a foreign `Origin` are rejected. Single-person by default: only the first account can be created, then sign-ups close (`SIGNUP_OPEN=1` opens them for a shared server, `0` closes them entirely).
 - **One origin:** in production one server serves the web app, the API (`/api`) and live sync (`/collab`), so the cookie also authenticates the WebSocket. In development Vite proxies `/api` and `/collab` to the server, so the code path is the same.
 - **Pages and roles:** `pages` + `page_members (owner | editor | commenter | viewer)`. Hocuspocus `onAuthenticate` resolves the caller (cookie or agent token), looks up the role, rejects non-members, and sets `readOnly` for viewers and commenters, so the server drops any edit they send (tested by forcing edits from a viewer's browser). Commenters become comment-capable in M2.
 - **Share links:** the owner creates a link with a role; anyone who opens it and signs in becomes a member with that role (never lowering an existing role). Links can be turned off. The owner can change or remove members.

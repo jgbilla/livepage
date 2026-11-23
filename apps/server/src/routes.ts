@@ -4,7 +4,7 @@ import type { Hocuspocus } from '@hocuspocus/server';
 import type { Db } from './db.ts';
 import {
   bearer, clearCookie, createApiToken, createSession, createUser, destroySession, login, readCookie, resolvePrincipal,
-  randomId, sessionCookie, validateSignup, type Principal,
+  randomId, sessionCookie, SignupClosedError, validateSignup, type Principal,
 } from './auth.ts';
 import {
   acceptShareLink, atLeast, backlinks, canEdit, cleanTag, createPage, createShareLink, dailyPage, deletePage, isPageId, listPages, members,
@@ -61,6 +61,18 @@ const clientIp = (req: IncomingMessage) =>
 /** Reject cross-site writes that ride on the session cookie (see origin.ts). */
 const isSameOrigin = (req: IncomingMessage) => sameOrigin(req.headers.origin, req.headers.host);
 
+const SIGNUP_CLOSED = new SignupClosedError().message;
+
+/** Can a new account be created right now? (config.signupMode) */
+let hasAccounts = false; // once true it stays true: accounts are never all deleted while running
+export async function signupOpen(db: Db): Promise<boolean> {
+  if (config.signupMode !== 'first-account') return config.signupMode === 'open';
+  if (hasAccounts) return false;
+  const [row] = await db.query('select exists (select 1 from users) as any');
+  hasAccounts = !!row?.any;
+  return !hasAccounts;
+}
+
 export async function handleApi(req: IncomingMessage, res: ServerResponse, db: Db, hp: Hocuspocus): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://x');
   const path = url.pathname.replace(/\/+$/, '');
@@ -73,18 +85,20 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     // ---------- public ----------
     if (path === '/api/health') return send(res, 200, { ok: true });
     if (path === '/api/config') {
-      return send(res, 200, { sandboxUrl: config.sandboxUrl, signupOpen: config.signupOpen, neonAuthUrl: neonAuthEnabled() ? config.neonAuthUrl : null });
+      return send(res, 200, { sandboxUrl: config.sandboxUrl, signupOpen: await signupOpen(db), neonAuthUrl: neonAuthEnabled() ? config.neonAuthUrl : null });
     }
 
     if (path === '/api/auth/signup' && method === 'POST') {
-      if (!config.signupOpen) return send(res, 403, { error: 'Sign-ups are closed on this server.' });
+      if (!(await signupOpen(db))) return send(res, 403, { error: SIGNUP_CLOSED });
       if (limited(clientIp(req))) return send(res, 429, { error: 'Too many attempts. Try again in a minute.' });
       const b = await readJson(req);
       const problem = validateSignup(b.email, b.name, b.password);
       if (problem) return send(res, 400, { error: problem });
       const [taken] = await db.query('select 1 from users where email = $1', [String(b.email).trim().toLowerCase()]);
       if (taken) return send(res, 409, { error: 'An account with this email already exists. Log in instead.' });
-      const user = await createUser(db, b.email, b.name, b.password);
+      let user;
+      try { user = await createUser(db, b.email, b.name, b.password); }
+      catch (e) { if (e instanceof SignupClosedError) return send(res, 403, { error: e.message }); throw e; }
       const raw = await createSession(db, user.id);
       return send(res, 201, { user }, { 'Set-Cookie': sessionCookie(raw, secure) });
     }
@@ -111,7 +125,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       try { claims = await verifyNeonToken(String(b.token ?? '')); }
       catch (e) { return send(res, 401, { error: `Sign-in could not be verified (${(e as Error).message}).` }); }
       const [known] = await db.query('select 1 from users where neon_auth_id = $1 or email = $2', [String(claims.sub), String(claims.email ?? '').toLowerCase()]);
-      if (!known && !config.signupOpen) return send(res, 403, { error: 'Sign-ups are closed on this server.' });
+      if (!known && !(await signupOpen(db))) return send(res, 403, { error: SIGNUP_CLOSED });
       try {
         const user = await userForNeonIdentity(db, claims);
         const raw = await createSession(db, user.id);

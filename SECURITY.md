@@ -89,8 +89,8 @@ On Render (livepage.onrender.com):
 
 1. **Set `AI_KEY_SECRET`** on the `livepage` service (a long random string, `openssl rand -base64 32`).
    Keep it: changing it makes saved AI keys unreadable.
-2. **Decide who can sign up.** Anyone can create an account today. Set `SIGNUP_OPEN=0` to allow only
-   existing accounts (people can still join pages through share links if they already have accounts).
+2. Sign-ups: nothing to do. Livepage is single-person: once the first account exists, nobody else
+   can sign up (with a password or with Google). Others who want Livepage clone it and run their own.
 3. **Turn on GitHub's private vulnerability reporting and Dependabot alerts** in the repository
    settings (Settings → Code security).
 4. Use your own Google OAuth keys in Neon Auth (the shared development keys are for testing).

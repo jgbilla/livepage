@@ -234,7 +234,7 @@ table(gs, [
   ['PG_POOL_MAX', 'App', 'Max database connections (default 5, for free tiers).'],
   ['SANDBOX_URL', 'App', 'Public address of the sandbox. Must be a different domain from the app.'],
   ['SANDBOX_FRAME_ANCESTORS', 'Sandbox', 'The app address allowed to embed HTML blocks.'],
-  ['SIGNUP_OPEN', 'App', 'Set to 0 to close sign-ups once your people have accounts.'],
+  ['SIGNUP_OPEN', 'App', 'Unset: only the first account can be created (one person per server). 1: anyone can sign up. 0: no sign-ups.'],
   ['NEON_AUTH_BASE_URL', 'App', 'Optional. Turns on "Continue with Google" through Neon Auth.'],
   ['AGENT_TOKEN', 'Dev only', 'Shared development token. Ignored in production.'],
 ]);
