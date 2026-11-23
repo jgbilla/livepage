@@ -26,7 +26,14 @@ const server = new Server<Context>({
     new Database({
       fetch: async ({ documentName }) => {
         const [row] = await db.query('select data from documents where name = $1', [documentName]);
-        return row?.data ? new Uint8Array(row.data) : null;
+        if (row?.data) return new Uint8Array(row.data);
+        // A brand-new page: start the document with the title it was created with (for example
+        // "daily", or a title an agent passed), so the first save does not blank it.
+        const [page] = await db.query('select title from pages where id = $1', [documentName]);
+        if (!page?.title) return null;
+        const seed = new Y.Doc();
+        seed.getMap(META).set('title', page.title);
+        return Y.encodeStateAsUpdate(seed);
       },
       store: async ({ documentName, state, document }) => {
         const doc = document as unknown as Y.Doc;
