@@ -354,7 +354,7 @@ function inlineNodes(tokens: Token[] | undefined, b: Builder): (Y.XmlText | Y.Xm
         }
         case 'footnoteRef': {
           const def = b.defs.get((t as unknown as { id: string }).id);
-          if (def) { flush(); out.push(makeFootnoteElement(def)); }
+          if (def) { flush(); out.push(makeFootnoteElement({ ...def, url: /^(https?:\/\/|mailto:)/i.test(def.url) ? def.url : '' })); }
           else text(t.raw, marks);
           break;
         }
