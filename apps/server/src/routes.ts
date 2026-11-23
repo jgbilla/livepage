@@ -19,6 +19,7 @@ import { META } from '@livepage/schema';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { linkGraph, searchPages } from './search.ts';
 import { config } from './config.ts';
+import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
 const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
@@ -129,6 +130,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       await db.query('delete from api_tokens where id = $1 and user_id = $2', [tokenDel[1], who.id]);
       return send(res, 200, { ok: true });
     }
+
+    if (path.startsWith('/api/ai/')) return handleAiApi(req, res, db, who, path);
 
     if (path === '/api/pages' && method === 'GET') {
       if (who.superAgent) return send(res, 200, { pages: await db.query('select id, title, updated_at from pages order by updated_at desc limit 500') });
@@ -335,6 +338,8 @@ async function pageRoutes(c: PageCtx): Promise<void> {
       return send(res, 200, { ok: true });
     }
   }
+
+  if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
 
   if (sub && CONTENT.has(sub)) {
     return handleContent({

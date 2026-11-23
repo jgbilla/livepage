@@ -9,6 +9,7 @@ import { Backlinks } from '../Backlinks';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
+import { AssistantPanel } from './AssistantPanel';
 import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
 import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
@@ -39,6 +40,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   const [peers, setPeers] = useState<Peer[]>([]);
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
   // Following a link to another tab of this same page changes only ?tab=.
   const { search } = useLocation();
@@ -111,12 +113,13 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
           ))}
         </div>
         <Link to={`/graph?page=${pageId}`} className="ghost-link small" >◉ Graph</Link>
+        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => setAsking((v) => !v)}>✦ Ask AI</button>}
         <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
           {copied ? 'Copied' : '🔗 Copy link'}
         </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
-      <main className={`page ${readOnly ? 'read-only' : ''}`}>
+      <main className={`page ${readOnly ? 'read-only' : ''} ${asking ? 'with-assistant' : ''}`}>
         <input
           className="page-title-input"
           placeholder="Untitled"
@@ -130,6 +133,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId} />
         <Backlinks pageId={pageId} tab={tab} />
       </main>
+      {asking && <AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} />}
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
     </div>
   );

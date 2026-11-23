@@ -70,6 +70,16 @@ create index if not exists blocks_type_idx on blocks (type);
 alter table users add column if not exists neon_auth_id text unique;
 alter table users alter column password_hash drop not null;
 create index if not exists page_members_user_idx on page_members (user_id);
+-- Built-in AI assistant: each person's own provider, model and API key (key encrypted with AI_KEY_SECRET).
+create table if not exists ai_settings (
+  user_id     text primary key references users(id) on delete cascade,
+  provider    text not null,
+  model       text not null,
+  base_url    text not null default '',
+  api_key_enc text not null default '',
+  key_hint    text not null default '',
+  updated_at  timestamptz not null default now()
+);
 -- Folders: each person's own tree (like an Obsidian vault). A page sits in one folder per
 -- member, so a page someone shared with you can live wherever you like in your tree.
 create table if not exists folders (
