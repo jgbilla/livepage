@@ -136,6 +136,38 @@ create table if not exists page_links (
 );
 create index if not exists page_links_to_idx on page_links (to_page);
 create index if not exists page_links_from_idx on page_links (from_page);
+-- Comments (threads anchored to text, a block or the page) and @mentions of people and agents.
+create table if not exists comments (
+  id          text primary key,
+  page_id     text not null references pages(id) on delete cascade,
+  thread_id   text not null,
+  tab         text not null default 'main',
+  anchor      jsonb,
+  body        text not null,
+  author_id   text not null,
+  author_name text not null,
+  author_kind text not null check (author_kind in ('human','agent')),
+  token_id    text,
+  created_at  timestamptz not null default now(),
+  edited_at   timestamptz,
+  resolved_at timestamptz,
+  resolved_by text
+);
+create index if not exists comments_page_idx on comments (page_id, thread_id, created_at);
+create table if not exists comment_mentions (
+  id          text primary key,
+  comment_id  text not null references comments(id) on delete cascade,
+  page_id     text not null references pages(id) on delete cascade,
+  thread_id   text not null,
+  target_kind text not null check (target_kind in ('user','agent')),
+  target_id   text not null,
+  created_at  timestamptz not null default now(),
+  handled_at  timestamptz
+);
+create index if not exists comment_mentions_target_idx on comment_mentions (target_kind, target_id, handled_at);
+-- Optional outgoing webhook per agent token, called when someone @mentions that agent.
+alter table api_tokens add column if not exists webhook_url text;
+alter table api_tokens add column if not exists webhook_secret text;
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

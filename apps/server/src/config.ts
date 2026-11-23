@@ -13,8 +13,16 @@ function sandboxUrl(): string {
   return 'http://localhost:5174';
 }
 
+function publicUrl(): string {
+  if (env.PUBLIC_URL) return env.PUBLIC_URL.replace(/\/$/, '');
+  if (env.RENDER_EXTERNAL_URL) return env.RENDER_EXTERNAL_URL.replace(/\/$/, ''); // set by Render
+  return 'http://localhost:5173';
+}
+
 export const config = {
   production,
+  /** Where people open the app; used in links sent to agents (mentions, webhooks). */
+  publicUrl: publicUrl(),
   port: Number(env.PORT ?? env.SERVER_PORT ?? 1234),
   sandboxUrl: sandboxUrl(),
   /** Serve the built web app from this server (production: one service for app + API + live sync). */

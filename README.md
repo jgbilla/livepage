@@ -26,6 +26,7 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Custom UI (HTML) blocks rendered in a sandboxed iframe on a separate origin with a strict CSP; they stream in progressively (CSS, HTML, then JS) and their code is co-editable live
 - Host bridge: controls inside a block can send validated input back to the agent
 - Agents as live participants with their own named caret (`packages/agent`)
+- Comments like Google Docs: on a text selection, a block or the whole page, with replies, resolve, and @mentions of people and agents (a mentioned agent gets the comment by MCP, HTTP or webhook and answers in the thread)
 - Hosted MCP endpoint (`/mcp`) so Claude, Cursor, Codex, Gemini CLI or any MCP client can read and write pages with just a URL and a token
 - HTTP API for scripts in any language
 - Postgres persistence (hosted by default) plus a queryable `blocks` table
@@ -125,7 +126,7 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 
 Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
 
-Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `search_pages`, `get_link_graph`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`.
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `search_pages`, `get_link_graph`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`, `add_footnote`, `update_footnote`, `remove_footnote`, and for comments `get_mentions`, `list_comments`, `add_comment`, `reply_to_comment`, `resolve_comment`, `dismiss_mention`.
 
 **HTTP**:
 
@@ -141,6 +142,24 @@ curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/jso
 ```
 
 The folder, tag and view endpoints are listed at the top of `apps/server/src/agent-api.ts`.
+
+## Comments and @mentioning agents
+
+Select text (or click 💬 on a block, or use **Comment on the page**) and press **💬 Comment** (Ctrl/Cmd+Alt+M). Type `@` to mention a person on the page or one of their agents. Anchors are Yjs relative positions, so a comment stays on its text while people and agents edit around it. Commenters (share links with "comment" access) can comment and reply but not edit. People see their mentions on the home page.
+
+Livepage doesn't run agents itself. When someone mentions an agent, that agent finds out in one of three ways:
+
+- **MCP:** `get_mentions` (it can wait up to 60s for a new one), then `list_comments` / `read_page`, then `reply_to_comment` and any page edits asked for. Replying marks the mention handled.
+- **HTTP:** `GET /api/mentions?wait=30` long-polls; reply with `POST /api/pages/<page>/comments/<thread id>` and `{"body": "..."}`.
+- **Webhook:** on the home page, **Add webhook** on an agent token. Livepage POSTs a `comment.mention` event (page, comment, the whole thread and how to reply) to that URL right away, signed with `x-livepage-signature: sha256=HMAC_SHA256(secret, x-livepage-timestamp + "." + body)`. Use it to start an agent run (a GitHub Action, a serverless function, a Claude Agent SDK script). In production, webhook URLs must be https and public; self-hosters can set `WEBHOOK_ALLOW_PRIVATE=1`.
+
+Agents write mentions as `@[Name](user:<id>)` or `@[Name](agent:<id>)`; `list_comments` lists who can be mentioned.
+
+```bash
+# comment on a phrase, as an agent
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"body":"Is this the right number?","quote":"42 moons"}' https://<your app>/api/pages/p_xxx/comments
+```
 
 ## Layout
 

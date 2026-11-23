@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { META, MAIN_TAB } from '@livepage/schema';
+import { META, MAIN_TAB, listTabs, type CommentAnchor } from '@livepage/schema';
+import type { Editor } from '@tiptap/core';
 import { api, colorFor, type Me, type Role } from '../api';
 import { collabUrl } from '../config';
 import { Link, navigate, useLocation } from '../router';
@@ -16,6 +17,8 @@ import { TagEditor } from '../TagEditor';
 import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
 
 type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[] };
+import { CommentsPanel } from './CommentsPanel';
+import { CommentStore } from '../editor/comments';
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
@@ -52,6 +55,13 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
   };
+  const canComment = role !== 'viewer';
+  const commentStore = useMemo(() => new CommentStore(), [pageId]);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || window.innerWidth >= 1100);
+  const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
+  const [openComments, setOpenComments] = useState(0);
+  const startComment = useCallback((a: CommentAnchor) => { setPendingComment(a); setCommentsOpen(true); setAsking(false); }, []);
 
   const selectTab = useCallback((id: string) => {
     setTab(id);
@@ -67,6 +77,8 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
     const provider = new HocuspocusProvider({ url: collabUrl(), name: pageId, document: doc, token: 'session' });
     return { doc, provider };
   }, [pageId]);
+
+  const tabTitle = useCallback((id: string) => listTabs(doc).find((t) => t.id === id)?.title ?? id, [doc]);
 
   useEffect(() => {
     const onStatus = ({ status }: { status: string }) => setStatus(status);
@@ -101,12 +113,12 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   useEffect(() => { document.title = `${title || 'Untitled'} · Livepage`; }, [title]);
 
   return (
-    <div className="shell">
+    <div className={`shell ${commentsOpen ? 'with-comments' : ''}`}>
       <header className="topbar">
         <SidebarToggle />
         {folderPath && <span className="crumbs muted small">{folderPath.split('/').join(' / ')}</span>}
         <span className={`status status-${status}`}>{status}</span>
-        {readOnly && <span className="badge">View only</span>}
+        {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
         <div className="peers">
           {peers.map((p, i) => (
             <span key={i} className="peer" style={{ background: p.color }} title={p.name}>
@@ -116,9 +128,12 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
         </div>
         <Link to={`/graph?page=${pageId}`} className="ghost-link small" >◉ Graph</Link>
         {!readOnly && <button type="button" className="ghost" onClick={() => setShowHistory(true)} title="Version history">History</button>}
-        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => setAsking((v) => !v)}>✦ Ask AI</button>}
+        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }}>✦ Ask AI</button>}
         <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
           {copied ? 'Copied' : <>🔗<span className="copy-link-label"> Copy link</span></>}
+        </button>
+        <button type="button" className={`comments-toggle ${commentsOpen ? 'on' : ''}`} onClick={() => { setCommentsOpen((o) => !o); setAsking(false); }} aria-pressed={commentsOpen}>
+          💬{openComments ? ` ${openComments}` : ''}<span className="sr-only"> comments</span>
         </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
@@ -133,10 +148,14 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
         />
         <TagEditor pageId={pageId} initial={info.tags} readOnly={readOnly} />
         <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} synced={synced} />
-        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId} />
+        <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId}
+          comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor} />
         <Backlinks pageId={pageId} tab={tab} />
       </main>
       {asking && <AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} />}
+      <CommentsPanel pageId={pageId} tab={tab} tabTitle={tabTitle} onSelectTab={selectTab} provider={provider} me={me} role={role}
+        editor={editor} store={commentStore} pending={pendingComment} setPending={setPendingComment}
+        open={commentsOpen} setOpen={setCommentsOpen} onCount={setOpenComments} />
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
       {showHistory && <HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} />}
     </div>

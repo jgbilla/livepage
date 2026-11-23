@@ -29,6 +29,15 @@
 //   POST   /api/daily          { date: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily")
 //   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
 //   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
+// Comments (routes.ts + comments.ts; commenters can use these too):
+//   GET    /api/pages/:page/comments?status=open|resolved|all  -> { threads }
+//   POST   /api/pages/:page/comments  { body, quote? | block_id?, tab?, occurrence? } -> { comment }   (no anchor = whole page)
+//   POST   /api/pages/:page/comments/:threadId { body }  -> reply
+//   PATCH  /api/pages/:page/comments/:id { body? , resolved? }
+//   DELETE /api/pages/:page/comments/:id
+//   GET    /api/pages/:page/mentionables                 -> people and agents who can be @mentioned
+//   GET    /api/mentions?wait=<s>                        -> your unanswered @mentions (long-polls up to 60s)
+//   POST   /api/mentions/:id/done
 //
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
