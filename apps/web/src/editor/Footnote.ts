@@ -137,11 +137,12 @@ export const Footnote = Node.create<Options>({
     return { 'Mod-Alt-f': () => this.editor.commands.insertFootnote() };
   },
 
-  // Typing "/footnote" (or "/fn") followed by a space inserts one, like a slash command.
+  // Footnote is also in the "/" menu (SlashMenu.tsx). As a shortcut, "/footnote" or "/fn"
+  // followed by a space inserts one straight away (at the start of a line or after a space, like the menu).
   addInputRules() {
     return [
       new InputRule({
-        find: /\/(?:footnote|fn)\s$/,
+        find: /(?<=^|\s)\/(?:footnote|fn)\s$/,
         handler: ({ range, chain }) => {
           chain().deleteRange(range).insertFootnote().run();
         },

@@ -85,15 +85,17 @@ A page is a stack of blocks, and **every block type is first-class**: same drag 
 
 | Block | Kind | Who edits | Where its data lives | Status |
 |-------|------|-----------|----------------------|--------|
-| Paragraph, heading, list, quote, code | Native text | People and agents, character by character | Tab's block tree | ✅ |
+| Paragraph, heading, bulleted / numbered / to-do list, quote, divider, code | Native text | People and agents, character by character | Tab's block tree | ✅ |
 | Table | Native component | People (cells are normal text) and agents (`insert_table`) | Tab's block tree | ✅ |
 | Mind map | Native component | People (click a node, Tab for child, Enter for sibling) and agents (`insert_mind_map`, `add_mind_map_node`) | `mindMaps` map, node by node | ✅ |
-| Footnote | Native inline node | People (toolbar **Footnote¹**, Ctrl/⌘+Alt+F, or type `/footnote`) and agents (`add_footnote` with `after_text`, url, title, author) | node attrs (note, url, title, author); numbered per tab in reading order, listed at the bottom with hover previews and back-links; markdown export as `[^n]` | ✅ |
+| Footnote | Native inline node | People (`/` menu, the selection menu's **¹**, Ctrl/⌘+Alt+F, or type `/fn` + space) and agents (`add_footnote` with `after_text`, url, title, author) | node attrs (note, url, title, author); numbered per tab in reading order, listed at the bottom with hover previews and back-links; markdown export as `[^n]` | ✅ |
 | Custom UI / HTML block | Sandboxed code | People ("Edit code") and agents (`insert_custom_ui`, `update_html_block`) | `htmlCode` map, one `Y.Text` per block | ✅ |
 | Drawing / whiteboard | Native component | People draw, agents add shapes and arrows | `drawings` map: shapes keyed by id (an Excalidraw- or tldraw-style scene, both MIT, both Yjs-friendly) | Planned (M3) |
 | Design frame | Native component | Layout of boxes, text and images for mockups and covers; agents can generate or tweak it | `designs` map | Planned (M4) |
 | Image, file, embed | Native | People and agents | `assets` table + block attrs | Planned (M1) |
 | Database view | Native | See §10 | `databases` / `rows` | Planned (M4) |
+
+**Inserting blocks (people).** There is no fixed toolbar. Type `/` at the start of a line or after a space for a Notion-style menu: every block above that exists today, plus footnote, link to page (same as `[[`), today's date, your templates (the template's first tab is copied in at the cursor, `{{date}}`-style variables filled, HTML blocks and mind maps copied with new ids), comment and Ask AI. Type to filter, arrows and Enter (or Tab) to pick, Escape to close. On touch screens a floating **+** button opens the same menu. Selecting text shows a small floating menu: bold, italic, strikethrough, inline code, link, comment, footnote and Ask AI. Markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `---`) still work.
 
 **Rule of thumb for native vs custom UI.** Native blocks are editable, searchable, exportable and accessible like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers, one-off visualizations. A drawing someone wants to keep editing by hand should be a drawing block, not an HTML block.
 
