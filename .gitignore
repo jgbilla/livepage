@@ -4,3 +4,4 @@ dist
 *.log
 .neon
 .env.local
+responsive-shots/

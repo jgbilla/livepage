@@ -49,6 +49,8 @@ pnpm dev                    # open http://localhost:5173 (server :1234 and sandb
 
 Just want to look around? `pnpm dev:memory` runs with an in-memory Postgres, and everything is lost when the server stops.
 
+Changed the layout? With `pnpm dev:memory` running, `pnpm check:responsive` opens every main screen at phone, tablet and desktop sizes (320 to 1440px, portrait and landscape), saves screenshots to `responsive-shots/`, and fails if anything spills past the screen edge, the page title is cut off, the top bar wraps, or one person shows twice in the presence avatars.
+
 Sign up at http://localhost:5173, create a page, click **Share** and open the link in a second (private) window as another user. Then, with the page id from the URL:
 
 ```bash

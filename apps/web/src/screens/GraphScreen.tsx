@@ -90,7 +90,7 @@ export function GraphScreen() {
       <header className="topbar">
         <SidebarToggle />
         <span className="brand">{focus ? <>Graph around <Link to={`/p/${focus}`}>{focusTitle}</Link></> : 'Graph'}</span>
-        {graph && <span className="muted small">{pageCount} pages · {linkCount} links</span>}
+        {graph && <span className="muted small graph-count">{pageCount} pages · {linkCount} links</span>}
         <span style={{ flex: 1 }} />
         <input className="name-input graph-filter" placeholder="Filter by title or #tag" value={filter} onChange={(e) => setFilter(e.target.value)} />
         {focus ? (
