@@ -8,6 +8,8 @@ import { PageScreen } from './screens/PageScreen';
 import { ShareScreen } from './screens/ShareScreen';
 import { NeonCallbackScreen } from './screens/NeonCallbackScreen';
 import { neonSignOut } from './neonAuth';
+import { Layout } from './Sidebar';
+import { ListScreen } from './screens/ListScreen';
 
 export function App() {
   const { path } = useLocation();
@@ -32,9 +34,17 @@ export function App() {
 
   const logout = async () => { await api('/auth/logout', { body: {} }); await neonSignOut(); setMe(null); navigate('/login', true); };
 
-  const page = path.match(/^\/p\/([\w-]+)/);
-  if (page) return <PageScreen key={page[1]} pageId={page[1]} me={me} />;
   const share = path.match(/^\/s\/([\w-]+)/);
   if (share) return <ShareScreen token={share[1]} />;
-  return <HomeScreen me={me} onLogout={logout} />;
+  const page = path.match(/^\/p\/([\w-]+)/);
+  const tag = path.match(/^\/tag\/(.+)$/);
+  const view = path.match(/^\/view\/([\w-]+)/);
+  return (
+    <Layout me={me} onLogout={logout}>
+      {page ? <PageScreen key={page[1]} pageId={page[1]} me={me} />
+        : tag ? <ListScreen key={tag[1]} tag={decodeURIComponent(tag[1])} />
+        : view ? <ListScreen key={view[1]} viewId={view[1]} />
+        : <HomeScreen me={me} />}
+    </Layout>
+  );
 }

@@ -11,8 +11,12 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 ## What works today
 
 - Accounts (email and password), your own page list, live page titles
+- Obsidian-style sidebar: your own nested folders of pages (create, rename, drag to move, collapse), a **Today** button that opens `YYYY/MM/DD/daily` (created if missing, using your local date)
+- Links between pages and tabs: type `[[` to search, add `#` for a tab, or paste a page link. Links point at ids, so they survive renames and moves, and every page lists its backlinks ("Linked from")
+- Tags on pages, and saved **views** in the sidebar that list the pages with any or all of some tags
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
+- Built-in AI assistant (**✦ Ask AI** on every page): bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model; it edits the page live with its own caret
 - Real-time collaborative editor (TipTap + Yjs + Hocuspocus) with live carets and a presence bar
 - Any mix of blocks on one page: text, tables, mind maps and custom UI, all editable by people and agents
 - Optional tabs at the top of a page, each its own live document
@@ -66,6 +70,17 @@ DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --prof
 ```
  For a real deployment, serve the sandbox from a **different domain** from the app (see SPEC.md §12).
 
+## Built-in assistant
+
+Every page has a **✦ Ask AI** button. Pick a provider on your home page (or right in the panel), paste your own API key, and the assistant works on the page live next to you, with its own caret: it writes and rewrites text, adds headings, tables, mind maps and custom UI blocks, and streams them in as the model generates them. Select text first to work on just that part.
+
+![Ask AI panel next to a page the assistant just edited](docs/ask-ai.png)
+
+- **Any model:** Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, or any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Groq, Together…). **Test & list models** checks the key and lists what you can use.
+- **Your key stays on the server:** encrypted with AES-256-GCM using `AI_KEY_SECRET`, only decrypted to make your own requests, never sent to the browser or to HTML blocks.
+- **Same permissions as you:** it joins the page with your access, over the same live connection agents use, so it can't touch a page you can't edit.
+- **Self-hosting:** set `AI_KEY_SECRET` (a long random string; `render.yaml` generates one). Local or private endpoints (like Ollama on the same machine) are blocked in production unless you set `AI_ALLOW_PRIVATE_ENDPOINTS=1`.
+
 ## Connect an AI
 
 Every Livepage app serves a **hosted MCP endpoint** at `https://<your app>/mcp` (Streamable HTTP). Any MCP client can connect with that URL and an agent token, with nothing to install. Create the token on your home page with **+ Agent token**, and send it as `Authorization: Bearer lp_...`. The agent joins pages live, with its own caret, and can only open pages its owner can.
@@ -104,7 +119,7 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 
 Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
 
-Tools: `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
 
 **HTTP**:
 
@@ -113,7 +128,13 @@ curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages
 curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages/p_xxx/content
 curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
   -d '{"rows":[["Planet","Moons"],["Mars","2"]]}' https://<your app>/api/pages/p_xxx/tables
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"title":"Chapter 1","path":"Projects/Book","tags":["draft"]}' https://<your app>/api/pages
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"date":"2026-11-23"}' https://<your app>/api/daily
 ```
+
+The folder, tag and view endpoints are listed at the top of `apps/server/src/agent-api.ts`.
 
 ## Layout
 
@@ -130,6 +151,7 @@ packages/agent  Live agent client, demo script, MCP server
 - Passwords are hashed with scrypt; sessions are random tokens stored hashed, in an HttpOnly, SameSite=Lax cookie (Secure in production). Cross-site writes are rejected by an Origin check.
 - Every live connection is authenticated and checked against the page's members; viewers and commenters connect read-only, so the server drops their edits.
 - HTML blocks run on a separate origin in a sandboxed iframe with a strict CSP (see SPEC.md §6). The app itself is served with a CSP that only allows frames from the sandbox.
+- AI API keys for the built-in assistant are encrypted at rest (AES-256-GCM, bound to the user) with `AI_KEY_SECRET` and only ever used server-side. The endpoint URLs people enter are checked so the server can't be pointed at private networks (unless `AI_ALLOW_PRIVATE_ENDPOINTS=1`).
 - The shared `AGENT_TOKEN` exists for local development only and is ignored when `NODE_ENV=production`.
 - Not yet: email verification, password reset, and two-factor sign-in.
 
