@@ -15,6 +15,7 @@
     "@livepage/agent": "workspace:*",
     "@livepage/schema": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "diff": "^8.0.4",
     "jose": "^6.2.18",
     "pg": "^8.23.1",
     "tsx": "^4.23.15",

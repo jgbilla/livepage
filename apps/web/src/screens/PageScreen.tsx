@@ -8,6 +8,7 @@ import { Link } from '../router';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
+import { HistoryPanel } from './HistoryPanel';
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
@@ -31,6 +32,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
 
   const selectTab = useCallback((id: string) => {
@@ -86,6 +88,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
             </span>
           ))}
         </div>
+        {!readOnly && <button type="button" className="ghost" onClick={() => setShowHistory(true)} title="Version history">History</button>}
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
       <main className={`page ${readOnly ? 'read-only' : ''}`}>
@@ -101,6 +104,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} />
       </main>
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
+      {showHistory && <HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} />}
     </div>
   );
 }
