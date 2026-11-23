@@ -11,9 +11,10 @@ import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
 import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
+import { PageMenu } from '../PageMenu';
 import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
 
-type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[] };
+type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[]; is_template?: boolean; published_slug?: string | null };
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
@@ -45,6 +46,8 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   useEffect(() => { setTab(new URLSearchParams(search).get('tab') || MAIN_TAB); }, [search]);
   const [copied, setCopied] = useState(false);
   const [synced, setSynced] = useState(false);
+  const [isTemplate, setIsTemplate] = useState(!!info.is_template);
+  const [publishedSlug, setPublishedSlug] = useState(info.published_slug ?? null);
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
   };
@@ -103,6 +106,8 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
         {folderPath && <span className="crumbs muted small">{folderPath.split('/').join(' / ')}</span>}
         <span className={`status status-${status}`}>{status}</span>
         {readOnly && <span className="badge">View only</span>}
+        {isTemplate && <span className="badge badge-template" title="New pages can start from this template">Template</span>}
+        {publishedSlug && <a className="badge badge-published" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Open the public page">● Published</a>}
         <div className="peers">
           {peers.map((p, i) => (
             <span key={i} className="peer" style={{ background: p.color }} title={p.name}>
@@ -114,6 +119,8 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
           {copied ? 'Copied' : '🔗 Copy link'}
         </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
+        <PageMenu pageId={pageId} role={role} title={title} isTemplate={isTemplate} publishedSlug={publishedSlug}
+          onChange={(p) => { if (p.isTemplate !== undefined) setIsTemplate(p.isTemplate); if (p.publishedSlug !== undefined) setPublishedSlug(p.publishedSlug); }} />
       </header>
       <main className={`page ${readOnly ? 'read-only' : ''}`}>
         <input

@@ -486,3 +486,10 @@ export function mindMapAsOutline(doc: Y.Doc, blockId: string): string {
   walk(null, 0);
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Markdown import/export, the public HTML renderer and templates live in their own files.
+export * from './walk.ts';
+export * from './markdown.ts';
+export * from './html.ts';
+export * from './template.ts';

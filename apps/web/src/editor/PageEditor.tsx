@@ -11,6 +11,7 @@ import { fragmentName } from '@livepage/schema';
 import { HtmlBlock } from './HtmlBlock';
 import { MindMap } from './MindMap';
 import { LinkMenu, PageLink, PageLinkInput } from './PageLink';
+import { TemplateFields } from './TemplateFields';
 import { titleOf, workspaceSnapshot } from '../workspace';
 type User = { id: string; name: string; color: string };
 
@@ -32,6 +33,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId }: { doc
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
         PageLink.configure({ doc, currentPage: pageId }),
+        TemplateFields,
         PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
       ],
     },

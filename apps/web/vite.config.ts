@@ -15,6 +15,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: server, changeOrigin: false },
       '/mcp': { target: server, changeOrigin: false },
+      '/pub': { target: server, changeOrigin: false }, // published pages
       '/collab': { target: server.replace(/^http/, 'ws'), ws: true, changeOrigin: false },
     },
   },

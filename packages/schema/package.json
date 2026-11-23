@@ -4,7 +4,15 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "scripts": { "build": "echo 'source package'", "typecheck": "tsc -p ." },
-  "dependencies": { "yjs": "^13.6.33" },
-  "devDependencies": { "typescript": "^5.9.3" }
+  "scripts": {
+    "build": "echo 'source package'",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "marked": "^16.4.2",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }

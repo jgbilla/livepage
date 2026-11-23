@@ -26,6 +26,18 @@
 //   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
 //   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
 //
+// Templates, import/export and publishing (routes.ts, templates.ts, transfer.ts, publish.ts):
+//   GET    /api/templates                          -> { templates, daily_template_id }
+//   PUT    /api/templates/daily { page_id | null }    which template new daily pages start from
+//   PATCH  /api/pages/:page    { template: true|false }   mark a page as a template
+//   POST   /api/pages          { template_id, title?, date?, time? }   new page from a template
+//   GET    /api/pages/:page/fields                 -> { fields }   {{fields}} still to fill in
+//   POST   /api/pages/:page/fields { fields: { name: text } }      fill them in
+//   GET    /api/pages/:page/export?format=md       -> the page as a Markdown file (footnotes, [[links]], frontmatter)
+//   GET    /api/export                              -> zip of all your pages as an Obsidian-style vault
+//   POST   /api/import         { files: [{ path, content }], into?: "Folder" }  Markdown files or a vault
+//   POST   /api/pages/:page/publish -> { url }   DELETE unpublishes. Public at /pub/<slug>.
+//
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent
 // gets that person's access to the page). In development the shared AGENT_TOKEN also works.
 // For a live cursor and typing animation, agents use the WebSocket client in packages/agent instead.
@@ -40,12 +52,12 @@ import {
 export const MAX_BODY = 512 * 1024;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-export async function readJson(req: IncomingMessage): Promise<any> {
+export async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<any> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY) throw new Error('body too large');
+    if (size > max) throw new Error('body too large');
     chunks.push(chunk);
   }
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
