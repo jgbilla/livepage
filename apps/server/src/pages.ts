@@ -175,3 +175,16 @@ export async function tagsByPage(db: Db, userId: string): Promise<Map<string, st
   for (const r of rows) out.set(r.page_id, [...(out.get(r.page_id) ?? []), r.tag]);
   return out;
 }
+
+/** Pages that link here, limited to pages this person can open. */
+export async function backlinks(db: Db, who: Principal, pageId: string) {
+  const rows = await db.query(
+    `select distinct l.from_page as page, p.title, l.from_tab as from_tab, l.from_tab_title, l.to_tab
+       from page_links l join pages p on p.id = l.from_page
+      where l.to_page = $1 and l.from_page <> $1
+        and ($2::boolean or exists (select 1 from page_members m where m.page_id = l.from_page and m.user_id = $3))
+      order by p.title`,
+    [pageId, !!who.superAgent, who.id],
+  );
+  return rows;
+}

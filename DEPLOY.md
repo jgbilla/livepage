@@ -25,6 +25,7 @@ Every push to `main` redeploys automatically.
 
 - **Your own domain:** in the `livepage` service, **Settings > Custom Domains**, add e.g. `write.yourdomain.com` and create the DNS record Render shows. Give the sandbox a domain that is **not** under the same main domain (or keep its `onrender.com` address), so HTML blocks can never reach the app's cookies. If you change domains, set `SANDBOX_URL` on the app and `SANDBOX_FRAME_ANCESTORS` on the sandbox to the new `https://` addresses.
 - **Close sign-ups** once your people have accounts: add `SIGNUP_OPEN=0` to the `livepage` service's environment.
+- **Built-in assistant (✦ Ask AI):** needs `AI_KEY_SECRET` on the `livepage` service. New Blueprints generate it; on an existing service add it under **Environment** with a long random value (`openssl rand -base64 32`). Then each person adds their own API key on their home page.
 - **Connect an agent:** in the app, **Agents > + Agent token**. It shows the exact command for Claude Code or any MCP client.
 
 ## Other hosts

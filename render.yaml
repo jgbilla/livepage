@@ -21,6 +21,8 @@ services:
         value: "5"
       - key: NEON_AUTH_BASE_URL
         sync: false # optional: Neon Auth URL (enables "Continue with Google"); from .env.local after `neon deploy`
+      - key: AI_KEY_SECRET
+        generateValue: true # encrypts people's AI API keys for the built-in assistant; keep it stable
 
   - type: web
     name: livepage-sandbox

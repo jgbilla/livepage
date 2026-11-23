@@ -70,6 +70,16 @@ create index if not exists blocks_type_idx on blocks (type);
 alter table users add column if not exists neon_auth_id text unique;
 alter table users alter column password_hash drop not null;
 create index if not exists page_members_user_idx on page_members (user_id);
+-- Built-in AI assistant: each person's own provider, model and API key (key encrypted with AI_KEY_SECRET).
+create table if not exists ai_settings (
+  user_id     text primary key references users(id) on delete cascade,
+  provider    text not null,
+  model       text not null,
+  base_url    text not null default '',
+  api_key_enc text not null default '',
+  key_hint    text not null default '',
+  updated_at  timestamptz not null default now()
+);
 -- Folders: each person's own tree (like an Obsidian vault). A page sits in one folder per
 -- member, so a page someone shared with you can live wherever you like in your tree.
 create table if not exists folders (
@@ -98,6 +108,16 @@ create table if not exists views (
   created_at timestamptz not null default now()
 );
 create index if not exists views_owner_idx on views (owner_id);
+-- Links between pages, rebuilt from each page's document when it is saved (for backlinks).
+create table if not exists page_links (
+  from_page text not null references pages(id) on delete cascade,
+  from_tab  text not null default 'main',
+  from_tab_title text not null default '',
+  to_page   text not null,
+  to_tab    text
+);
+create index if not exists page_links_to_idx on page_links (to_page);
+create index if not exists page_links_from_idx on page_links (from_page);
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

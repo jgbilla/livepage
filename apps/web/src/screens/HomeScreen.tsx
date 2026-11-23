@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Me } from '../api';
 import { collabUrl } from '../config';
+import { AiSettings } from './AiSettings';
 import { Link } from '../router';
 import { SidebarToggle } from '../Sidebar';
 import { newPage, openToday, titleOf, useWorkspace } from '../workspace';
@@ -44,6 +45,11 @@ export function HomeScreen({ me }: { me: Me }) {
             ))}
           </ul>
         )}
+        <section className="tokens">
+          <h2>AI assistant</h2>
+          <p className="muted small">The “✦ Ask AI” button on every page uses this. Bring your own key for any provider, or point it at a local model.</p>
+          <AiSettings />
+        </section>
         <AgentTokens />
       </main>
     </div>
