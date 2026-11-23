@@ -38,7 +38,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         StarterKit.configure({ undoRedo: false, codeBlock: false }), // Yjs owns undo history
         CodeBlock,
         Collaboration.configure({ document: doc, field: fragmentName(tab) }), // one block tree per tab
-        CollaborationCaret.configure({ provider, user: { name: user.name, color: user.color, kind: 'human' } }),
+        CollaborationCaret.configure({ provider, user: { id: user.id, name: user.name, color: user.color, kind: 'human' } }),
         Placeholder.configure({ placeholder: 'Write, or add a table, a mind map or a live HTML block…' }),
         Table.configure({ resizable: false }),
         TableRow,
@@ -95,8 +95,8 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
   });
 
   useEffect(() => {
-    editor?.commands.updateUser({ name: user.name, color: user.color, kind: 'human' });
-  }, [editor, user.name, user.color]);
+    editor?.commands.updateUser({ id: user.id, name: user.name, color: user.color, kind: 'human' });
+  }, [editor, user.id, user.name, user.color]);
 
   if (!editor) return null;
   return (

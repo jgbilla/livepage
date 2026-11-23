@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type Role } from './api';
 import { reloadWorkspace } from './workspace';
+import { navigate } from './router';
 
 type Props = {
   pageId: string;
@@ -10,6 +11,10 @@ type Props = {
   isTemplate: boolean;
   publishedSlug: string | null;
   onChange: (patch: { isTemplate?: boolean; publishedSlug?: string | null }) => void;
+  /** On phones the top bar has no room for these, so they live in this menu (shown only there). */
+  onHistory?: () => void;
+  onCopyLink?: () => void;
+  copied?: boolean;
 };
 
 export async function downloadMarkdown(pageId: string) {
@@ -40,7 +45,7 @@ export function printPage(title: string) {
   setTimeout(() => window.print(), 50); // let HTML blocks settle their height first
 }
 
-export function PageMenu({ pageId, role, title, isTemplate, publishedSlug, onChange }: Props) {
+export function PageMenu({ pageId, role, title, isTemplate, publishedSlug, onChange, onHistory, onCopyLink, copied }: Props) {
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [dailyId, setDailyId] = useState<string | null | undefined>(undefined);
@@ -79,6 +84,18 @@ export function PageMenu({ pageId, role, title, isTemplate, publishedSlug, onCha
       <button type="button" className="ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="More">⋯</button>
       {open && (
         <div className="menu" role="menu">
+          <div className="narrow-only">
+            {onCopyLink && <button type="button" role="menuitem" onClick={() => { onCopyLink(); setTimeout(() => setOpen(false), 600); }}>
+              <span className="check">🔗</span>{copied ? 'Copied' : 'Copy link'}
+            </button>}
+            {onHistory && <button type="button" role="menuitem" onClick={() => { setOpen(false); onHistory(); }}>
+              <span className="check">↺</span>Version history
+            </button>}
+            <a role="menuitem" href={`/graph?page=${pageId}`} onClick={(e) => { e.preventDefault(); setOpen(false); navigate(`/graph?page=${pageId}`); }}>
+              <span className="check">◉</span>Graph around this page
+            </a>
+            <div className="menu-sep" />
+          </div>
           {canEdit && (
             <button type="button" role="menuitemcheckbox" aria-checked={isTemplate} onClick={toggleTemplate}>
               <span className="check">{isTemplate ? '✓' : ''}</span>Use as a template

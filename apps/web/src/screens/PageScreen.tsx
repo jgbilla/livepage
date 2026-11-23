@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { META, MAIN_TAB, listTabs, type CommentAnchor } from '@livepage/schema';
@@ -15,13 +15,13 @@ import { AssistantPanel } from './AssistantPanel';
 import { SidebarToggle } from '../Sidebar';
 import { TagEditor } from '../TagEditor';
 import { PageMenu } from '../PageMenu';
+import { Presence, uniquePeers, type Peer } from '../Presence';
 import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
 
 type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[]; is_template?: boolean; published_slug?: string | null };
 import { CommentsPanel } from './CommentsPanel';
 import { CommentStore } from '../editor/comments';
 
-type Peer = { name: string; color: string; kind?: string; tab?: string };
 
 export function PageScreen({ pageId, me }: { pageId: string; me: Me }) {
   const [info, setInfo] = useState<{ role: Role; page: PageInfo } | null>(null);
@@ -61,7 +61,7 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
   const canComment = role !== 'viewer';
   const commentStore = useMemo(() => new CommentStore(), [pageId]);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || window.innerWidth >= 1100);
+  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || pageColumnWidth() >= 1100);
   const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
   const [openComments, setOpenComments] = useState(0);
   const startComment = useCallback((a: CommentAnchor) => { setPendingComment(a); setCommentsOpen(true); setAsking(false); }, []);
@@ -117,24 +117,21 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
 
   return (
     <div className={`shell ${commentsOpen ? 'with-comments' : ''}`}>
-      <header className="topbar">
+      <header className="topbar page-topbar">
         <SidebarToggle />
         {folderPath && <span className="crumbs muted small">{folderPath.split('/').join(' / ')}</span>}
-        <span className={`status status-${status}`}>{status}</span>
+        <span className={`status status-${status}`} role="status" title={status === 'connected' ? 'Connected: changes sync live' : status}>
+          <span className="status-dot" aria-hidden="true" />
+          <span className={status === 'connected' ? 'sr-only' : 'status-label'}>{status === 'connected' ? 'Connected' : status}</span>
+        </span>
         {readOnly && <span className="badge">{role === 'commenter' ? 'Can comment' : 'View only'}</span>}
-        {isTemplate && <span className="badge badge-template" title="New pages can start from this template">Template</span>}
-        {publishedSlug && <a className="badge badge-published" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Open the public page">● Published</a>}
-        <div className="peers">
-          {peers.map((p, i) => (
-            <span key={i} className="peer" style={{ background: p.color }} title={p.name}>
-              {p.kind === 'agent' ? '✦ ' : ''}{p.name}
-            </span>
-          ))}
-        </div>
-        <Link to={`/graph?page=${pageId}`} className="ghost-link small" >◉ Graph</Link>
-        {!readOnly && <button type="button" className="ghost" onClick={() => setShowHistory(true)} title="Version history">History</button>}
-        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }}>✦ Ask AI</button>}
-        <button type="button" className="ghost" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
+        {isTemplate && <span className="badge badge-template narrow-hide" title="New pages can start from this template">Template</span>}
+        {publishedSlug && <a className="badge badge-published narrow-hide" href={`/pub/${publishedSlug}`} target="_blank" rel="noopener" title="Published: open the public page">●<span className="badge-label"> Published</span></a>}
+        <Presence peers={peers} />
+        <Link to={`/graph?page=${pageId}`} className="ghost-link small narrow-hide" >◉ Graph</Link>
+        {!readOnly && <button type="button" className="ghost narrow-hide" onClick={() => setShowHistory(true)} title="Version history">History</button>}
+        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => { setAsking((v) => !v); setCommentsOpen(false); }} title="Ask AI">✦<span className="ask-ai-label"> Ask AI</span></button>}
+        <button type="button" className="ghost narrow-hide" onClick={copyLink} title="Copy a link to this page (and tab). Paste it into any page to link here.">
           {copied ? 'Copied' : <>🔗<span className="copy-link-label"> Copy link</span></>}
         </button>
         <button type="button" className={`comments-toggle ${commentsOpen ? 'on' : ''}`} onClick={() => { setCommentsOpen((o) => !o); setAsking(false); }} aria-pressed={commentsOpen}>
@@ -142,19 +139,13 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
         </button>
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
         <PageMenu pageId={pageId} role={role} title={title} isTemplate={isTemplate} publishedSlug={publishedSlug}
-          onChange={(p) => { if (p.isTemplate !== undefined) setIsTemplate(p.isTemplate); if (p.publishedSlug !== undefined) setPublishedSlug(p.publishedSlug); }} />
+          onChange={(p) => { if (p.isTemplate !== undefined) setIsTemplate(p.isTemplate); if (p.publishedSlug !== undefined) setPublishedSlug(p.publishedSlug); }}
+          onHistory={readOnly ? undefined : () => setShowHistory(true)} onCopyLink={copyLink} copied={copied} />
       </header>
       <main className={`page ${readOnly ? 'read-only' : ''} ${asking ? 'with-assistant' : ''}`}>
-        <input
-          className="page-title-input"
-          placeholder="Untitled"
-          value={title}
-          readOnly={readOnly}
-          aria-label="Page title"
-          onChange={(e) => doc.getMap(META).set('title', e.target.value.slice(0, 200))}
-        />
+        <TitleInput value={title} readOnly={readOnly} onChange={(t) => doc.getMap(META).set('title', t.slice(0, 200))} />
         <TagEditor pageId={pageId} initial={info.tags} readOnly={readOnly} />
-        <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} synced={synced} />
+        <TabBar doc={doc} active={tab} onSelect={selectTab} peers={uniquePeers(peers, true)} readOnly={readOnly} synced={synced} />
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} pageId={pageId}
           comments={commentStore} canComment={canComment} onComment={startComment} onEditor={setEditor} />
         <Backlinks pageId={pageId} tab={tab} />
@@ -167,4 +158,42 @@ function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Ro
       {showHistory && <HistoryPanel pageId={pageId} canRestore={!readOnly} onClose={() => setShowHistory(false)} />}
     </div>
   );
+}
+
+/** The page title: wraps onto more lines instead of being cut off on narrow screens. Enter moves on, no line breaks. */
+function TitleInput({ value, readOnly, onChange }: { value: string; readOnly: boolean; onChange: (title: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+  useLayoutEffect(fit, [value, fit]);
+  useEffect(() => {
+    addEventListener('resize', fit);
+    return () => removeEventListener('resize', fit);
+  }, [fit]);
+  return (
+    <textarea
+      ref={ref}
+      className="page-title-input"
+      placeholder="Untitled"
+      rows={1}
+      value={value}
+      readOnly={readOnly}
+      aria-label="Page title"
+      onChange={(e) => onChange(e.target.value.replace(/[\r\n]+/g, ' '))}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+        e.preventDefault();
+        (document.querySelector('.editor .ProseMirror') as HTMLElement | null)?.focus();
+      }}
+    />
+  );
+}
+
+/** Width of the page column (the window minus a docked sidebar). Comments open by default only when they fit beside the page. */
+function pageColumnWidth() {
+  return document.querySelector('.layout-main')?.clientWidth ?? window.innerWidth;
 }
