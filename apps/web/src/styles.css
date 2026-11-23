@@ -775,6 +775,8 @@ code.copy, .share-url { display: block; font: var(--lp-text-xs)/1.5 var(--lp-fon
   background: var(--lp-ink); color: var(--lp-on-ink); font-size: 22px; line-height: 1; box-shadow: var(--lp-shadow-3); cursor: pointer; place-items: center; }
 @media (pointer: coarse) { .insert-fab { display: grid; } }
 body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { display: none; }
+/* On a phone, Ask AI and comments cover the page: the + would sit on top of their Send buttons. */
+@media (max-width: 800px) { body:has(.assistant) .insert-fab, body:has(.comments) .insert-fab { display: none; } }
 /* To-do lists */
 .editor ul[data-type="taskList"] { list-style: none; padding-left: 2px; }
 .editor ul[data-type="taskList"] li { display: flex; gap: var(--lp-space-2); align-items: flex-start; }

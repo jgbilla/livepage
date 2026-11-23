@@ -93,7 +93,7 @@ DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --prof
 
 ## Built-in assistant
 
-Every page has a **✦ Ask AI** button. Pick a provider on your home page (or right in the panel), paste your own API key, and the assistant works on the page live next to you, with its own caret: it writes and rewrites text, adds headings, tables, mind maps and custom UI blocks, and streams them in as the model generates them. Select text first to work on just that part.
+Every page has a **✦ Ask AI** button. Pick a provider on your home page (or right in the panel), paste your own API key, and the assistant works on the page live next to you, with its own caret: it writes and rewrites text, adds headings, tables, mind maps and custom UI blocks, and streams them in as the model generates them. Select text first to work on just that part. Each page keeps your chat with it on the server, so it follows you to your other devices, and an answer keeps going if you close the panel or your phone sleeps (Stop ends it).
 
 ![Ask AI panel next to a page the assistant just edited](docs/ask-ai.png)
 
