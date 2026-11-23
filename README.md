@@ -13,18 +13,22 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Agents as live participants with their own named caret (`packages/agent`)
 - MCP server so Claude, ChatGPT or any MCP client can read and write pages
 - HTTP API for scripts in any language
-- Postgres persistence plus a queryable `blocks` table
+- Postgres persistence (hosted by default) plus a queryable `blocks` table
 - Docker Compose for self-hosting
 
 ## Run it locally
 
 Needs Node 22+ and pnpm 10 (`corepack enable`).
 
+Livepage stores pages in **a hosted Postgres by default**, so nothing is lost if your machine or a container dies. A free [Neon](https://neon.tech) or [Supabase](https://supabase.com) database is enough.
+
 ```bash
 pnpm install
-cp .env.example .env        # optional: set DATABASE_URL to use Postgres; without it pages live in memory
+cp .env.example .env        # paste your hosted DATABASE_URL (keep ?sslmode=require)
 pnpm dev                    # web :5173, collab server :1234, sandbox :5174
 ```
+
+Just want to look around? `pnpm dev:memory` runs without a database, and pages are lost when the server stops.
 
 Open http://localhost:5173/?page=demo in **two browser windows**, then in a third terminal:
 
@@ -39,10 +43,18 @@ The agent joins the page, types a paragraph with its own caret, and streams in a
 ## Self-host with Docker
 
 ```bash
+cp .env.example .env        # set DATABASE_URL to your hosted Postgres
 docker compose up --build
 ```
 
-Then open http://localhost:5173. For a real deployment, serve the sandbox from a **different domain** from the app (see SPEC.md §12).
+Then open http://localhost:5173. The server refuses to start without `DATABASE_URL`.
+
+Prefer a database on the same machine? The bundled Postgres is an opt-in profile. Its data lives in a Docker volume, so back it up yourself:
+
+```bash
+DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --profile local-db up --build
+```
+ For a real deployment, serve the sandbox from a **different domain** from the app (see SPEC.md §12).
 
 ## Connect an AI
 

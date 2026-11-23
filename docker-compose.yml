@@ -1,9 +1,19 @@
-# One-command self-hosting:  docker compose up --build
+# Self-hosting.
+#
+# Default: a HOSTED Postgres (Neon, Supabase, RDS, ...). Put its connection string in .env:
+#   DATABASE_URL=postgres://user:pass@host/db?sslmode=require
+#   docker compose up --build
+#
+# Local-only alternative (data lives in a Docker volume on this machine, so it dies with it):
+#   DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --profile local-db up --build
+#
 # Web app:   http://localhost:5173
 # Sandbox:   http://localhost:5174   (separate origin for HTML blocks, keep it that way)
 # Collab:    ws://localhost:1234
 services:
+  # Optional bundled Postgres, only started with --profile local-db.
   db:
+    profiles: ["local-db"]
     image: postgres:17
     environment:
       POSTGRES_USER: livepage
@@ -20,12 +30,13 @@ services:
     build: .
     command: pnpm --filter @livepage/server start
     environment:
-      DATABASE_URL: postgres://livepage:livepage@db:5432/livepage
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env to your hosted Postgres connection string (see docker-compose.yml)}
+      PG_POOL_MAX: ${PG_POOL_MAX:-5}
       SERVER_PORT: "1234"
       AGENT_TOKEN: ${AGENT_TOKEN:-dev-agent-token}
     ports: ["1234:1234"]
     depends_on:
-      db: { condition: service_healthy }
+      db: { condition: service_healthy, required: false }
 
   web:
     build:

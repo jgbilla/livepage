@@ -30,14 +30,35 @@ export type Store = {
 
 export async function createStore(url: string | undefined): Promise<Store> {
   if (!url) {
-    console.warn('[server] DATABASE_URL not set: pages are kept in memory and lost on restart.');
+    // Pages must outlive the server process, so a real database is required.
+    // The in-memory store exists only for a quick local try-out.
+    if (process.env.LIVEPAGE_MEMORY_STORE !== '1') {
+      console.error(
+        '[server] DATABASE_URL is not set.\n' +
+          '  Use a hosted Postgres (Neon, Supabase, RDS...) and paste its connection string into .env,\n' +
+          '  or run `pnpm dev:memory` to try Livepage without saving anything.',
+      );
+      process.exit(1);
+    }
+    console.warn('[server] LIVEPAGE_MEMORY_STORE=1: pages are kept in memory and LOST on restart.');
     const mem = new Map<string, Uint8Array>();
     return {
       async fetch(name) { return mem.get(name) ?? null; },
       async store(name, state) { mem.set(name, state); },
     };
   }
-  const pool = new pg.Pool({ connectionString: url });
+  // Hosted Postgres: TLS comes from the connection string (?sslmode=require, which Neon and
+  // Supabase include). Keep the pool small: hosted plans cap connections, and poolers
+  // (PgBouncer, Neon's -pooler host) do the fan-out.
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: Number(process.env.PG_POOL_MAX ?? 5),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  });
+  // Hosted databases close idle connections and restart for maintenance.
+  // Without this handler, a dropped idle client would crash the server.
+  pool.on('error', (err) => console.warn('[server] postgres connection dropped:', err.message));
   await pool.query(SCHEMA_SQL);
   return {
     async fetch(name) {

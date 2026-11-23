@@ -4,8 +4,8 @@
   "type": "module",
   "bin": { "livepage-mcp": "src/mcp.ts" },
   "scripts": {
-    "demo": "tsx src/demo.ts",
-    "mcp": "tsx src/mcp.ts",
+    "demo": "tsx --env-file-if-exists=../../.env src/demo.ts",
+    "mcp": "tsx --env-file-if-exists=../../.env src/mcp.ts",
     "build": "echo 'run with tsx'",
     "typecheck": "tsc -p ."
   },

@@ -16,6 +16,7 @@ One scrolling page per document. You write in it like Notion. An AI agent sits i
 |---|----------|----------|
 | 1 | Infinite canvas or page? | **One scrolling page.** Blocks flow top to bottom. |
 | 2 | Storage | **Database (Postgres)**, like Notion. Not a folder of markdown files. Markdown import/export keeps the Obsidian door open. |
+| 2b | Where the database lives | **Hosted Postgres by default** (Neon, Supabase, RDS...), so pages survive if the server or its machine dies. A bundled local Postgres is opt-in for development or fully offline installs. |
 | 3 | How the agent works | **Live, in the page, alongside you**, with presence and a caret. Not a side chat that pastes results. |
 | 4 | Which AI | **Any.** Agents connect over MCP or a small HTTP API. No model is built in. |
 | 5 | Sharing | Required: share links and per-page permissions. |
@@ -53,7 +54,7 @@ So yes, it is "just" HTML and JavaScript. The hard parts are the isolation and m
            - persistence + block projection
                      │
                      ▼
-                Postgres
+        Hosted Postgres (Neon, Supabase, RDS...)
    documents (Yjs state)   blocks (queryable projection)   users, pages, shares... (M1+)
 
  HTML blocks:  <iframe sandbox="allow-scripts" src="https://SANDBOX_ORIGIN/runner.html">
@@ -64,7 +65,7 @@ So yes, it is "just" HTML and JavaScript. The hard parts are the isolation and m
 |-------|------|-------|
 | Editor | TipTap 3 (ProseMirror) + React 19 + Vite | `apps/web` |
 | Live sync | Yjs CRDT, Hocuspocus server/provider | `apps/server`, `apps/web` |
-| Storage | Postgres 17 | `apps/server/src/db.ts` |
+| Storage | Hosted Postgres via one `DATABASE_URL` (bundled Postgres 17 optional) | `apps/server/src/db.ts` |
 | HTML block runtime | Static runner on its own origin, strict CSP | `apps/sandbox` |
 | Shared document model | Yjs helpers used by every participant | `packages/schema` |
 | Agent connectivity | Live WS client, MCP server, HTTP API | `packages/agent`, `apps/server/src/agent-api.ts` |
@@ -94,6 +95,21 @@ An HTML block in the tree stores only `{ blockId, title }`. Its code lives in `h
 ## 5. Storage
 
 The Yjs state is the **source of truth** for content (it's what makes real-time merging work). Postgres stores it and also keeps **relational projections** so the server can query pages like Notion does.
+
+### Where the database runs
+
+The server is **stateless**: all content is in Postgres, reached through a single `DATABASE_URL`. The default and documented setup is a **hosted** Postgres, because a database on the same box as the server dies with it. Any provider works: Neon and Supabase have free tiers, and RDS, Cloud SQL or a managed Postgres from any host are fine for production.
+
+- TLS comes from the connection string (`?sslmode=require`).
+- The pool is small (`PG_POOL_MAX`, default 5) because hosted plans cap connections. A provider's pooled endpoint (Neon's `-pooler` host, Supabase's pooler) is supported.
+- Hosted databases close idle connections and restart for maintenance. The server logs a dropped connection and reconnects on the next save instead of crashing (tested by killing all connections mid-session).
+- The server **refuses to start without `DATABASE_URL`**, so nobody ends up keeping pages in memory by accident. `pnpm dev:memory` is the explicit, throwaway exception.
+- Because the server holds no state, it can be restarted, redeployed or moved freely. Running several server instances needs the Hocuspocus Redis extension (later).
+- Backups: rely on the provider's point-in-time restore, plus `pg_dump` for a portable copy.
+
+The bundled Postgres container is an opt-in Compose profile (`--profile local-db`) for development or installs that must stay on one machine.
+
+### Tables
 
 Implemented now:
 
@@ -199,10 +215,11 @@ Notion-style collections: a database is a page whose rows are pages, with typed 
 
 ```
 git clone ... && cd livepage
+cp .env.example .env     # DATABASE_URL = your hosted Postgres
 docker compose up --build
 ```
 
-Brings up Postgres, the collab server, the web app and the sandbox. For production, put a reverse proxy (Caddy) in front with **two hostnames**: `app.example.com` for the web app and server, and a different domain (ideally a different registrable domain, like `example-blocks.net`) for the sandbox. Set `SANDBOX_FRAME_ANCESTORS`, `VITE_SANDBOX_URL` and `VITE_COLLAB_URL` accordingly. Backups are plain `pg_dump`.
+Brings up the collab server, the web app and the sandbox, connected to your hosted database. Add `--profile local-db` (and point `DATABASE_URL` at `db`) to run Postgres in a container on the same machine instead. For production, put a reverse proxy (Caddy) in front with **two hostnames**: `app.example.com` for the web app and server, and a different domain (ideally a different registrable domain, like `example-blocks.net`) for the sandbox. Set `SANDBOX_FRAME_ANCESTORS`, `VITE_SANDBOX_URL` and `VITE_COLLAB_URL` accordingly. Backups: the database provider's point-in-time restore, plus `pg_dump` for a portable copy.
 
 Scaling later: Hocuspocus Redis extension for several server instances.
 
@@ -212,7 +229,7 @@ Scaling later: Hocuspocus Redis extension for several server instances.
 
 | | Milestone | Done when |
 |---|-----------|-----------|
-| **M0** | **Live demo** (this scaffold) | Two browsers and an agent edit one page live. The agent types with its own caret and inserts an animated HTML block. Pages persist in Postgres. ✅ |
+| **M0** | **Live demo** (this scaffold) | Two browsers and an agent edit one page live. The agent types with its own caret and inserts an animated HTML block. Pages persist in hosted Postgres. ✅ |
 | M1 | Accounts and sharing | Sign up, workspaces, page tree sidebar, roles, share links, agent tokens. |
 | M2 | Comments | Comment on a selection, threads, agents can read and reply. |
 | M3 | Writing quality | Slash menu, drag handles, CodeMirror block editor, suggestions, version history. |
