@@ -7,7 +7,7 @@ import type { Editor } from '@tiptap/core';
 import { Icon } from '../design/Icon';
 import { api, colorFor, type Me, type Role } from '../api';
 import { collabUrl } from '../config';
-import { Link, navigate, useLocation } from '../router';
+import { Link, useLocation, useNavigate } from '../router';
 import { Backlinks } from '../Backlinks';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
@@ -76,21 +76,26 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
   const [sharing, setSharing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [asking, setAsking] = useState(false);
-  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
+  // This workspace tab's own location (it may be in the background or the other half of a split).
+  const loc = useLocation();
+  const { search } = loc;
+  const nav = useNavigate();
+  const locRef = useRef(loc);
+  locRef.current = loc;
+  const [tab, setTab] = useState(() => new URLSearchParams(search).get('tab') || MAIN_TAB);
   // Following a link to another tab of this same page changes only ?tab=.
-  const { search } = useLocation();
   useEffect(() => { setTab(new URLSearchParams(search).get('tab') || MAIN_TAB); }, [search]);
   const [copied, setCopied] = useState(false);
   const [synced, setSynced] = useState(false);
   const [isTemplate, setIsTemplate] = useState(!!info.is_template);
   const [publishedSlug, setPublishedSlug] = useState(info.published_slug ?? null);
   const copyLink = async () => {
-    try { await navigator.clipboard.writeText(location.href); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
+    try { await navigator.clipboard.writeText(location.origin + loc.path + loc.search); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* no clipboard */ }
   };
   const canComment = role !== 'viewer';
   const commentStore = useMemo(() => new CommentStore(), [pageId]);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(location.search).has('comment') || pageColumnWidth() >= 1100);
+  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(search).has('comment') || pageColumnWidth() >= 1100);
   const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
   const [openComments, setOpenComments] = useState(0);
   const openAskAi = useCallback(() => { setAsking(true); setCommentsOpen(false); }, []);
@@ -98,11 +103,14 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
 
   const selectTab = useCallback((id: string) => {
     setTab(id);
-    const url = new URL(location.href);
-    if (id === MAIN_TAB) url.searchParams.delete('tab');
-    else url.searchParams.set('tab', id);
-    if (url.href !== location.href) navigate(url.pathname + url.search, true); // keeps useLocation in step
-  }, []);
+    const { path, search } = locRef.current;
+    const q = new URLSearchParams(search);
+    if (id === MAIN_TAB) q.delete('tab');
+    else q.set('tab', id);
+    const qs = q.toString();
+    const to = path + (qs ? `?${qs}` : '');
+    if (to !== path + search) nav(to, true); // keeps useLocation in step
+  }, [nav]);
 
   const { doc, provider } = live;
 
@@ -137,7 +145,6 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
   // A page shared with you that is not in your sidebar yet (just opened from a link): show it.
   useEffect(() => { if (ws && !ws.pages.some((p) => p.id === pageId)) void reloadWorkspace(); }, [ws, pageId]);
   useEffect(() => { provider.setAwarenessField('tab', tab); }, [provider, tab]);
-  useEffect(() => { document.title = `${title || 'Untitled'} · Livepage`; }, [title]);
 
   return (
     <div className={`shell ${commentsOpen ? 'with-comments' : ''}`}>
@@ -212,7 +219,7 @@ function TitleInput({ value, readOnly, onChange }: { value: string; readOnly: bo
       onKeyDown={(e) => {
         if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
         e.preventDefault();
-        (document.querySelector('.editor .ProseMirror') as HTMLElement | null)?.focus();
+        (e.currentTarget.closest('.page')?.querySelector('.editor .ProseMirror') as HTMLElement | null)?.focus();
       }}
     />
   );
@@ -220,5 +227,5 @@ function TitleInput({ value, readOnly, onChange }: { value: string; readOnly: bo
 
 /** Width of the page column (the window minus a docked sidebar). Comments open by default only when they fit beside the page. */
 function pageColumnWidth() {
-  return document.querySelector('.layout-main')?.clientWidth ?? window.innerWidth;
+  return (document.querySelector('.wt-pane.wt-focused') ?? document.querySelector('.layout-main'))?.clientWidth ?? window.innerWidth;
 }

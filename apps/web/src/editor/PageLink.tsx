@@ -8,7 +8,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type * as Y from 'yjs';
 import { LINK_NODE, MAIN_TAB, listTabs, tabsMap, type Tab } from '@livepage/schema';
 import { api } from '../api';
-import { navigate } from '../router';
+import { middleClickOpens, navigate, openTabFromClick } from '../router';
 import { titleOf, useWorkspace } from '../workspace';
 import { Icon } from '../design/Icon';
 
@@ -95,7 +95,8 @@ function LinkView({ node, selected, doc, currentPage }: ReactNodeViewProps & { d
         href={linkHref(page, tab)}
         title={missing ? 'You cannot open this page' : `Open ${text}`}
         contentEditable={false}
-        onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); navigate(linkHref(page, tab)); }}
+        {...middleClickOpens(linkHref(page, tab))}
+        onClick={(e) => { if (openTabFromClick(e, linkHref(page, tab)) || e.shiftKey) return; e.preventDefault(); navigate(linkHref(page, tab)); }}
       >
         <Icon name={tab && page === currentPage ? 'arrow-right-to-line' : 'arrow-up-right'} />{text}
       </a>

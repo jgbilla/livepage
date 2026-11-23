@@ -9,6 +9,7 @@ import { api, colorFor, type Me, type Role } from '../api';
 import { resolveAnchor, type CommentStore } from '../editor/comments';
 import { Icon } from '../design/Icon';
 import { initials } from '../Presence';
+import { useLocation } from '../router';
 
 type Comment = {
   id: string; thread_id: string; body: string; author_id: string; author_name: string; author_kind: 'human' | 'agent';
@@ -28,8 +29,9 @@ export function CommentsPanel(p: Props) {
   const { pageId, tab, provider, me, role, editor, store, pending, setPending, open, setOpen, onCount } = p;
   const [threads, setThreads] = useState<Thread[]>([]);
   const [people, setPeople] = useState<Mentionable[]>([]);
+  const { search } = useLocation();
   const [filter, setFilter] = useState<'open' | 'resolved'>('open');
-  const [active, setActive] = useState<string | null>(() => new URLSearchParams(location.search).get('comment'));
+  const [active, setActive] = useState<string | null>(() => new URLSearchParams(search).get('comment'));
   const [error, setError] = useState<string | null>(null);
   const [, rerender] = useState(0);
   const canComment = role !== 'viewer';
@@ -82,8 +84,11 @@ export function CommentsPanel(p: Props) {
     if (!fromEditor && editor && t) {
       const r = resolveAnchor(editor, t.anchor);
       if (r) {
-        const top = editor.view.coordsAtPos(r.from).top + window.scrollY - 140;
-        window.scrollTo({ top, behavior: 'smooth' });
+        // The page scrolls the window, or its own half of a split view.
+        const y = editor.view.coordsAtPos(r.from).top - 140;
+        const box = editor.view.dom.closest('.wt-split .wt-body');
+        if (box) box.scrollTo({ top: box.scrollTop + y - box.getBoundingClientRect().top, behavior: 'smooth' });
+        else window.scrollTo({ top: y + window.scrollY, behavior: 'smooth' });
       }
     }
     setTimeout(() => listRef.current?.querySelector(`[data-thread="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 50);
@@ -91,7 +96,7 @@ export function CommentsPanel(p: Props) {
 
   useEffect(() => { store.onActivate = (id) => focusThread(id, true); }, [store, focusThread]);
   // Open the thread from a ?comment= link once threads load.
-  const linked = useRef(new URLSearchParams(location.search).get('comment'));
+  const linked = useRef(new URLSearchParams(search).get('comment'));
   useEffect(() => {
     if (linked.current && threads.some((t) => t.id === linked.current)) { focusThread(linked.current); linked.current = null; }
   }, [threads, focusThread]);

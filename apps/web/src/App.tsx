@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { WorkspaceTabs } from './WorkspaceTabs';
 import { api, ApiError, type Me } from './api';
 import { loadConfig } from './config';
 import { navigate, useLocation } from './router';
@@ -22,6 +23,22 @@ export function App() {
   const { path } = useLocation();
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [ready, setReady] = useState(false);
+  // One open tab's screen. Each tab has its own path, so this takes it instead of reading the URL bar.
+  const screenFor = useCallback((p: string) => {
+    if (!me) return null;
+    const page = p.match(/^\/p\/([\w-]+)/);
+    const tag = p.match(/^\/tag\/(.+)$/);
+    const view = p.match(/^\/view\/([\w-]+)/);
+    return (
+      <Suspense fallback={<PageSkeleton />}>
+        {page ? <PageScreen key={page[1]} pageId={page[1]} me={me} />
+          : tag ? <ListScreen key={tag[1]} tag={decodeURIComponent(tag[1])} />
+          : view ? <ListScreen key={view[1]} viewId={view[1]} />
+          : p === '/graph' ? <GraphScreen />
+          : <HomeScreen me={me} />}
+      </Suspense>
+    );
+  }, [me]);
 
   const refreshMe = useCallback(async () => {
     try { setMe((await api<{ user: Me | null }>('/me')).user); }
@@ -44,18 +61,9 @@ export function App() {
 
   const share = path.match(/^\/s\/([\w-]+)/);
   if (share) return <ShareScreen token={share[1]} />;
-  const page = path.match(/^\/p\/([\w-]+)/);
-  const tag = path.match(/^\/tag\/(.+)$/);
-  const view = path.match(/^\/view\/([\w-]+)/);
   return (
     <Layout me={me} onLogout={logout}>
-      <Suspense fallback={<PageSkeleton />}>
-      {page ? <PageScreen key={page[1]} pageId={page[1]} me={me} />
-        : tag ? <ListScreen key={tag[1]} tag={decodeURIComponent(tag[1])} />
-        : view ? <ListScreen key={view[1]} viewId={view[1]} />
-        : path === '/graph' ? <GraphScreen />
-        : <HomeScreen me={me} />}
-      </Suspense>
+      <WorkspaceTabs key={me.id} me={me} screenFor={screenFor} />
     </Layout>
   );
 }

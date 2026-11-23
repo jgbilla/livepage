@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 // Same value as MAIN_TAB in @livepage/schema; not imported so search doesn't pull in the sync code.
 const MAIN_TAB = 'main';
 import { api } from './api';
-import { navigate } from './router';
+import { navigate, openTab } from './router';
 import { reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';
 import { Icon } from './design/Icon';
 
@@ -103,7 +103,7 @@ function Switcher({ onClose }: { onClose: () => void }) {
 
   const open = (h: Hit, newTab = false) => {
     const href = `/p/${h.id}${h.tab && h.tab !== MAIN_TAB ? `?tab=${encodeURIComponent(h.tab)}` : ''}`;
-    if (newTab) { window.open(href, '_blank'); return; }
+    if (newTab) { onClose(); openTab(href); if (h.snippet && words.length) void revealWords(words); return; }
     onClose();
     navigate(href);
     if (h.snippet && words.length) void revealWords(words);
@@ -186,7 +186,7 @@ async function revealWords(words: string[]) {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 150));
-    const root = document.querySelector('.editor .ProseMirror');
+    const root = document.querySelector('.wt-pane.wt-focused .wt-visible .editor .ProseMirror') ?? document.querySelector('.editor .ProseMirror');
     if (!root) continue;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {

@@ -10,7 +10,7 @@ import {
   type Simulation, type SimulationLinkDatum, type SimulationNodeDatum,
 } from 'd3-force';
 import { api } from '../api';
-import { Link, navigate, useLocation } from '../router';
+import { Link, navigate, openTab, useLocation } from '../router';
 import { SidebarToggle } from '../Sidebar';
 
 type ApiGraph = {
@@ -336,7 +336,7 @@ function GraphCanvas({ graph, focus, filter }: { graph: { nodes: N[]; links: E[]
       dragging = null; panning = null;
       if (n && !moved) {
         if (n.kind === 'tag') navigate(`/tag/${encodeURIComponent(n.tags[0])}`);
-        else if (e.metaKey || e.ctrlKey) window.open(`/p/${n.id}`, '_blank');
+        else if (e.metaKey || e.ctrlKey) openTab(`/p/${n.id}`, { split: e.altKey });
         else navigate(`/p/${n.id}`);
       }
     };

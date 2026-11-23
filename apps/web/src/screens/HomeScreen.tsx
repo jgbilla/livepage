@@ -10,7 +10,6 @@ import { Icon } from '../design/Icon';
 export function HomeScreen({ me }: { me: Me }) {
   const ws = useWorkspace();
   const pages = ws ? [...ws.pages].sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)).slice(0, 30) : null;
-  useEffect(() => { document.title = 'Livepage'; }, []);
 
   return (
     <div className="shell">

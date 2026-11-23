@@ -5,6 +5,7 @@ import { Icon } from './design/Icon';
 
 type Peer = { name: string; color: string; tab?: string };
 
+// Page tabs: a page's own sections, under its title (not the workspace tabs of open pages, see tabs.ts).
 // Optional tabs at the top of a page. With one tab, only a small "+ Add tab" shows,
 // so the page looks like a normal page. Each tab is its own live block document.
 export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced = true }: { doc: Y.Doc; active: string; onSelect: (id: string) => void; peers: Peer[]; readOnly?: boolean; synced?: boolean }) {
@@ -60,8 +61,8 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced 
             )}
           </div>
         ))}
-      {!readOnly && <button type="button" className="tab-add" onClick={() => { const id = addTab(doc, `Tab ${tabs.length + 1}`); onSelect(id); setEditing(id); }}>
-        + Add tab
+      {!readOnly && <button type="button" className="tab-add" onClick={() => { const id = addTab(doc, `Tab ${tabs.length + 1}`); onSelect(id); setEditing(id); }} title="Add a section to this page, as its own tab">
+        + Add page tab
       </button>}
     </nav>
   );
