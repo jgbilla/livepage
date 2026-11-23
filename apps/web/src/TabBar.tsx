@@ -5,7 +5,7 @@ import { MAIN_TAB, addTab, listTabs, removeTab, renameTab, tabsMap, type Tab } f
 import { Icon } from './design/Icon';
 import { HScrollEdges, useHScroll } from './HScroll';
 
-type Peer = { name: string; color: string; tab?: string };
+import type { Peer } from './Presence';
 
 // Page tabs: a page's own sections, under its title (not the workspace tabs of open pages, see tabs.ts).
 // Optional tabs at the top of a page. With one tab, only a small "+ Add tab" shows,
