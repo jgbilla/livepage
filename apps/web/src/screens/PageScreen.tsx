@@ -9,23 +9,30 @@ import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
 import { HistoryPanel } from './HistoryPanel';
+import { SidebarToggle } from '../Sidebar';
+import { TagEditor } from '../TagEditor';
+import { reloadWorkspace, setLiveTitle, useWorkspace } from '../workspace';
+
+type PageInfo = { id: string; title: string; path: string; folder_id: string | null; tags: string[] };
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
 export function PageScreen({ pageId, me }: { pageId: string; me: Me }) {
-  const [role, setRole] = useState<Role | null>(null);
+  const [info, setInfo] = useState<{ role: Role; page: PageInfo } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api<{ role: Role }>(`/pages/${pageId}`).then((r) => setRole(r.role)).catch((e) => setError(e.message));
+    api<{ role: Role; page: PageInfo }>(`/pages/${pageId}`).then(setInfo).catch((e) => setError(e.message));
   }, [pageId]);
 
   if (error) return <div className="center"><p>{error} <Link to="/">Back to your pages</Link></p></div>;
-  if (!role) return <div className="center muted">Loading…</div>;
-  return <LivePage pageId={pageId} me={me} role={role} />;
+  if (!info) return <div className="center muted">Loading…</div>;
+  return <LivePage pageId={pageId} me={me} role={info.role} info={info.page} />;
 }
 
-function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) {
+function LivePage({ pageId, me, role, info }: { pageId: string; me: Me; role: Role; info: PageInfo }) {
+  const ws = useWorkspace();
+  const folderPath = ws?.pages.find((p) => p.id === pageId)?.path ?? info.path;
   const readOnly = role === 'viewer' || role === 'commenter';
   const user = useMemo(() => ({ id: me.id, name: me.name, color: colorFor(me.id) }), [me]);
   const [status, setStatus] = useState('connecting');
@@ -59,7 +66,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
       setPeers(list);
     };
     const meta = doc.getMap(META);
-    const onMeta = () => setTitle(String(meta.get('title') ?? ''));
+    const onMeta = () => { const t = String(meta.get('title') ?? ''); setTitle(t); setLiveTitle(pageId, t); };
     provider.on('status', onStatus);
     awareness.on('change', onAwareness);
     meta.observe(onMeta);
@@ -69,8 +76,10 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
       awareness.off('change', onAwareness);
       meta.unobserve(onMeta);
     };
-  }, [provider, doc]);
+  }, [provider, doc, pageId]);
 
+  // A page shared with you that is not in your sidebar yet (just opened from a link): show it.
+  useEffect(() => { if (ws && !ws.pages.some((p) => p.id === pageId)) void reloadWorkspace(); }, [ws, pageId]);
   useEffect(() => () => { provider.destroy(); doc.destroy(); }, [provider, doc]);
   useEffect(() => { provider.setAwarenessField('tab', tab); }, [provider, tab]);
   useEffect(() => { document.title = `${title || 'Untitled'} · Livepage`; }, [title]);
@@ -78,7 +87,8 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
   return (
     <div className="shell">
       <header className="topbar">
-        <Link to="/" className="brand">Livepage</Link>
+        <SidebarToggle />
+        {folderPath && <span className="crumbs muted small">{folderPath.split('/').join(' / ')}</span>}
         <span className={`status status-${status}`}>{status}</span>
         {readOnly && <span className="badge">View only</span>}
         <div className="peers">
@@ -100,6 +110,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
           aria-label="Page title"
           onChange={(e) => doc.getMap(META).set('title', e.target.value.slice(0, 200))}
         />
+        <TagEditor pageId={pageId} initial={info.tags} readOnly={readOnly} />
         <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} />
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} />
       </main>

@@ -9,7 +9,8 @@
     "demo": "tsx --env-file-if-exists=../../.env src/demo.ts",
     "mcp": "tsx --env-file-if-exists=../../.env src/mcp.ts",
     "build": "echo 'run with tsx'",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "docs": "tsx --env-file-if-exists=../../.env src/docs-page.ts"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.9.0",
