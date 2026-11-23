@@ -16,6 +16,7 @@
     "@tiptap/extension-code-block-lowlight": "^3.35.0",
     "@tiptap/extension-collaboration": "^3.35.0",
     "@tiptap/extension-collaboration-caret": "^3.35.0",
+    "@tiptap/extension-list": "^3.35.0",
     "@tiptap/extension-placeholder": "^3.35.0",
     "@tiptap/extension-table": "^3.35.0",
     "@tiptap/pm": "^3.35.0",
@@ -23,9 +24,9 @@
     "@tiptap/starter-kit": "^3.35.0",
     "@tiptap/y-tiptap": "^3.3.1",
     "d3-force": "3.0.0",
+    "fflate": "^0.8.3",
     "highlight.js": "^11.11.2",
     "lowlight": "^3.3.0",
-    "fflate": "^0.8.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "yjs": "^13.6.33"
