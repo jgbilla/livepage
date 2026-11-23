@@ -219,9 +219,10 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .editor .selectedCell { background: var(--lp-accent-soft); }
 
 /* Tabs: underline tabs, the active one in ink */
-.tabbar { display: flex; align-items: flex-end; gap: var(--lp-space-1); margin: 0; border-bottom: var(--lp-border-width) solid transparent; overflow-x: auto; }
-.tabbar-multi { border-bottom-color: var(--lp-border); }
-.tab { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) 0 0;
+.tabbar { display: flex; align-items: flex-end; gap: var(--lp-space-1); margin: 0; overflow-x: auto; overflow-y: hidden; }
+/* The baseline is an inset shadow, not a border, so tabs never hang below the row (that made it scroll up and down on iPhones). */
+.tabbar-multi { box-shadow: inset 0 calc(-1 * var(--lp-border-width)) 0 var(--lp-border); }
+.tab { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; border-radius: var(--lp-radius-sm) var(--lp-radius-sm) 0 0;
   transition: border-color var(--lp-duration-fast), background-color var(--lp-duration-instant); }
 @media (hover: hover) { .tab:hover { background: var(--lp-hover); } }
 .tab-active { border-bottom-color: var(--lp-ink); }
@@ -240,7 +241,7 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .tabbar::-webkit-scrollbar { display: none; }
 /* Sideways rows (page tabs, open tabs): no rubber-banding past the ends, items snap into place, and
    a fade with an arrow over each end that has more (see HScroll.tsx). */
-.tabbar, .wt-strip { overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: 40px; -webkit-overflow-scrolling: touch; }
+.tabbar, .wt-strip { overscroll-behavior: contain; touch-action: pan-x; scroll-snap-type: x proximity; scroll-padding-inline: 40px; -webkit-overflow-scrolling: touch; }
 .tab, .tab-add, .wt-new { scroll-snap-align: start; flex-shrink: 0; }
 .wt-tab { scroll-snap-align: start; }
 .hscroll { position: relative; min-width: 0; --hscroll-bg: var(--lp-bg); }
@@ -922,10 +923,10 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 
 .wt-strip-wrap { position: sticky; top: 0; z-index: calc(var(--lp-z-sticky) + 1); --hscroll-bg: var(--lp-bg-subtle); }
 .wt-strip { display: flex; align-items: flex-end; gap: 2px; height: var(--wt-strip-h);
-  padding: 0 var(--lp-space-2); background: var(--lp-bg-subtle); border-bottom: var(--lp-border-width) solid var(--lp-border);
+  padding: 0 var(--lp-space-2); background: var(--lp-bg-subtle); box-shadow: inset 0 calc(-1 * var(--lp-border-width)) 0 var(--lp-border);
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .wt-strip::-webkit-scrollbar { display: none; }
-.wt-tab { position: relative; display: flex; align-items: center; gap: var(--lp-space-1-5); flex: 0 1 200px; min-width: 76px; height: 32px; margin-bottom: -1px;
+.wt-tab { position: relative; display: flex; align-items: center; gap: var(--lp-space-1-5); flex: 0 1 200px; min-width: 76px; height: 32px;
   padding: 0 var(--lp-space-1) 0 var(--lp-space-3); border: var(--lp-border-width) solid transparent; border-bottom: 0;
   border-radius: var(--lp-radius-md) var(--lp-radius-md) 0 0; font-size: var(--lp-text-sm); font-weight: var(--lp-weight-medium); line-height: 1;
   color: var(--lp-text-secondary); cursor: default; user-select: none; -webkit-user-select: none;
