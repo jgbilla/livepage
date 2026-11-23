@@ -113,7 +113,7 @@ jobs:
           SIGNUP_OPEN: '1' # the tests sign up several people (sharing); a real server allows only its first account
         run: |
           mkdir -p logs
-          nohup pnpm --filter @livepage/sandbox start > logs/sandbox.log 2>&1 &
+          PORT=5174 SANDBOX_FRAME_ANCESTORS=http://localhost:5173 nohup pnpm --filter @livepage/sandbox start > logs/sandbox.log 2>&1 &
           nohup pnpm --filter @livepage/server start > logs/server.log 2>&1 &
           for i in $(seq 60); do
             curl -sf http://localhost:5173/api/health > /dev/null && curl -sf http://localhost:5174/ > /dev/null && exit 0
