@@ -2,9 +2,14 @@
 const env = process.env;
 const production = env.NODE_ENV === 'production';
 
+function publicHost(host: string): string {
+  return host.includes('.') ? host : `${host}.onrender.com`;
+}
+
 function sandboxUrl(): string {
   if (env.SANDBOX_URL) return env.SANDBOX_URL.replace(/\/$/, '');
-  if (env.SANDBOX_HOST) return `https://${env.SANDBOX_HOST}`; // Render passes the sandbox service's host
+  // Render's fromService `host` is the internal name (e.g. "livepage-sandbox"); its public address is <name>.onrender.com.
+  if (env.SANDBOX_HOST) return `https://${publicHost(env.SANDBOX_HOST)}`;
   return 'http://localhost:5174';
 }
 
