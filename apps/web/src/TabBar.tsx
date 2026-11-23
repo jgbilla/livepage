@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { MAIN_TAB, addTab, listTabs, removeTab, renameTab, tabsMap, type Tab } from '@livepage/schema';
 import { Icon } from './design/Icon';
+import { HScrollEdges, useHScroll } from './HScroll';
 
 type Peer = { name: string; color: string; tab?: string };
 
@@ -27,8 +28,10 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced 
   }, [tabs, active, onSelect, synced]);
 
   const multi = tabs.length > 1;
+  const { ref, edges, nudge } = useHScroll<HTMLElement>(`${active} ${tabs.length}`);
   return (
-    <nav className={`tabbar ${multi ? 'tabbar-multi' : ''}`} aria-label="Page tabs">
+    <div className="hscroll tabbar-wrap">
+    <nav ref={ref} className={`tabbar ${multi ? 'tabbar-multi' : ''}`} aria-label="Page tabs">
       {multi &&
         tabs.map((t) => (
           <div key={t.id} className={`tab ${t.id === active ? 'tab-active' : ''}`}>
@@ -65,5 +68,7 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced 
         + Add page tab
       </button>}
     </nav>
+    {multi && <HScrollEdges edges={edges} nudge={nudge} />}
+    </div>
   );
 }
