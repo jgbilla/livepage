@@ -321,7 +321,7 @@ write(ag, `
 Livepage is model-agnostic: any AI can join a page, read it, and write text, tables, mind maps and custom UI live, with its own caret. Start by creating an agent token on your home page.
 
 ## Hosted MCP (any client, nothing to install)
-Every Livepage app serves an MCP endpoint at \`https://<your app>/mcp\` (Streamable HTTP). Connect with that address and the header \`Authorization: Bearer lp_...\`. (On livepage.onrender.com this arrives with the next update.)
+Every Livepage app serves an MCP endpoint at \`https://<your app>/mcp\` (Streamable HTTP). Connect with that address and the header \`Authorization: Bearer lp_...\`.
 **Claude Code**
 \`\`\`
 claude mcp add --transport http livepage https://<your app>/mcp --header "Authorization: Bearer lp_..."
