@@ -13,6 +13,8 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Accounts (email and password), your own page list, live page titles
 - Obsidian-style sidebar: your own nested folders of pages (create, rename, drag to move, collapse), a **Today** button that opens `YYYY/MM/DD/daily` (created if missing, using your local date)
 - Links between pages and tabs: type `[[` to search, add `#` for a tab, or paste a page link. Links point at ids, so they survive renames and moves, and every page lists its backlinks ("Linked from")
+- Search everything with Cmd+K (Ctrl+K): titles match instantly, and full-text matches from any block (tables, mind maps and HTML code too) follow with a snippet. Enter opens the page at the right tab and highlights the words. Only pages you can open are searched
+- Graph view (sidebar, or ◉ Graph on a page for the local graph around it): every page you can open and the links between them. Hover to see neighbours, click to open, drag, zoom, filter by title or #tag, show tags as nodes
 - Tags on pages, and saved **views** in the sidebar that list the pages with any or all of some tags
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
@@ -107,7 +109,7 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 
 Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
 
-Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `search_pages`, `get_link_graph`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
 
 **HTTP**:
 
