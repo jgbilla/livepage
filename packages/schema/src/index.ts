@@ -9,6 +9,9 @@
 //   - Map "comments"          commentId -> Y.Map (anchor, author, body, resolved)  [see SPEC.md, not wired in the UI yet]
 //   - Map "meta"              title, icon, etc.
 //   - Map "actions"           actionId -> BlockAction: values a user sent from an HTML block's controls to the agent
+//
+// Links to other pages or tabs are inline "pageLink" elements inside a paragraph (attrs page, tab, label).
+// They point at ids, so they keep working when the target is renamed or moved.
 import * as Y from 'yjs';
 
 export const FRAGMENT = 'default';
@@ -98,6 +101,7 @@ export function htmlCodeText(doc: Y.Doc, blockId: string): Y.Text {
 
 function textOf(el: Y.XmlElement | Y.XmlText): string {
   if (el instanceof Y.XmlText) return el.toString().replace(/<[^>]+>/g, '');
+  if (el.nodeName === LINK_NODE) return linkToken(el.getAttributes() as LinkTarget);
   return el.toArray().map((c) => textOf(c as Y.XmlElement | Y.XmlText)).join('');
 }
 
@@ -180,8 +184,77 @@ export function appendHeading(doc: Y.Doc, text: string, level = 2, tab: string =
 export function appendParagraph(doc: Y.Doc, text: string, tab: string = MAIN_TAB): void {
   doc.transact(() => {
     const f = fragment(doc, tab);
-    f.insert(f.length, [makeParagraph(text).el]);
+    f.insert(f.length, [paragraphWithLinks(text)]);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Links between pages and tabs
+//
+// In text written by agents (and in what read_page returns) a link is written
+//   [[p_abc123def]]            a page
+//   [[p_abc123def#tab_x1]]     a tab of a page
+//   [[p_abc123def|Label]]      with the text to show if the target cannot be opened
+// The editor shows the target's current title, so renames never break a link.
+
+export const LINK_NODE = 'pageLink';
+export type LinkTarget = { page: string; tab?: string | null; label?: string | null };
+export const LINK_RE = /\[\[(p_[\w-]{8,40})(?:#([\w-]{1,60}))?(?:\|([^\]\n]{0,200}))?\]\]/g;
+
+export function linkToken(t: LinkTarget): string {
+  return `[[${t.page}${t.tab && t.tab !== MAIN_TAB ? `#${t.tab}` : ''}${t.label ? `|${String(t.label).replace(/[\]|]/g, '')}` : ''}]]`;
+}
+
+/** Split text into plain strings and link targets. */
+export function splitLinks(text: string): (string | LinkTarget)[] {
+  const out: (string | LinkTarget)[] = [];
+  let last = 0;
+  for (const m of text.matchAll(LINK_RE)) {
+    if (m.index! > last) out.push(text.slice(last, m.index));
+    out.push({ page: m[1], tab: m[2] ?? null, label: m[3] ?? null });
+    last = m.index! + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+export function makeLink(t: LinkTarget): Y.XmlElement {
+  const el = new Y.XmlElement(LINK_NODE);
+  el.setAttribute('page', t.page);
+  if (t.tab && t.tab !== MAIN_TAB) el.setAttribute('tab', t.tab);
+  if (t.label) el.setAttribute('label', String(t.label).slice(0, 200));
+  return el;
+}
+
+/** A paragraph element from text that may contain [[...]] links. */
+export function paragraphWithLinks(text: string): Y.XmlElement {
+  const el = new Y.XmlElement('paragraph');
+  const parts = splitLinks(text).map((p) => {
+    if (typeof p !== 'string') return makeLink(p);
+    const t = new Y.XmlText();
+    t.insert(0, p);
+    return t;
+  });
+  el.insert(0, parts.length ? parts : [new Y.XmlText()]);
+  return el;
+}
+
+export type PageLinkRow = { fromTab: string; page: string; tab: string | null };
+
+/** Every link on the page (all tabs), for the backlinks index. */
+export function listLinks(doc: Y.Doc): PageLinkRow[] {
+  const out: PageLinkRow[] = [];
+  const walk = (node: Y.XmlElement | Y.XmlFragment | Y.XmlText, fromTab: string) => {
+    if (node instanceof Y.XmlText) return;
+    if (node instanceof Y.XmlElement && node.nodeName === LINK_NODE) {
+      const page = node.getAttribute('page');
+      if (page) out.push({ fromTab, page, tab: node.getAttribute('tab') || null });
+      return;
+    }
+    node.toArray().forEach((c) => walk(c as Y.XmlElement, fromTab));
+  };
+  for (const t of listTabs(doc)) walk(fragment(doc, t.id), t.id);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

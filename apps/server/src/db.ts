@@ -80,6 +80,44 @@ create table if not exists ai_settings (
   key_hint    text not null default '',
   updated_at  timestamptz not null default now()
 );
+-- Folders: each person's own tree (like an Obsidian vault). A page sits in one folder per
+-- member, so a page someone shared with you can live wherever you like in your tree.
+create table if not exists folders (
+  id         text primary key,
+  owner_id   text not null references users(id) on delete cascade,
+  parent_id  text references folders(id) on delete cascade,
+  name       text not null,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists folders_sibling_name_idx on folders (owner_id, coalesce(parent_id, ''), lower(name));
+alter table page_members add column if not exists folder_id text references folders(id) on delete set null;
+-- Tags belong to the page, so everyone with access sees the same tags. Stored lowercase.
+create table if not exists page_tags (
+  page_id text not null references pages(id) on delete cascade,
+  tag     text not null,
+  primary key (page_id, tag)
+);
+create index if not exists page_tags_tag_idx on page_tags (tag);
+-- Saved views: a named list in someone's sidebar of the pages that match some tags.
+create table if not exists views (
+  id         text primary key,
+  owner_id   text not null references users(id) on delete cascade,
+  name       text not null,
+  tags       jsonb not null default '[]',
+  match      text not null default 'any' check (match in ('any','all')),
+  created_at timestamptz not null default now()
+);
+create index if not exists views_owner_idx on views (owner_id);
+-- Links between pages, rebuilt from each page's document when it is saved (for backlinks).
+create table if not exists page_links (
+  from_page text not null references pages(id) on delete cascade,
+  from_tab  text not null default 'main',
+  from_tab_title text not null default '',
+  to_page   text not null,
+  to_tab    text
+);
+create index if not exists page_links_to_idx on page_links (to_page);
+create index if not exists page_links_from_idx on page_links (from_page);
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

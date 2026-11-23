@@ -11,6 +11,9 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 ## What works today
 
 - Accounts (email and password), your own page list, live page titles
+- Obsidian-style sidebar: your own nested folders of pages (create, rename, drag to move, collapse), a **Today** button that opens `YYYY/MM/DD/daily` (created if missing, using your local date)
+- Links between pages and tabs: type `[[` to search, add `#` for a tab, or paste a page link. Links point at ids, so they survive renames and moves, and every page lists its backlinks ("Linked from")
+- Tags on pages, and saved **views** in the sidebar that list the pages with any or all of some tags
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
 - Built-in AI assistant (**✦ Ask AI** on every page): bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model; it edits the page live with its own caret
@@ -116,7 +119,7 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 
 Web chat apps that only accept OAuth connectors (ChatGPT, claude.ai) can't use a token yet; use the HTTP API below, or a client above.
 
-Tools: `list_pages`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
+Tools: `list_pages` (filter by folder `path` or `tags`), `list_folders`, `create_folder`, `create_page`, `open_daily_page`, `move_page`, `rename_page`, `set_page_tags`, `list_tags`, `create_view`, `get_backlinks`, `read_page`, `add_tab`, `write_paragraph`, `add_heading`, `insert_table`, `insert_mind_map`, `add_mind_map_node`, `insert_custom_ui`, `insert_html_block`, `update_html_block`, `get_block_actions`, `resolve_block_action`.
 
 **HTTP**:
 
@@ -125,7 +128,13 @@ curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages
 curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages/p_xxx/content
 curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
   -d '{"rows":[["Planet","Moons"],["Mars","2"]]}' https://<your app>/api/pages/p_xxx/tables
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"title":"Chapter 1","path":"Projects/Book","tags":["draft"]}' https://<your app>/api/pages
+curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \
+  -d '{"date":"2026-11-23"}' https://<your app>/api/daily
 ```
+
+The folder, tag and view endpoints are listed at the top of `apps/server/src/agent-api.ts`.
 
 ## Layout
 

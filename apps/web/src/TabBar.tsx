@@ -6,7 +6,7 @@ type Peer = { name: string; color: string; tab?: string };
 
 // Optional tabs at the top of a page. With one tab, only a small "+ Add tab" shows,
 // so the page looks like a normal page. Each tab is its own live block document.
-export function TabBar({ doc, active, onSelect, peers, readOnly = false }: { doc: Y.Doc; active: string; onSelect: (id: string) => void; peers: Peer[]; readOnly?: boolean }) {
+export function TabBar({ doc, active, onSelect, peers, readOnly = false, synced = true }: { doc: Y.Doc; active: string; onSelect: (id: string) => void; peers: Peer[]; readOnly?: boolean; synced?: boolean }) {
   const [tabs, setTabs] = useState<Tab[]>(() => listTabs(doc));
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -18,10 +18,11 @@ export function TabBar({ doc, active, onSelect, peers, readOnly = false }: { doc
     return () => map.unobserve(update);
   }, [doc]);
 
-  // If the active tab was deleted by someone else, fall back to the main tab.
+  // If the active tab was deleted by someone else, fall back to the main tab. Wait for the first
+  // sync: before it, a link to a tab (?tab=) would look like a missing tab.
   useEffect(() => {
-    if (!tabs.some((t) => t.id === active)) onSelect(MAIN_TAB);
-  }, [tabs, active, onSelect]);
+    if (synced && !tabs.some((t) => t.id === active)) onSelect(MAIN_TAB);
+  }, [tabs, active, onSelect, synced]);
 
   const multi = tabs.length > 1;
   return (
