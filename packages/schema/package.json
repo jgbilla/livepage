@@ -7,13 +7,15 @@
   "sideEffects": false,
   "scripts": {
     "build": "echo 'source package'",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "test": "node --import tsx --test --test-reporter=spec 'test/*.test.ts'"
   },
   "dependencies": {
     "marked": "^16.4.2",
     "yjs": "^13.6.33"
   },
   "devDependencies": {
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
 }
