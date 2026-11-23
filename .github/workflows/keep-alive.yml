@@ -1,0 +1,37 @@
+# Keeps the free Render instance awake. Render's free plan stops a service after 15 minutes
+# without traffic, and the next visitor then waits about a minute for it to start.
+# This asks the app's health endpoint every 5 minutes (GitHub often runs schedules late, so
+# 5 leaves room before the 15-minute limit).
+#
+# Only the app is pinged, not the sandbox: Render's 750 free hours a month cover one
+# always-on service, not two.
+#
+# Forks: this runs only in the original repository unless you set a repository variable
+# KEEPALIVE_URL (Settings > Secrets and variables > Actions > Variables) to your own
+# https://<your app>/api/health. To turn it off, disable this workflow in the Actions tab.
+name: Keep alive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    if: vars.KEEPALIVE_URL != '' || github.repository == 'jgbilla/livepage'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ask the app if it is up
+        env:
+          URL: ${{ vars.KEEPALIVE_URL || 'https://livepage.onrender.com/api/health' }}
+        run: |
+          # A sleeping instance takes about a minute to answer; wait for it and retry once.
+          curl --silent --show-error --fail --max-time 90 --retry 1 --retry-delay 5 --output /dev/null \
+            --write-out 'status %{http_code} in %{time_total}s\n' "$URL"
