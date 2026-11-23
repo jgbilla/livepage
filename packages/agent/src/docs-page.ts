@@ -3,12 +3,14 @@
 //
 //   LIVEPAGE_URL=wss://<your app>/collab AGENT_TOKEN=lp_... pnpm agent:docs            # creates a new page
 //   LIVEPAGE_URL=wss://<your app>/collab AGENT_TOKEN=lp_... pnpm agent:docs p_xxxx     # writes into an existing (empty) page
+//   ... pnpm agent:docs p_xxxx --replace                                                # clears that page first, then rewrites it
+// --replace keeps the page's comments and history (restore the old version from History if needed).
 //
-// This writes the whole page, so it is for the first version only. To update the documentation page afterwards,
-// change just the blocks or words that are out of date with the targeted edit tools (get_outline, read_blocks,
-// replace_text, replace_blocks, insert_blocks, set_table_cell...) rather than running this again.
+// This writes the whole page, so it is for a first version or a full restructure. To bring an existing documentation
+// page up to date, change just the blocks or words that are out of date with the targeted edit tools (get_outline,
+// read_blocks, replace_text, replace_blocks, insert_blocks, set_table_cell...) rather than running this again.
 import * as Y from 'yjs';
-import { fragment, META, renameTab } from '@livepage/schema';
+import { fragment, listTabs, MAIN_TAB, META, removeTab, renameTab } from '@livepage/schema';
 import { LiveAgent } from './client.ts';
 import { httpBaseFor } from './tools.ts';
 
@@ -19,7 +21,8 @@ const TITLE = 'Livepage documentation';
 // Examples use this app's real address, e.g. https://livepage.example.com/mcp
 const HOST = new URL(base).host;
 
-let pageId = process.argv[2];
+const replace = process.argv.includes('--replace');
+let pageId = process.argv.slice(2).find((a) => !a.startsWith('--'));
 if (!pageId) {
   const res = await fetch(`${base}/api/pages`, {
     method: 'POST',
@@ -33,6 +36,20 @@ console.log(`[docs] writing ${pageId}`);
 
 const agent = await LiveAgent.connect({ page: pageId, url: wsUrl, token, name: 'Docs writer' });
 const doc = agent.doc;
+
+if (replace) {
+  doc.transact(() => {
+    for (const t of listTabs(doc)) {
+      const f = fragment(doc, t.id);
+      if (f.length) f.delete(0, f.length);
+      if (t.id !== MAIN_TAB) removeTab(doc, t.id);
+    }
+    for (const name of ['htmlCode', 'mindMaps', 'actions']) {
+      const m = doc.getMap(name);
+      for (const k of [...m.keys()]) m.delete(k);
+    }
+  });
+}
 
 // ---- tiny markdown-ish writer: headings, paragraphs, bullets, numbered lists, code blocks,
 // with inline `code` and **bold**.
@@ -110,10 +127,15 @@ Write like in Notion, keep notes like in Obsidian, and drop in live HTML/JS bloc
 - **One live page:** a single scrolling page, with optional tabs at the top.
 - **Any mix of blocks:** text, headings, lists, tables, mind maps and sandboxed custom UI, side by side.
 - **Real-time collaboration:** live carets and presence for every person and agent.
-- **Any AI:** agents connect over MCP or a plain HTTP API. No model is built in.
-- **Sharing:** invite links with editor, commenter or viewer access, enforced on the server.
-- **Organized like Obsidian:** your own folders in a sidebar, a Today button for \`YYYY/MM/DD/daily\`, tags, and saved tag views.
-- **Links:** type \`[[\` to link a page or one of its tabs. Links survive renames and moves, and every page lists what links to it.
+- **Any AI:** ✦ Ask AI on every page with your own key (Claude, GPT, Gemini, OpenRouter or a local model), or connect your own agent over MCP or a plain HTTP API.
+- **Comments:** on a selection, a block or the whole page, with replies, resolve and @mentions of people and agents.
+- **Version history:** every saved version, who changed it, a word-level diff, and restore for everyone.
+- **Sharing:** invite links with editor, commenter or viewer access, enforced on the server, or publish a public read-only page.
+- **Organized like Obsidian:** your own folders in a sidebar, a Today button for \`YYYY/MM/DD/daily\`, tags, saved tag views, templates, and pages in tabs side by side.
+- **Links:** type \`[[\` to link a page or one of its tabs. Links survive renames and moves, every page lists what links to it, and a graph view shows them all.
+- **Search:** Cmd/Ctrl+K finds titles instantly and text in any block.
+- **Markdown in and out:** import Markdown or an Obsidian vault, export a page as Markdown or PDF, or everything as a zip.
+- **Installable:** add it to your home screen on phone, tablet or desktop; pages you've opened work offline.
 - **Yours to run:** MIT licensed, self-hostable with Docker, or one-click on Render with a Neon Postgres database.
 
 ## How it fits together
@@ -173,11 +195,13 @@ This mind map is a native block: click a node to edit it, press Tab for a child 
 agent.useTab('main').addMindMap({
   text: 'Livepage',
   children: [
-    { text: 'Write', children: [{ text: 'Text, headings, lists' }, { text: 'Tables' }, { text: 'Mind maps' }, { text: 'Tabs' }] },
+    { text: 'Write', children: [{ text: 'Text, headings, lists' }, { text: 'Tables' }, { text: 'Mind maps' }, { text: 'Footnotes' }, { text: '/ menu' }, { text: 'Tabs' }] },
     { text: 'Build', children: [{ text: 'Custom UI blocks' }, { text: 'Streaming in order' }, { text: 'Host bridge (livepage.send)' }] },
-    { text: 'Collaborate', children: [{ text: 'Live carets' }, { text: 'Share links' }, { text: 'Roles' }] },
-    { text: 'Agents', children: [{ text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }] },
-    { text: 'Run it', children: [{ text: 'Render + Neon' }, { text: 'Docker' }, { text: 'Locally' }] },
+    { text: 'Organize', children: [{ text: 'Folders and daily pages' }, { text: '[[Links]] and backlinks' }, { text: 'Graph view' }, { text: 'Tags and views' }, { text: 'Search' }, { text: 'Templates' }] },
+    { text: 'Collaborate', children: [{ text: 'Live carets' }, { text: 'Comments and @mentions' }, { text: 'Version history' }, { text: 'Share links' }, { text: 'Roles' }] },
+    { text: 'Agents', children: [{ text: 'Ask AI (your own key)' }, { text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }, { text: 'Mention webhooks' }] },
+    { text: 'Share', children: [{ text: 'Publish to the web' }, { text: 'Import Markdown / Obsidian' }, { text: 'Export Markdown, PDF, zip' }] },
+    { text: 'Run it', children: [{ text: 'Render + Neon' }, { text: 'Docker' }, { text: 'Locally' }, { text: 'Install as an app' }] },
   ],
 }, 'Livepage features');
 
@@ -188,10 +212,11 @@ Each tab at the top goes into detail:
 table('main', [
   ['Tab', 'What it covers'],
   ['Getting started', 'Using the hosted app, running it locally, self-hosting with Docker, deploying to Render + Neon'],
-  ['Editor and blocks', 'Every block type, when to use which, custom UI streaming and the host bridge, tabs'],
-  ['Collaboration and sharing', 'Live editing, roles, share links and how access is enforced'],
+  ['Editor and blocks', 'Every block type, the / menu, footnotes, custom UI streaming and the host bridge, tabs'],
+  ['Organize and publish', 'Folders, daily pages, links and backlinks, graph, search, tags, templates, import, export and publishing'],
+  ['Collaboration and sharing', 'Live editing, comments, version history, roles, share links and how access is enforced'],
   ['Accounts and sign-in', 'Email and password, Google via Neon Auth, sessions, agent tokens, security'],
-  ['Connect agents', 'Hosted MCP for any client, the local MCP server, the HTTP API and the full tool list'],
+  ['Connect agents', 'Ask AI, hosted MCP for any client, the local MCP server, @mentions, the HTTP API and the full tool list'],
   ['Architecture', 'Components, the document model, storage, the sandbox security model, repo layout'],
   ['Roadmap', 'What is built, what comes next, and open questions'],
 ]);
@@ -203,7 +228,9 @@ write(gs, `
 ## Use the hosted app
 1. Open your Livepage address (https://<your app>) and sign up with email and password, or with **Continue with Google** where it is enabled.
 2. Click **+ New page**. Give it a title and start writing.
-3. Click **Share** to invite people, or create an **agent token** on your home page to let an AI join.
+3. Click **Share** to invite people, press **✦ Ask AI** to work with an assistant, or create an **agent token** on your home page to let your own AI join.
+4. Press **Today** in the sidebar for your daily page, and Cmd/Ctrl+K to search everything.
+To install it as an app, use Share > Add to Home Screen in Safari, or the browser's Install button.
 On Render's free plan the app sleeps after 15 minutes without visitors, so the first visit after a break can take about a minute.
 
 ## Run it locally
@@ -240,6 +267,10 @@ table(gs, [
   ['SANDBOX_FRAME_ANCESTORS', 'Sandbox', 'The app address allowed to embed HTML blocks.'],
   ['SIGNUP_OPEN', 'App', 'Unset: only the first account can be created (one person per server). 1: anyone can sign up. 0: no sign-ups.'],
   ['NEON_AUTH_BASE_URL', 'App', 'Optional. Turns on "Continue with Google" through Neon Auth.'],
+  ['AI_KEY_SECRET', 'App', 'Encrypts the Ask AI keys people save. Changing it makes saved keys unreadable (people paste them again).'],
+  ['AI_ALLOW_PRIVATE_ENDPOINTS', 'App', 'Set to 1 to allow Ask AI endpoints on private addresses (Ollama, LM Studio). On in dev, off in production.'],
+  ['PUBLIC_URL', 'App', 'Public address used in links sent to agents (mentions and webhooks). Render sets it automatically.'],
+  ['WEBHOOK_ALLOW_PRIVATE', 'App', 'Set to 1 to let agent webhooks call private addresses in production.'],
   ['AGENT_TOKEN', 'Dev only', 'Shared development token. Ignored in production.'],
 ]);
 
@@ -252,13 +283,18 @@ A page is a stack of blocks, and every block type is first-class: any mix on the
 table(ed, [
   ['Block', 'Kind', 'How to edit', 'Status'],
   ['Paragraph, heading, list, quote, code', 'Native text', 'Type; agents write character by character', 'Built'],
-  ['Table', 'Native', 'Toolbar > Table; cells are normal text', 'Built'],
+  ['Table', 'Native', '/ menu > Table; cells are normal text', 'Built'],
   ['Mind map', 'Native', 'Click a node; Tab adds a child, Enter a sibling', 'Built'],
   ['Custom UI / HTML block', 'Sandboxed code', '"Edit code" to co-edit the source live', 'Built'],
+  ['Page link', 'Inline', 'Type [[ and pick a page, add # for a tab', 'Built'],
+  ['Footnote', 'Inline', '/ menu > Footnote, or Ctrl/Cmd+Alt+F after a selection', 'Built'],
   ['Drawing / whiteboard', 'Native', 'Shapes and arrows', 'Planned'],
   ['Design frame, images, files, database views', 'Native', '', 'Planned'],
 ]);
 write(ed, `
+## Inserting and formatting
+Type \`/\` anywhere for the block menu: headings, lists, tables, mind maps, live HTML blocks, footnotes and page links. Select text for a small floating menu with bold, italic, link, comment, footnote and Ask AI. Footnotes are numbered in reading order and listed at the bottom of each tab.
+
 ## Native first, custom UI when it earns it
 Native blocks are editable, searchable and exportable like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers and one-off visualizations. Agents follow the same rule: plain text first, then a native table or mind map, and custom UI only for motion or interaction.
 
@@ -274,20 +310,57 @@ Tabs are optional, like Google Docs tabs, and show at the top of the page. Click
 `);
 
 // =====================================================================================
+const og = agent.addTab('Organize and publish');
+write(og, `
+# Organize and publish
+## Folders and daily pages
+The sidebar holds your own nested folders of pages, like an Obsidian vault: create, rename, drag to move and collapse them. **Today** opens \`YYYY/MM/DD/daily\` for your local date, creating it if it's missing.
+
+## Links, backlinks and the graph
+- Type \`[[\` to search for a page and link it, add \`#\` to link one of its tabs, or paste a page link. Links point at ids, so they survive renames and moves.
+- Every page lists the pages that link to it under "Linked from".
+- **Graph view** (in the sidebar, or ◉ Graph on a page for the local graph around it) shows every page you can open and the links between them. Hover for neighbours, click to open, filter by title or #tag.
+
+## Search
+Cmd/Ctrl+K searches everything you can open. Titles match instantly, then full-text matches from any block (tables, mind maps and HTML code too) follow with a snippet. Enter opens the page at the right tab and highlights the words.
+
+## Pages in tabs
+Cmd/Ctrl-click or middle-click any page link to open it in a new tab, like Obsidian. Drag tabs to reorder, right-click to pin, close others or open side by side. Alt+1…9 jumps to a tab, Alt+T opens one and Alt+W closes it, and your tabs come back when you reload. (These are different from the tabs inside a page.)
+
+## Tags and views
+Tag pages, then save **views** in the sidebar that list the pages with any or all of some tags.
+
+## Templates
+Mark any page as a template from the ⋯ menu, start new pages from it in the sidebar, and pick one for your daily pages. \`{{date}}\`, \`{{title}}\`, \`{{yesterday}}\` and formats like \`{{date:MMMM D, YYYY}}\` fill in automatically. Any other \`{{Field}}\` stays highlighted for you or an agent to fill in.
+
+## Import and export
+Import Markdown files, a folder or an Obsidian vault (or a .zip): folders, frontmatter, \`#tags\`, \`[[links]]\` and \`[^1]\` footnotes come across. Export a page as Markdown or PDF, or everything as a zip you can open in Obsidian.
+
+## Publish to the web
+Publish a page to get a clean, public, read-only copy at \`/pub/<slug>\` that anyone can read without an account. Live HTML blocks keep running in the sandbox. Unpublish any time.
+`);
+
+// =====================================================================================
 const co = agent.addTab('Collaboration and sharing');
 write(co, `
 # Collaboration and sharing
 ## Live editing
 Every page is one shared document (Yjs) synced over a WebSocket. Edits from people and agents merge automatically, even when they type in the same paragraph at the same time. Each participant has a named caret, the presence bar shows who is on the page, and tab dots show who is on which tab.
 
+## Comments
+Select text and press **💬 Comment** (Ctrl/Cmd+Alt+M), click 💬 on a block, or use **Comment on the page**. Threads have replies and can be resolved. Type \`@\` to mention a person on the page or one of their agents: people see their mentions on the home page, and a mentioned agent gets the comment and answers in the thread (see Connect agents). Comments stay attached to their text while people and agents edit around it.
+
+## Version history
+History lists every saved version and who made it (a person, or an agent marked ✦), with a block-by-block diff down to the word. Restore any version and it comes back live for everyone. Agent edits always land in their own version, so they are easy to undo. Old versions are thinned out (all for 2 days, hourly to 30 days, then daily, at most 200 per page) and stored compressed.
+
 ## Roles
 `);
 table(co, [
-  ['Role', 'Read', 'Edit', 'Share and manage members'],
-  ['Owner', 'Yes', 'Yes', 'Yes'],
-  ['Editor', 'Yes', 'Yes', 'No'],
-  ['Commenter', 'Yes', 'No (comments come in a later milestone)', 'No'],
-  ['Viewer', 'Yes', 'No', 'No'],
+  ['Role', 'Read', 'Comment', 'Edit', 'Share and manage members'],
+  ['Owner', 'Yes', 'Yes', 'Yes', 'Yes'],
+  ['Editor', 'Yes', 'Yes', 'Yes', 'No'],
+  ['Commenter', 'Yes', 'Yes', 'No', 'No'],
+  ['Viewer', 'Yes', 'No', 'No', 'No'],
 ]);
 write(co, `
 ## Share links
@@ -297,7 +370,7 @@ write(co, `
 The owner can turn links off, change members' roles or remove them at any time.
 
 ## Enforced on the server
-Access isn't just hidden in the interface. Every live connection is authenticated and checked against the page's members. Viewers and commenters connect read-only, so the server drops any edit they send, even one forced from the browser's developer tools. People who aren't members see "Page not found, or you do not have access."
+Access isn't just hidden in the interface. Every live connection is authenticated and checked against the page's members. Viewers and commenters connect read-only (commenters can still comment), so the server drops any edit they send, even one forced from the browser's developer tools. People who aren't members see "Page not found, or you do not have access."
 `);
 
 // =====================================================================================
@@ -327,7 +400,14 @@ Agents can't create tokens, and a token only opens pages its owner can open. Kee
 const ag = agent.addTab('Connect agents');
 write(ag, `
 # Connect agents
-Livepage is model-agnostic: any AI can join a page, read it, and write text, tables, mind maps and custom UI live, with its own caret. Start by creating an agent token on your home page.
+Livepage is model-agnostic: any AI can join a page, read it, and write text, tables, mind maps and custom UI live, with its own caret.
+
+## Ask AI
+Press **✦ Ask AI** on any page, or select text and pick Ask AI. Two ways to answer:
+- **Built-in assistant:** bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model. Keys are stored encrypted, and the assistant edits the page live with its own caret.
+- **Your own connected agent:** pick it in the panel's **Ask** menu, which shows whether it's online. The request goes to that agent (Claude Code, Cursor, Codex…), which works on the page with its own files, memory and tools and answers in the panel. Tell the agent *"Listen for Livepage requests and handle them"*.
+
+To connect your own agent, create an agent token on your home page and use one of the setups below.
 
 ## Hosted MCP (any client, nothing to install)
 Every Livepage app serves an MCP endpoint at \`https://<your app>/mcp\` (Streamable HTTP). Connect with that address and the header \`Authorization: Bearer lp_...\`.
@@ -384,6 +464,13 @@ table(ag, [
   ['insert_html_block / update_html_block', 'Raw HTML in one piece, or replace a block\'s code'],
   ['get_block_actions / resolve_block_action', 'Receive input people send from block controls, and answer it'],
   ['add_tab', 'Create a tab; every writing tool takes an optional tab'],
+  ['add_footnote / update_footnote / remove_footnote', 'Footnotes on a quote in the page'],
+  ['get_mentions / dismiss_mention', 'Comments that @mention this agent (waits up to 60s for a new one)'],
+  ['list_comments / add_comment / reply_to_comment / resolve_comment', 'Read, start, answer and resolve comment threads'],
+  ['list_templates / set_template / get_template_fields / fill_template_fields', 'Templates and their {{Field}}s'],
+  ['import_markdown / export_markdown', 'Markdown in and out'],
+  ['publish_page / unpublish_page', 'A public read-only copy at /pub/<slug>'],
+  ['wait_for_requests / reply_to_request', 'Ask AI requests sent to this agent, and the answer shown in the panel'],
 ]);
 write(ag, `
 ### Small edits, not rewrites
@@ -413,6 +500,14 @@ table(ag, [
   ['POST/PUT /api/pages/<id>/html-blocks', 'Add or replace an HTML block'],
   ['POST /api/pages/<id>/tabs', 'Add a tab'],
   ['GET /api/pages/<id>/actions', 'Pending input from block controls'],
+  ['POST /api/daily', 'Open or create a daily page ({ "date" })'],
+  ['GET /api/mentions?wait=30', 'Long-poll for comments that @mention this agent'],
+  ['POST /api/pages/<id>/comments', 'Comment on the page ({ "body", "quote" })'],
+  ['POST /api/pages/<id>/comments/<thread id>', 'Reply in a thread ({ "body" }); replying marks the mention handled'],
+  ['GET /api/agent-requests?wait=20', 'Ask AI requests sent to this agent'],
+  ['POST /api/agent-requests/<id>/reply', 'Answer in the Ask panel ({ "text", "done" }); done: false posts a progress note'],
+  ['GET /api/pages/<id>/versions', 'Version history; add /<version id>?compare=previous|current for a diff'],
+  ['POST /api/pages/<id>/versions/<version id>/restore', 'Restore a version live for everyone'],
 ]);
 write(ag, `
 \`\`\`
@@ -420,6 +515,9 @@ curl -H "Authorization: Bearer lp_..." https://<your app>/api/pages/p_xxx/conten
 curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/json" \\
   -d '{"rows":[["Planet","Moons"],["Mars","2"]]}' https://<your app>/api/pages/p_xxx/tables
 \`\`\`
+
+## @mentions and webhooks
+When someone mentions an agent in a comment, the agent finds out by MCP (\`get_mentions\`), HTTP (\`GET /api/mentions?wait=30\`) or a webhook. On the home page, **Add webhook** on an agent token: Livepage POSTs a \`comment.mention\` event (page, comment, the whole thread and how to reply) to that URL right away, signed with \`x-livepage-signature: sha256=HMAC_SHA256(secret, x-livepage-timestamp + "." + body)\`. Use it to start an agent run from a GitHub Action, a serverless function or an Agent SDK script. Agents write mentions as \`@[Name](user:<id>)\` or \`@[Name](agent:<id>)\`.
 `);
 
 // =====================================================================================
@@ -430,8 +528,8 @@ write(ar, `
 `);
 table(ar, [
   ['Part', 'What it is', 'Code'],
-  ['Web app', 'React 19 + TipTap 3 editor, Yjs collaboration, tabs, sharing screens', 'apps/web'],
-  ['Server', 'Hocuspocus 4 live sync, HTTP API, hosted MCP, serves the web app; one origin', 'apps/server'],
+  ['Web app', 'React 19 + TipTap 3 editor, Yjs collaboration, sidebar, search, graph, comments, history, Ask AI; installable and offline-capable', 'apps/web'],
+  ['Server', 'Hocuspocus 4 live sync, HTTP API, hosted MCP, versions, mentions and webhooks, Ask AI, publishing; serves the web app on one origin', 'apps/server'],
   ['Sandbox', 'Separate-origin runner for HTML blocks with a strict CSP', 'apps/sandbox'],
   ['Schema', 'Shared page model used by the editor, the server and agents', 'packages/schema'],
   ['Agent', 'Live agent client, demo, MCP tools and the local MCP server', 'packages/agent'],
@@ -446,11 +544,12 @@ Each page is one Yjs document:
 - \`htmlCode\`: one live text per HTML block, so code is co-edited character by character.
 - \`mindMaps\`: mind map nodes, edited node by node.
 - \`actions\`: input people sent from block controls, waiting for an agent.
+- \`comments\`: where each comment is anchored (Yjs relative positions, so anchors follow the text).
 - \`meta\`: the page title.
 One document per page means one sync connection, one permission check and one history, and agents read the whole page in one call.
 
 ## Storage
-Postgres, hosted by default (Neon or Supabase), so nothing is lost if a machine or container dies. The server saves each page's Yjs state and also writes a \`blocks\` table (id, tab, position, type, text, attributes) that you can query with SQL. Other tables: users, sessions, pages, page_members, share_links and api_tokens. \`pnpm dev:memory\` swaps in an in-memory Postgres (PGlite) for quick tries.
+Postgres, hosted by default (Neon or Supabase), so nothing is lost if a machine or container dies. The server saves each page's Yjs state and also writes a \`blocks\` table (id, tab, position, type, text, attributes) that you can query with SQL. Other tables: users, sessions, pages, page_members, share_links, api_tokens, folders, page_tags, views, page_links, comments, comment_mentions, page_versions, agent_requests and ai_settings. \`pnpm dev:memory\` swaps in an in-memory Postgres (PGlite) for quick tries.
 
 ## Security model for HTML blocks
 - Blocks run in a sandboxed iframe served from a different site (on Render, \`*.onrender.com\` is on the Public Suffix List, so the app and the sandbox are different sites).
@@ -468,17 +567,18 @@ table(rm, [
   ['Milestone', 'What', 'Status'],
   ['M0 Live demo', 'Two browsers and an agent edit one page live: caret, table, mind map, streamed custom UI, host bridge, tabs', 'Done'],
   ['M1 Accounts, sharing, hosting', 'Sign up, page list, roles, share links, agent tokens, Render + Neon deploy, Google sign-in', 'Done'],
-  ['M2 Comments', 'Comment on a selection, threads, agents read and reply', 'Next'],
-  ['M3 Writing quality', 'Slash menu, drag handles, drawing block, code editor, suggestions, version history', 'Planned'],
-  ['M4 Databases and design', 'Collections with properties and views, read bridge for custom UI, design frames', 'Planned'],
-  ['M5 Obsidian and integrations', 'Wikilinks, backlinks, markdown round-trip, Google Drive', 'Planned'],
+  ['M2 Comments', 'Comments on a selection, block or page, threads, resolve, @mentions; agents answer by MCP, HTTP or webhook', 'Done'],
+  ['Ask AI', 'Built-in assistant with your own key, or send the request to your own connected agent', 'Done'],
+  ['M3 Writing quality', 'Done: / menu, selection menu, footnotes, version history. Next: drag handles, drawing block, code editor, suggestions', 'In progress'],
+  ['M4 Databases and design', 'Done: tags and saved views. Next: collections with properties, read bridge for custom UI, design frames', 'In progress'],
+  ['M5 Obsidian and integrations', 'Done: folders, daily pages, templates, wikilinks, backlinks, graph, search, Markdown and Obsidian import/export, publishing. Next: Google Drive', 'Mostly done'],
 ]);
 write(rm, `
 ## Open questions
 1. **Name:** "Livepage" is a working name.
 2. **Agent permissions:** should agents edit directly by default, or start in suggestion mode?
-3. **Built-in AI:** keep the server model-free, or add an optional "Ask AI" button with your own key?
-4. **Offline:** Yjs supports offline editing; is offline-first a goal for v1?
+3. **Offline:** pages you've opened already work offline in the installed app; should offline-first editing go further?
+4. **Native apps:** is an App Store build worth it on top of the installable web app?
 5. **OAuth for web chat apps:** let ChatGPT and claude.ai connect as MCP connectors.
 
 Livepage is open source under the MIT license: https://github.com/jgbilla/livepage
