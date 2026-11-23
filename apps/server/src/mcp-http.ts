@@ -88,6 +88,7 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, db: D
     wsUrl: `ws://127.0.0.1:${config.port}/collab`,
     token,
     agentName: who.name || 'Agent',
+    agentId: who.tokenId ? `agent:${who.tokenId}` : undefined,
   });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),

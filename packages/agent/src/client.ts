@@ -11,7 +11,14 @@ import {
   type BlockAction, type FootnoteInput, type HtmlParts, type MindTree,
 } from '@livepage/schema';
 
-export type AgentOptions = { url?: string; page: string; name?: string; color?: string; token?: string };
+export type AgentOptions = {
+  url?: string; page: string; token?: string;
+  /** Shown on the agent's avatar and caret, e.g. "Claude Code". */
+  name?: string;
+  /** Stable id (e.g. the agent token's id) so two agents with the same name stay apart. */
+  id?: string;
+  color?: string;
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,7 +39,7 @@ export class LiveAgent {
       token: opts.token ?? process.env.AGENT_TOKEN ?? 'dev-agent-token',
     });
     this.provider.attach();
-    this.provider.setAwarenessField('user', { name: opts.name ?? 'Agent', color: opts.color ?? '#6e56cf', kind: 'agent' });
+    this.provider.setAwarenessField('user', { ...(opts.id ? { id: opts.id } : {}), name: opts.name ?? 'Agent', color: opts.color ?? '#6e56cf', kind: 'agent' });
   }
 
   static async connect(opts: AgentOptions): Promise<LiveAgent> {

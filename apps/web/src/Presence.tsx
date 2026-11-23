@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import { agentInitials, agentShade } from './agents';
 import { Icon } from './design/Icon';
 
 // Who is on the page right now, as small overlapping initials avatars.
@@ -26,21 +28,64 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function Presence({ peers, max = 4 }: { peers: Peer[]; max?: number }) {
-  const list = uniquePeers(peers);
-  const shown = list.slice(0, list.length > max ? max - 1 : max);
-  const extra = list.length - shown.length;
-  const all = list.map((p) => (p.kind === 'agent' ? `${p.name} (agent)` : p.name)).join(', ');
+/** An agent's square avatar, in its own shade with its own initials. */
+export function AgentAvatar({ peer, size }: { peer: Peer; size?: 'sm' }) {
   return (
-    <div className="peers" aria-label={`On this page: ${all}`} title={all}>
-      {shown.map((p) => (
-        <span key={keyOf(p)} className={`peer ${p.kind === 'agent' ? 'peer-agent' : ''}`} style={p.kind === 'agent' ? undefined : { background: p.color }}
-          title={p.kind === 'agent' ? `${p.name} (agent)` : p.name}>
-          {initials(p.name)}
-          {p.kind === 'agent' && <span className="peer-spark" aria-hidden="true"><Icon name="sparkles" size={9} strokeWidth={2.25} /></span>}
-        </span>
-      ))}
-      {extra > 0 && <span className="peer peer-more">+{extra}</span>}
+    <span className={`peer peer-agent agent-shade-${agentShade(peer)}${size ? ` peer-${size}` : ''}`} aria-hidden="true">
+      {agentInitials(peer.name)}
+      <span className="peer-spark"><Icon name="sparkles" size={9} strokeWidth={2.25} /></span>
+    </span>
+  );
+}
+
+function Avatar({ peer }: { peer: Peer }) {
+  return peer.kind === 'agent'
+    ? <AgentAvatar peer={peer} />
+    : <span className="peer" style={{ background: peer.color }} aria-hidden="true">{initials(peer.name)}</span>;
+}
+
+/** Who is on the page. Tap (or click) for the list with each person's and agent's name. */
+export function Presence({ peers, max = 4, meId, tabTitle }: { peers: Peer[]; max?: number; meId?: string; tabTitle?: (id: string) => string }) {
+  const list = uniquePeers(peers);
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  if (!list.length) return <div className="peers-wrap" />;
+  // Agents first: they are the ones that are easy to mix up.
+  const ordered = [...list.filter((p) => p.kind === 'agent'), ...list.filter((p) => p.kind !== 'agent')];
+  const shown = ordered.slice(0, ordered.length > max ? max - 1 : max);
+  const extra = ordered.length - shown.length;
+  const label = (p: Peer) => (p.kind === 'agent' ? `${p.name} (agent)` : p.id && p.id === meId ? `${p.name} (you)` : p.name);
+  const all = ordered.map(label).join(', ');
+  return (
+    <div className="peers-wrap" ref={wrap}>
+      <button type="button" className="peers" aria-label={`On this page: ${all}`} aria-expanded={open} title={all} onClick={() => setOpen((v) => !v)}>
+        {shown.map((p) => <Avatar key={keyOf(p)} peer={p} />)}
+        {extra > 0 && <span className="peer peer-more" aria-hidden="true">+{extra}</span>}
+      </button>
+      {open && (
+        <div className="menu peers-menu" role="dialog" aria-label="On this page">
+          <div className="peers-menu-head">On this page</div>
+          {ordered.map((p) => {
+            const where = p.tab && tabTitle ? tabTitle(p.tab) : null;
+            return (
+              <div key={keyOf(p)} className="peers-row">
+                <Avatar peer={p} />
+                <span className="peers-name">{p.name}{p.id && p.id === meId && <span className="muted"> (you)</span>}</span>
+                {p.kind === 'agent' && <span className={`agent-tag agent-shade-${agentShade(p)}`}>Agent</span>}
+                {where && <span className="peers-where muted small">{where}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

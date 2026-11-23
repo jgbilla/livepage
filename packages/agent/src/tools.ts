@@ -9,9 +9,34 @@ export type LivepageMcpOptions = {
   wsUrl: string;
   /** Agent token (lp_...) the agent acts as. */
   token: string;
-  /** Name shown on the agent's caret. */
+  /** Name shown on the agent's avatar and caret. A generic one ("Agent") gives way to the MCP client's own name. */
   agentName?: string;
+  /** Stable id for this agent (its token id), so several agents on a page stay apart. */
+  agentId?: string;
 };
+
+const GENERIC_NAME = /^\s*(agent|ai|assistant|bot|mcp|token|default|livepage)?\s*$/i;
+const KNOWN_CLIENTS: [RegExp, string][] = [
+  [/^claude[-_ ]?code/i, 'Claude Code'], [/^claude[-_ ]?(ai|desktop)?$/i, 'Claude'], [/^cursor/i, 'Cursor'],
+  [/^codex/i, 'Codex'], [/^gemini/i, 'Gemini CLI'], [/visual studio code|^vscode/i, 'VS Code'], [/^windsurf/i, 'Windsurf'],
+  [/^zed/i, 'Zed'], [/^cline/i, 'Cline'], [/^goose/i, 'Goose'], [/^chatgpt|^openai/i, 'ChatGPT'],
+];
+
+/** A readable name from an MCP client's clientInfo.name: "claude-code" -> "Claude Code". */
+export function clientDisplayName(raw: string | undefined): string | undefined {
+  const name = (raw ?? '').trim();
+  if (!name) return undefined;
+  for (const [re, label] of KNOWN_CLIENTS) if (re.test(name)) return label;
+  const words = name.replace(/[-_]+/g, ' ').replace(/\b(mcp|client)\b/gi, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return undefined;
+  return words.map((w) => (w === w.toLowerCase() ? w[0].toUpperCase() + w.slice(1) : w)).join(' ').slice(0, 40);
+}
+
+/** The name an agent shows on the page: its token's name, unless that says nothing (then its MCP client's). */
+export function agentDisplayName(tokenName: string | undefined, clientName: string | undefined): string {
+  if (tokenName && !GENERIC_NAME.test(tokenName)) return tokenName;
+  return clientDisplayName(clientName) ?? (tokenName?.trim() || 'Agent');
+}
 
 /** HTTP base of the app for a collab WebSocket URL: wss://host/collab -> https://host */
 export const httpBaseFor = (wsUrl: string) => wsUrl.replace(/^ws/, 'http').replace(/\/collab\/?$/, '');
@@ -22,7 +47,9 @@ export function createLivepageMcp(opts: LivepageMcpOptions): { server: McpServer
   async function agentFor(page: string, tab?: string) {
     let a = agents.get(page);
     if (!a) {
-      a = LiveAgent.connect({ page, url: opts.wsUrl, token: opts.token, name: opts.agentName ?? 'Agent' });
+      // Named when it first joins a page; by then the client has introduced itself (initialize).
+      const name = agentDisplayName(opts.agentName, server.server.getClientVersion()?.name);
+      a = LiveAgent.connect({ page, url: opts.wsUrl, token: opts.token, name, id: opts.agentId });
       agents.set(page, a);
       a.catch(() => agents.delete(page));
     }
