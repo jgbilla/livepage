@@ -243,6 +243,10 @@ function measure() {
     const st = getComputedStyle(row);
     const name = row.classList.contains('wt-strip') ? 'open tabs strip' : 'page tabs';
     if ((st.webkitMaskImage && st.webkitMaskImage !== 'none') || (st.maskImage && st.maskImage !== 'none')) problems.push(`${name} uses a mask-image on the scroller`);
+    // Never up and down: a row taller inside than out scrolls vertically on iPhones and clips the labels.
+    if (st.overflowY !== 'hidden') problems.push(`${name} can scroll up and down (overflow-y: ${st.overflowY})`);
+    if (row.scrollHeight > row.clientHeight) problems.push(`${name} is ${row.scrollHeight - row.clientHeight}px taller inside than its box, so it scrolls up and down`);
+    if (st.touchAction !== 'pan-x') problems.push(`${name} takes vertical swipes (touch-action: ${st.touchAction})`);
     if (row.scrollWidth <= row.clientWidth + 1) continue;
     if (st.overscrollBehaviorX === 'auto') problems.push(`${name} can rubber-band sideways (overscroll-behavior-x: auto)`);
     const rr = row.getBoundingClientRect();
