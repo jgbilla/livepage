@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -13,11 +13,14 @@ import { MindMap } from './MindMap';
 import { CodeBlock } from './CodeBlock';
 import { LinkMenu, PageLink, PageLinkInput } from './PageLink';
 import { titleOf, workspaceSnapshot } from '../workspace';
+import { Footnote } from './Footnote';
+import { Footnotes } from './Footnotes';
 type User = { id: string; name: string; color: string };
 
 export function PageEditor({ doc, provider, user, tab, readOnly, pageId }: { doc: Y.Doc; provider: HocuspocusProvider; user: User; tab: string; readOnly: boolean; pageId: string }) {
   const meRef = useRef(user);
   meRef.current = user;
+  const [footnoteEdit, setFootnoteEdit] = useState<{ id: string; at: number } | null>(null);
   const editor = useEditor(
     {
       editable: !readOnly,
@@ -35,6 +38,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId }: { doc
         MindMap.configure({ doc, readOnly }),
         PageLink.configure({ doc, currentPage: pageId }),
         PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
+        Footnote.configure({ onInsert: (id) => setFootnoteEdit({ id, at: Date.now() }) }),
       ],
     },
     [doc, provider, tab, readOnly, pageId],
@@ -53,12 +57,14 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId }: { doc
         <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()}><i>I</i></button>
         <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}>• List</button>
         <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>Code</button>
+        <button type="button" title="Footnote (Ctrl/⌘+Alt+F, or type /footnote)" onClick={() => editor.chain().focus().insertFootnote().run()}>Footnote¹</button>
         <button type="button" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Table</button>
         <button type="button" onClick={() => editor.chain().focus().insertMindMap().run()}>Mind map</button>
         <button type="button" onClick={() => editor.chain().focus().insertHtmlBlock().run()}>✦ HTML block</button>
       </div>}
       <EditorContent editor={editor} className="editor" />
       {!readOnly && <LinkMenu editor={editor} doc={doc} currentPage={pageId} />}
+      <Footnotes editor={editor} readOnly={readOnly} editRequest={footnoteEdit} />
     </>
   );
 }

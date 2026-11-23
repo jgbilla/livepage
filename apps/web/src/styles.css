@@ -311,3 +311,34 @@ button.ask-ai.on, button.ask-ai:hover { background: #7048e8; color: #fff; }
   .topbar .crumbs { display: none; }
   .copy-link-label { display: none; }
 }
+
+/* Footnotes */
+.editor .fn-ref { font-size: .72em; line-height: 0; margin: 0 1px; cursor: pointer; user-select: none; }
+.editor .fn-ref a { color: var(--accent); text-decoration: none; font-weight: 600; padding: 0 1px; border-radius: 3px; }
+.editor .fn-ref.ProseMirror-selectednode a { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fn-flash { animation: fn-flash 1.4s ease-out; }
+@keyframes fn-flash { from { background: color-mix(in srgb, var(--accent) 30%, transparent); } to { background: transparent; } }
+.footnotes { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; }
+.footnotes h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.footnotes ol { margin: 0; padding-left: 28px; }
+.footnotes li { margin: 4px 0; padding: 2px 6px; border-radius: 6px; scroll-margin: 80px; }
+.footnotes li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fn-back { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0 6px 0 0; font-size: 14px; }
+.fn-item .fn-edit { margin-left: 8px; font-size: 12px; opacity: 0; }
+.footnotes li:hover .fn-edit, .fn-item .fn-edit:focus { opacity: 1; }
+.fn-cite a { color: inherit; }
+.fn-card { position: fixed; z-index: 50; width: 320px; background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.14); padding: 10px 12px; font-size: 14px; line-height: 1.5; }
+.fn-card-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; font-size: 12px; }
+.fn-card-head b { color: var(--accent); }
+.fn-card-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.fn-card-actions { display: flex; gap: 12px; margin-top: 8px; }
+.fn-card-actions .link { font-size: 12px; }
+.fn-form { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.fn-form textarea, .fn-form input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; }
+.fn-form textarea { resize: vertical; }
+.fn-form-row { display: flex; gap: 6px; }
+.fn-form-actions { justify-content: flex-end; }
+.fn-form .fn-bad { border-color: #e03131; }
+.fn-hint { color: #e03131; font-size: 12px; }

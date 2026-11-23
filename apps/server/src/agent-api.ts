@@ -15,6 +15,10 @@
 //   POST /api/pages/:page/tabs         { title }   -> { id }      GET -> { tabs }
 //   GET  /api/pages/:page/backlinks                -> pages (and tabs) that link to this page
 // Paragraph text may contain links: [[p_id]], [[p_id#tab_id]], [[p_id|label]] (see packages/schema).
+//   GET  /api/pages/:page/footnotes                -> { footnotes: [{ id, n, note, url, title, author }] }
+//   POST /api/pages/:page/footnotes    { afterText?, last?, note?, url?, title?, author? } -> { id, n }  (cite a source)
+//   PUT  /api/pages/:page/footnotes/:id { note?, url?, title?, author? }
+//   DELETE /api/pages/:page/footnotes/:id
 // Writes go to the main tab unless ?tab=<id or title> is given.
 //
 // Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
@@ -35,10 +39,13 @@ import * as Y from 'yjs';
 import {
   appendHeading, appendParagraph, htmlSections, insertHtmlBlock, insertMindMap, insertTable, listBlocks, pageAsMarkdown,
   addTab, listTabs, pendingActions, resolveTab, setHtmlCode, updateAction,
+  insertFootnote, listFootnotes, removeFootnote, updateFootnote, type FootnoteInput,
 } from '@livepage/schema';
 
 export const MAX_BODY = 512 * 1024;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const opt = (v: unknown) => (typeof v === 'string' ? v : undefined);
+const citation = (b: any): FootnoteInput => ({ note: opt(b.note), url: opt(b.url), title: opt(b.title), author: opt(b.author) });
 
 export async function readJson(req: IncomingMessage): Promise<any> {
   let size = 0;
@@ -70,7 +77,7 @@ export type ContentCall = {
 
 /** Content operations on one page. The caller has already checked the principal can read it. */
 export async function handleContent({ req, res, hp, url, page, collection, id, who, writable }: ContentCall): Promise<void> {
-  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs');
+  const isRead = req.method === 'GET' && (!collection || collection === 'actions' || collection === 'tabs' || collection === 'footnotes');
   if (!isRead && !writable) return send(res, 403, { error: 'read-only access to this page' });
   try {
     const body = req.method === 'GET' ? {} : await readJson(req);
@@ -102,6 +109,14 @@ export async function handleContent({ req, res, hp, url, page, collection, id, w
           result = { tabs: listTabs(doc) };
         } else if (req.method === 'POST' && collection === 'tabs') {
           result = { id: addTab(doc, str(body.title)) };
+        } else if (req.method === 'GET' && collection === 'footnotes') {
+          result = { footnotes: listFootnotes(doc, tab) };
+        } else if (req.method === 'POST' && collection === 'footnotes') {
+          result = insertFootnote(doc, { ...citation(body), afterText: opt(body.afterText), last: body.last === true, tab });
+        } else if (req.method === 'PUT' && collection === 'footnotes' && id) {
+          updateFootnote(doc, id, citation(body));
+        } else if (req.method === 'DELETE' && collection === 'footnotes' && id) {
+          removeFootnote(doc, id);
         } else if (req.method === 'GET' && collection === 'actions') {
           const list = pendingActions(doc);
           list.forEach((a) => updateAction(doc, a.id, { status: 'claimed' }));
