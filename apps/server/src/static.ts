@@ -8,15 +8,15 @@ const TYPES: Record<string, string> = {
   '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.map': 'application/json',
 };
 
-export function staticHandler(root: string, sandboxUrl: string) {
+export function staticHandler(root: string, sandboxUrl: string, neonAuthOrigin: string | null = null) {
   // The app page itself: no inline scripts, frames only from the sandbox origin.
   const csp = [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self'", // includes ws(s):// to this host
-    `frame-src ${sandboxUrl}`,
+    `connect-src 'self'${neonAuthOrigin ? ` ${neonAuthOrigin}` : ''}`, // 'self' includes ws(s):// to this host
+    `frame-src ${sandboxUrl}${neonAuthOrigin ? ` ${neonAuthOrigin}` : ''}`, // Neon Auth may use an iframe for OAuth
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self'",

@@ -19,6 +19,8 @@ services:
           property: host
       - key: PG_POOL_MAX
         value: "5"
+      - key: NEON_AUTH_BASE_URL
+        sync: false # optional: Neon Auth URL (enables "Continue with Google"); from .env.local after `neon deploy`
 
   - type: web
     name: livepage-sandbox

@@ -12,6 +12,7 @@ import {
 } from './pages.ts';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
+import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
 const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
 const SHARE_ROLES = new Set(['editor', 'commenter', 'viewer']);
@@ -45,7 +46,9 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
   try {
     // ---------- public ----------
     if (path === '/api/health') return send(res, 200, { ok: true });
-    if (path === '/api/config') return send(res, 200, { sandboxUrl: config.sandboxUrl, signupOpen: config.signupOpen });
+    if (path === '/api/config') {
+      return send(res, 200, { sandboxUrl: config.sandboxUrl, signupOpen: config.signupOpen, neonAuthUrl: neonAuthEnabled() ? config.neonAuthUrl : null });
+    }
 
     if (path === '/api/auth/signup' && method === 'POST') {
       if (!config.signupOpen) return send(res, 403, { error: 'Sign-ups are closed on this server.' });
@@ -67,6 +70,25 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       if (!user) return send(res, 401, { error: 'Wrong email or password.' });
       const raw = await createSession(db, user.id);
       return send(res, 200, { user }, { 'Set-Cookie': sessionCookie(raw, secure) });
+    }
+
+    // Exchange a Neon Auth JWT (after "Continue with Google") for a Livepage session.
+    if (path === '/api/auth/neon' && method === 'POST') {
+      if (!neonAuthEnabled()) return send(res, 404, { error: 'Neon Auth is not configured on this server.' });
+      if (limited(clientIp(req))) return send(res, 429, { error: 'Too many attempts. Try again in a minute.' });
+      const b = await readJson(req);
+      let claims;
+      try { claims = await verifyNeonToken(String(b.token ?? '')); }
+      catch (e) { return send(res, 401, { error: `Sign-in could not be verified (${(e as Error).message}).` }); }
+      const [known] = await db.query('select 1 from users where neon_auth_id = $1 or email = $2', [String(claims.sub), String(claims.email ?? '').toLowerCase()]);
+      if (!known && !config.signupOpen) return send(res, 403, { error: 'Sign-ups are closed on this server.' });
+      try {
+        const user = await userForNeonIdentity(db, claims);
+        const raw = await createSession(db, user.id);
+        return send(res, 200, { user }, { 'Set-Cookie': sessionCookie(raw, secure) });
+      } catch (e) {
+        return send(res, 409, { error: (e as Error).message });
+      }
     }
 
     if (path === '/api/auth/logout' && method === 'POST') {

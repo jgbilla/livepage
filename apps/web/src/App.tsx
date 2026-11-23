@@ -6,6 +6,8 @@ import { AuthScreen } from './screens/AuthScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { PageScreen } from './screens/PageScreen';
 import { ShareScreen } from './screens/ShareScreen';
+import { NeonCallbackScreen } from './screens/NeonCallbackScreen';
+import { neonSignOut } from './neonAuth';
 
 export function App() {
   const { path } = useLocation();
@@ -21,12 +23,14 @@ export function App() {
 
   if (!ready || me === undefined) return <div className="center muted">Loading…</div>;
 
+  if (path === '/auth/callback') return <NeonCallbackScreen onSignedIn={refreshMe} />;
+
   if (!me) {
     // Remember where they were going (a page or a share link) and come back after signing in.
     return <AuthScreen onSignedIn={async () => { await refreshMe(); if (path === '/login') navigate('/', true); }} />;
   }
 
-  const logout = async () => { await api('/auth/logout', { body: {} }); setMe(null); navigate('/login', true); };
+  const logout = async () => { await api('/auth/logout', { body: {} }); await neonSignOut(); setMe(null); navigate('/login', true); };
 
   const page = path.match(/^\/p\/([\w-]+)/);
   if (page) return <PageScreen key={page[1]} pageId={page[1]} me={me} />;

@@ -66,6 +66,9 @@ create table if not exists blocks (
 );
 alter table blocks add column if not exists tab text not null default 'main';
 create index if not exists blocks_type_idx on blocks (type);
+-- Neon Auth (Google and other social sign-in) links to the same users rows.
+alter table users add column if not exists neon_auth_id text unique;
+alter table users alter column password_hash drop not null;
 create index if not exists page_members_user_idx on page_members (user_id);
 `;
 

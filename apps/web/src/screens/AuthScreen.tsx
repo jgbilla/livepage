@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { appConfig } from '../config';
+import { neonAuthAvailable, signInWithGoogle } from '../neonAuth';
 
 export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const signupOpen = appConfig().signupOpen;
@@ -36,6 +37,24 @@ export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
         <label>Password<input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={8} /></label>
         {error && <div className="form-error" role="alert">{error}</div>}
         <button type="submit" className="primary" disabled={busy}>{mode === 'login' ? 'Log in' : 'Sign up'}</button>
+        {neonAuthAvailable() && (
+          <>
+            <div className="or"><span>or</span></div>
+            <button
+              type="button"
+              className="google"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                const next = location.pathname === '/login' ? '/' : location.pathname + location.search;
+                try { await signInWithGoogle(next); } catch (err) { setError((err as Error).message); setBusy(false); }
+              }}
+            >
+              Continue with Google
+            </button>
+          </>
+        )}
         {signupOpen && (
           <button type="button" className="link" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(null); }}>
             {mode === 'login' ? 'No account yet? Sign up' : 'Have an account? Log in'}

@@ -111,3 +111,6 @@ code.copy, .share-url { display: block; font-size: 12px; background: var(--bg); 
 .row { display: flex; gap: 8px; }
 .page-title-input { width: 100%; border: 0; background: transparent; color: var(--fg); font-family: inherit; font-weight: 700; font-size: 34px; line-height: 1.2; outline: none; margin: 8px 0 16px; padding: 0; }
 .read-only .mm-node input { pointer-events: none; }
+.or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+.or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+button.google { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 14px; }
