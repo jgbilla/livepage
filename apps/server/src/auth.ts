@@ -7,7 +7,7 @@ import type { Db } from './db.ts';
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 
 export type User = { id: string; email: string; name: string };
-export type Principal = User & { kind: 'human' | 'agent'; superAgent?: boolean };
+export type Principal = User & { kind: 'human' | 'agent'; superAgent?: boolean; /** Agent token id (tok_...) when acting through a personal agent token. */ tokenId?: string };
 
 export const SESSION_COOKIE = 'lp_session';
 const SESSION_DAYS = 30;
@@ -95,7 +95,7 @@ export async function createApiToken(db: Db, userId: string, name: string): Prom
   return { id, token };
 }
 
-export async function userFromApiToken(db: Db, token: string | null): Promise<(User & { tokenName: string }) | null> {
+export async function userFromApiToken(db: Db, token: string | null): Promise<(User & { tokenName: string; tokenId: string }) | null> {
   if (!token || !token.startsWith('lp_')) return null;
   const [row] = await db.query(
     'select u.id, u.email, u.name, t.name as token_name, t.id as token_id from api_tokens t join users u on u.id = t.user_id where t.token_hash = $1',
@@ -103,7 +103,7 @@ export async function userFromApiToken(db: Db, token: string | null): Promise<(U
   );
   if (!row) return null;
   void db.query('update api_tokens set last_used_at = now() where id = $1', [row.token_id]);
-  return { id: row.id, email: row.email, name: row.name, tokenName: row.token_name };
+  return { id: row.id, email: row.email, name: row.name, tokenName: row.token_name, tokenId: row.token_id };
 }
 
 /**
@@ -125,7 +125,7 @@ export async function resolvePrincipal(db: Db, opts: { cookie?: string | null; t
     return { id: 'dev-agent', email: '', name: 'Agent', kind: 'agent', superAgent: true };
   }
   const viaToken = await userFromApiToken(db, opts.token ?? null);
-  if (viaToken) return { id: viaToken.id, email: viaToken.email, name: viaToken.tokenName, kind: 'agent' };
+  if (viaToken) return { id: viaToken.id, email: viaToken.email, name: viaToken.tokenName, kind: 'agent', tokenId: viaToken.tokenId };
   const viaSession = await userFromSession(db, readCookie(opts.cookie));
   if (viaSession) return { ...viaSession, kind: 'human' };
   return null;

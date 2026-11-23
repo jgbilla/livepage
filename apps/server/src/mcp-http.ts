@@ -14,6 +14,7 @@ import type { Db } from './db.ts';
 import { bearer, resolvePrincipal } from './auth.ts';
 import { readJson } from './agent-api.ts';
 import { config } from './config.ts';
+import { touchAgent } from './agent-requests.ts';
 
 type Session = { transport: StreamableHTTPServerTransport; close: () => Promise<void>; tokenHash: string; lastSeen: number };
 const sessions = new Map<string, Session>();
@@ -62,6 +63,7 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, db: D
     });
   }
 
+  touchAgent(who);
   const sid = req.headers['mcp-session-id'];
   const sessionId = Array.isArray(sid) ? sid[0] : sid;
   const body = req.method === 'POST' ? await readJson(req).catch(() => undefined) : undefined;

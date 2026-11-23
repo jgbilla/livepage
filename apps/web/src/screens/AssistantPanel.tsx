@@ -3,7 +3,12 @@ import { api } from '../api';
 import { AiSettings, type AiSettingsValue } from './AiSettings';
 
 type ToolStep = { id: string; name: string; status: 'running' | 'done' | 'error'; note?: string };
-type Turn = { role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string };
+type Turn = { role: 'user' | 'assistant'; text: string; steps?: ToolStep[]; error?: string; selection?: string; model?: string; status?: string };
+type Agent = { id: string; name: string; online: boolean };
+type AgentReq = { id: string; status: 'pending' | 'working' | 'done' | 'cancelled'; progress: string; reply: string; sig: string; agent_online: boolean; agent_name: string };
+const BUILTIN = 'builtin';
+const loadTarget = () => { try { return localStorage.getItem('livepage.askTarget') || BUILTIN; } catch { return BUILTIN; } };
+const saveTarget = (v: string) => { try { localStorage.setItem('livepage.askTarget', v); } catch { /* private mode */ } };
 
 const LABELS: Record<string, string> = {
   read_page: 'Reading the page', write_paragraph: 'Writing', add_heading: 'Adding a heading', replace_text: 'Editing text',
@@ -37,17 +42,72 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
   const [selection, clearSelection] = useEditorSelection();
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [target, setTargetState] = useState(loadTarget);
+  const setTarget = (v: string) => { setTargetState(v); saveTarget(v); setSetup(false); };
+  const agent = agents.find((a) => a.id === target);
+  const builtin = target === BUILTIN || !agent;
+  const reqRef = useRef<string | null>(null);
 
   useEffect(() => {
     api<{ settings: AiSettingsValue | null }>('/ai/settings').then((r) => setReady(!!r.settings)).catch(() => setReady(false));
   }, []);
+  // Your connected agents and whether they're online; refreshed while the panel is open.
+  useEffect(() => {
+    const load = () => api<{ agents: Agent[] }>('/agents').then((r) => setAgents(r.agents)).catch(() => {});
+    void load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [turns]);
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    if (reqRef.current) void fetch(`/api/agent-requests/${reqRef.current}`, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+  }, []);
 
   const patchLast = (fn: (t: Turn) => Turn) => setTurns((ts) => [...ts.slice(0, -1), fn(ts[ts.length - 1])]);
 
+  /** Hand the request to a connected agent (Claude Code, Cursor…) and follow it until it answers. */
+  const askAgent = async (a: Agent, prompt: string, sel: string, history: { role: string; text: string }[], ac: AbortController) => {
+    const statusFor = (r: AgentReq) =>
+      r.status === 'pending'
+        ? (r.agent_online ? `Waiting for ${a.name} to pick it up…` : `${a.name} isn't listening right now. Ask it to “listen for Livepage requests”; this request waits for it.`)
+        : r.status === 'working' ? (r.progress ? `${a.name}: ${r.progress}` : `${a.name} is working on it…`) : '';
+    let { request: r } = await api<{ request: AgentReq }>(`/pages/${pageId}/agent-requests`, { body: { tokenId: a.id, prompt, tab, selection: sel, history } });
+    reqRef.current = r.id;
+    patchLast((t) => ({ ...t, model: a.name, status: statusFor(r) }));
+    while (r.status === 'pending' || r.status === 'working') {
+      const res = await fetch(`/api/agent-requests/${r.id}?wait=25&since=${encodeURIComponent(r.sig)}`, { credentials: 'same-origin', signal: ac.signal });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`);
+      r = (await res.json()).request;
+      patchLast((t) => ({ ...t, status: statusFor(r) }));
+    }
+    reqRef.current = null;
+    if (r.status === 'cancelled') patchLast((t) => ({ ...t, error: 'Cancelled.' }));
+    else patchLast((t) => ({ ...t, text: r.reply || `${a.name} finished without a message.`, status: '' }));
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+    if (reqRef.current) { void api(`/agent-requests/${reqRef.current}`, { method: 'DELETE' }).catch(() => {}); reqRef.current = null; }
+  };
+
   const ask = async (prompt: string) => {
     if (!prompt.trim() || busy) return;
+    if (agent) {
+      const history = turns.filter((t) => t.text).map((t) => ({ role: t.role, text: t.text }));
+      const sel = selection;
+      setTurns((ts) => [...ts, { role: 'user', text: prompt, selection: sel || undefined }, { role: 'assistant', text: '', steps: [] }]);
+      setInput('');
+      clearSelection();
+      setBusy(true);
+      const ac = new AbortController();
+      abortRef.current = ac;
+      try { await askAgent(agent, prompt, sel, history, ac); }
+      catch (e) { patchLast((t) => ({ ...t, status: '', error: (e as Error).name === 'AbortError' ? 'Stopped.' : (e as Error).message })); }
+      finally { setBusy(false); abortRef.current = null; }
+      return;
+    }
     const history = turns.filter((t) => t.text).map((t) => ({ role: t.role, text: t.text }));
     const sel = selection;
     setTurns((ts) => [...ts, { role: 'user', text: prompt, selection: sel || undefined }, { role: 'assistant', text: '', steps: [] }]);
@@ -113,12 +173,30 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
       <div className="assistant-head">
         <b>✦ Ask AI</b>
         <span className="spacer" />
-        {ready && <button type="button" className="ghost" onClick={() => setSetup((v) => !v)}>{setup ? 'Back to chat' : 'Settings'}</button>}
+        {ready && builtin && <button type="button" className="ghost" onClick={() => setSetup((v) => !v)}>{setup ? 'Back to chat' : 'Settings'}</button>}
         {turns.length > 0 && !busy && <button type="button" className="ghost" onClick={() => setTurns([])}>Clear</button>}
         <button type="button" className="ghost" aria-label="Close" onClick={onClose}>✕</button>
       </div>
 
-      {ready === null ? <p className="muted small pad">Loading…</p> : !ready || setup ? (
+      {agents.length > 0 && (
+        <label className="assistant-target">
+          <span className="muted small">Ask</span>
+          <select value={agent ? agent.id : BUILTIN} onChange={(e) => setTarget(e.target.value)} disabled={busy}>
+            <option value={BUILTIN}>Built-in assistant (your API key)</option>
+            <optgroup label="Your connected agents">
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.online ? '● ' : '○ '}{a.name}{a.online ? ' (online)' : ''}</option>)}
+            </optgroup>
+          </select>
+        </label>
+      )}
+      {agent && !agent.online && turns.length === 0 && (
+        <p className="small pad agent-hint">
+          {agent.name} is offline. In that agent (for example Claude Code with the Livepage MCP server), say
+          <code className="copy">Listen for Livepage requests and handle them</code>
+          It answers here with everything it already knows: your files, memory and tools.
+        </p>
+      )}
+      {ready === null ? <p className="muted small pad">Loading…</p> : builtin && (!ready || setup) ? (
         <div className="pad">
           {!ready && <p className="small">Use any AI model with your own API key: Claude, GPT, Gemini, anything on OpenRouter, or a local model. It edits this page live, next to you.</p>}
           <AiSettings compact onSaved={(s) => { setReady(!!s); if (s) setSetup(false); }} />
@@ -146,8 +224,9 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
                     ))}
                   </ul>
                 )}
+                {t.status && <div className="turn-status">{t.status}</div>}
                 {t.text && <div className="turn-text">{t.text}</div>}
-                {t.role === 'assistant' && !t.text && !t.error && busy && i === turns.length - 1 && !(t.steps?.length) && <div className="muted small">Thinking…</div>}
+                {t.role === 'assistant' && !t.text && !t.error && busy && i === turns.length - 1 && !(t.steps?.length) && !t.status && <div className="muted small">Thinking…</div>}
                 {t.error && <div className="form-error small">{t.error}</div>}
               </div>
             ))}
@@ -170,7 +249,7 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
             <div className="row">
               <span className="muted small spacer">Enter to send, Shift+Enter for a new line</span>
               {busy
-                ? <button type="button" onClick={() => abortRef.current?.abort()}>Stop</button>
+                ? <button type="button" onClick={stop}>Stop</button>
                 : <button type="submit" className="primary" disabled={!input.trim()}>Send</button>}
             </div>
           </form>
