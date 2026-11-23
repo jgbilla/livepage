@@ -54,15 +54,24 @@ const server = new Server<Context>({
           );
           await q('update pages set title = $2, updated_at = now() where id = $1', [documentName, title]);
           await q('delete from page_links where from_page = $1', [documentName]);
-          for (const l of links) {
-            await q('insert into page_links (from_page, from_tab, from_tab_title, to_page, to_tab) values ($1,$2,$3,$4,$5)',
-              [documentName, l.fromTab, tabTitles.size > 1 ? tabTitles.get(l.fromTab) ?? '' : '', l.page, l.tab]);
+          // One statement per table, not one per row: each statement is a round trip to the database.
+          if (links.length) {
+            await q(
+              `insert into page_links (from_page, from_tab, from_tab_title, to_page, to_tab)
+               select $1, * from unnest($2::text[], $3::text[], $4::text[], $5::text[])`,
+              [documentName, links.map((l) => l.fromTab), links.map((l) => (tabTitles.size > 1 ? tabTitles.get(l.fromTab) ?? '' : '')),
+                links.map((l) => l.page), links.map((l) => l.tab ?? null)],
+            );
           }
           await q('delete from blocks where doc_name = $1', [documentName]);
-          for (const b of blocks) {
+          if (blocks.length) {
             await q(
-              'insert into blocks (doc_name, id, tab, position, type, text, attrs) values ($1,$2,$3,$4,$5,$6,$7) on conflict do nothing',
-              [documentName, b.id, b.tab, b.position, b.type, b.text, JSON.stringify(b.attrs)],
+              `insert into blocks (doc_name, id, tab, position, type, text, attrs)
+               select $1, b.id, b.tab, b.position, b.type, b.text, b.attrs::jsonb
+                 from unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[]) as b(id, tab, position, type, text, attrs)
+               on conflict do nothing`,
+              [documentName, blocks.map((b) => b.id), blocks.map((b) => b.tab), blocks.map((b) => b.position), blocks.map((b) => b.type),
+                blocks.map((b) => b.text), blocks.map((b) => JSON.stringify(b.attrs))],
             );
           }
         });

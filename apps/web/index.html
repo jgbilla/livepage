@@ -9,9 +9,22 @@
     <title>Livepage</title>
     <!-- Apply the saved light/dark choice before first paint (see src/design/theme.tsx). -->
     <script src="/theme-init.js"></script>
+    <meta name="description" content="Livepage: a writing canvas where people and AI agents edit one live page together." />
+    <!-- Painted by the browser straight away, before any script has loaded. React replaces it. -->
+    <style>
+      html { color-scheme: light dark; }
+      body { margin: 0; background: #fcfbf9; }
+      .boot0 { display: flex; min-height: 100vh; }
+      .boot0 i { display: block; height: 14px; margin: 14px 0; border-radius: 6px; background: #e7e4de; opacity: .6; }
+      .boot0 .s { width: 260px; flex: none; border-right: 1px solid #e7e4de; }
+      .boot0 .m { flex: 1; max-width: 760px; margin: 0 auto; padding: 72px 24px; }
+      @media (max-width: 760px) { .boot0 .s { display: none; } }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) body { background: #161514; } html:not([data-theme="light"]) .boot0 i { background: #302e2b; } html:not([data-theme="light"]) .boot0 .s { border-color: #302e2b; } }
+      html[data-theme="dark"] body { background: #161514; } html[data-theme="dark"] .boot0 i { background: #302e2b; } html[data-theme="dark"] .boot0 .s { border-color: #302e2b; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot0" aria-hidden="true"><div class="s"></div><div class="m"><i style="height:34px;width:55%;margin:8px 0 26px"></i><i></i><i></i><i style="width:40%"></i></div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -15,7 +15,8 @@
     "agent:docs": "pnpm --filter @livepage/agent docs",
     "check:responsive": "node scripts/responsive-check.mjs",
     "tokens:sync": "node scripts/sync-tokens.mjs",
-    "check:tokens": "node scripts/sync-tokens.mjs --check"
+    "check:tokens": "node scripts/sync-tokens.mjs --check",
+    "check:perf": "node scripts/perf-check.mjs"
   },
   "dependencies": {
     "@neon/config": "^1.14.6",

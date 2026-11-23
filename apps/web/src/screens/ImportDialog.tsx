@@ -110,7 +110,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
 
         <h3>Export</h3>
         <p className="muted small">Every page you can open, as Markdown files in your folders (a .zip you can open as an Obsidian vault). To export one page as Markdown or PDF, use ⋯ on the page.</p>
-        <button type="button" onClick={exportAll} disabled={!!busy}>⤓ Export everything (.zip)</button>
+        <button type="button" onClick={exportAll} disabled={!!busy}><Icon name="download" />Export everything (.zip)</button>
       </div>
     </div>
   );

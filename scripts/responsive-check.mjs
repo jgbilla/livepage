@@ -10,7 +10,7 @@
 // What counts as a failure:
 //   - the page scrolls sideways (document wider than the viewport), or
 //   - a visible element sticks out past the right/left edge and is not inside a container that
-//     scrolls sideways on purpose (tab bar, toolbar, code blocks, tables, mind maps), or
+//     scrolls sideways on purpose (tab bar, selection menu, code blocks, tables, mind maps), or
 //   - the page title is cut off (its text is wider than the title field), or
 //   - the top bar wraps onto a second row, or
 //   - the same person shows twice in the presence avatars (they have the page open in two tabs), or
@@ -88,6 +88,18 @@ const SCREENS = [
       await p.waitForSelector('.ProseMirror');
       await p.click('button.ask-ai');
     }, ready: '.assistant', scroll: true,
+  },
+  {
+    // The "/" menu: typed on desktop, opened with the "+" button on touch screens.
+    name: 'slash-menu', go: async (p, s, vp) => {
+      await p.goto(`${BASE}/p/${s.pageId}`);
+      await p.waitForSelector('.ProseMirror');
+      await p.click('.ProseMirror > p:last-of-type');
+      await p.keyboard.press('End');
+      await p.keyboard.press('Enter');
+      if (vp.mobile && await p.isVisible('.insert-fab')) await p.click('.insert-fab');
+      else await p.keyboard.type('/');
+    }, ready: '.slash-menu',
   },
   {
     name: 'history', go: async (p, s, vp) => {

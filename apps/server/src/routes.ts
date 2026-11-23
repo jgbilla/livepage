@@ -355,10 +355,16 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   const { req, res, db, hp, url, who, role, pageId, sub, id, method } = c;
 
   if (!sub && method === 'GET') {
-    const [m] = who.superAgent ? [] : await db.query('select folder_id from page_members where page_id = $1 and user_id = $2', [pageId, who.id]);
+    // One round trip: the queries are independent, so they run side by side.
+    const [[m], folders, info, tags] = await Promise.all([
+      who.superAgent ? [] : db.query('select folder_id from page_members where page_id = $1 and user_id = $2', [pageId, who.id]),
+      who.superAgent ? [] : listFolders(db.query, who.id),
+      pageInfo(db, pageId),
+      pageTags(db, pageId),
+    ]);
     const folderId: string | null = m?.folder_id ?? null;
-    const folderPath = folderId && !who.superAgent ? folderPaths(await listFolders(db.query, who.id)).get(folderId) ?? '' : '';
-    return send(res, 200, { page: { ...(await pageInfo(db, pageId)), folder_id: folderId, path: folderPath, tags: await pageTags(db, pageId) }, role });
+    const folderPath = folderId ? folderPaths(folders).get(folderId) ?? '' : '';
+    return send(res, 200, { page: { ...info, folder_id: folderId, path: folderPath, tags }, role });
   }
 
   // Rename, move (in your own tree) and retag. Moving is yours alone, so any role can do it.
@@ -523,8 +529,8 @@ async function placement(b: any): Promise<{ folderId?: string | null; path?: str
 
 /** Everything the sidebar needs: folders, pages (with folder, path and tags) and tag counts. ?path= and ?tag= filter pages. */
 async function workspace(db: Db, userId: string, url: URL) {
-  const [folders, pages, tagMap, tags] = await Promise.all([
-    listFolders(db.query, userId), listPages(db, userId), tagsByPage(db, userId), tagsFor(db, userId),
+  const [folders, pages, tagMap, tags, views] = await Promise.all([
+    listFolders(db.query, userId), listPages(db, userId), tagsByPage(db, userId), tagsFor(db, userId), listViews(db, userId),
   ]);
   const paths = folderPaths(folders);
   let out = pages.map((p: any) => ({ ...p, path: p.folder_id ? paths.get(p.folder_id) ?? '' : '', tags: tagMap.get(p.id) ?? [] }));
@@ -537,7 +543,7 @@ async function workspace(db: Db, userId: string, url: URL) {
   // ?tag=a&tag=b (or ?tag=a,b) with ?match=all|any (default any). A tag also matches its nested tags (a/x).
   const wantTags = url.searchParams.getAll('tag').flatMap((t) => t.split(',')).map(cleanTag).filter((t): t is string => !!t);
   if (wantTags.length) out = out.filter((p) => matchesTags(p.tags, wantTags, url.searchParams.get('match') === 'all' ? 'all' : 'any'));
-  return { pages: out, folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })), tags, views: await listViews(db, userId) };
+  return { pages: out, folders: folders.map((f) => ({ ...f, path: paths.get(f.id) })), tags, views };
 }
 
 /** Title lives in the live document (so open editors update at once) and in pages.title (for lists). */
