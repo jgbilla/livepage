@@ -101,7 +101,7 @@ Use list_pages to find page ids, and call read_page first to see what is there.`
 
   server.tool('open_daily_page',
     'Get (or create) the daily page for a date: folder YYYY/MM/DD, page titled "daily". Returns the page id to write into.',
-    { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('YYYY-MM-DD. Pass the person's local date when you know it; defaults to today where this MCP server runs.') },
+    { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('YYYY-MM-DD. Pass the person\'s local date when you know it; defaults to today where this MCP server runs.') },
     async ({ date }) => tryText(async () => {
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
