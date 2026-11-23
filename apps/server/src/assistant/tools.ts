@@ -1,12 +1,12 @@
 // The assistant's page tools. Same abilities as external agents (packages/agent: MCP and HTTP),
-// plus two that only make sense inside the app: placing new content after a given passage,
-// and rewriting existing text in place. Writes stream into the live doc while the model is
+// including the targeted edits (block ids, replace/insert/delete/move blocks, table cells; see schema/blocks.ts),
+// plus one that only makes sense inside the app: placing new content after a given passage. Writes stream into the live doc while the model is
 // still generating, with the assistant's own caret, so people watch it write.
 import * as Y from 'yjs';
 import type { LiveAgent } from '@livepage/agent/client';
 import {
   addMindNode, addTab, fragment, htmlCodeText, htmlSections, insertHtmlBlock, insertMindMap, insertTable, makeParagraph,
-  pageAsMarkdown, setHtmlBlockStatus, setHtmlCode, type MindTree,
+  setHtmlBlockStatus, setHtmlCode, hitsToReplace, type MindTree,
 } from '@livepage/schema';
 import type { ToolDef } from './providers.ts';
 
@@ -21,7 +21,7 @@ const afterText = {
 export const TOOLS: ToolDef[] = [
   {
     name: 'read_page',
-    description: 'Read the current page (or all tabs) as markdown. Mind maps show node ids; HTML blocks show their id and code. Call again after others may have edited.',
+    description: 'Read the whole page (all tabs): each block is a line "[block_id type]" followed by its Markdown. Mind maps show node ids; HTML blocks show their code. Call again after others may have edited; read_blocks reads just one section.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -39,12 +39,92 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
-    name: 'replace_text',
-    description: 'Rewrite existing text in place: replaces the first occurrence of `find` (must be within one paragraph, heading, list item or table cell) with `replace`. Use an empty `replace` to delete. Use this to edit, fix or rewrite what is already on the page.',
+    name: 'read_blocks',
+    description: 'Read blocks with their ids: each block is a line "[block_id type]" followed by its Markdown. Pass section (a heading\'s block id) to read only that heading and what is under it, or from to start at a block. Use it for a fresh look at one part of the page before editing it.',
     parameters: {
       type: 'object',
-      properties: { find: { type: 'string', description: 'Exact text currently on the page.' }, replace: { type: 'string' } },
+      properties: {
+        section: { type: 'string', description: 'A heading\'s block id: read that section only.' },
+        from: { type: 'string', description: 'Start reading at this block id.' },
+        limit: { type: 'integer', minimum: 1, maximum: 1000 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'replace_text',
+    description: 'Change words in place: replaces `find` (exact text now on the page, plain text without Markdown markers, within one paragraph, heading, list item or table cell) with `replace`, keeping the formatting, links and footnotes around it. The cheapest way to fix or reword something. If the text appears more than once, quote more words or pass block_id, occurrence or all. Use an empty `replace` to delete.',
+    parameters: {
+      type: 'object',
+      properties: {
+        find: { type: 'string', description: 'Exact text currently on the page.' },
+        replace: { type: 'string' },
+        block_id: { type: 'string', description: 'Only look inside this block.' },
+        occurrence: { type: 'integer', minimum: 1, description: 'Which match to replace (1 = first) when there are several.' },
+        all: { type: 'boolean', description: 'Replace every match.' },
+      },
       required: ['find', 'replace'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'replace_blocks',
+    description: 'Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown: headings, **bold**, lists, tables, code fences, links. Everything else on the page is untouched. For a change of a few words use replace_text. Returns the new block ids.',
+    parameters: {
+      type: 'object',
+      properties: { block_id: { type: 'string' }, through_block_id: { type: 'string', description: 'Last block of the run to replace (same tab).' }, markdown: { type: 'string' } },
+      required: ['block_id', 'markdown'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'insert_blocks',
+    description: 'Insert new content, written as Markdown, right before or after a block (give one of before / after), or at the start or end of the current tab. Returns the new block ids.',
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown: { type: 'string' },
+        before: { type: 'string', description: 'Block id to insert before.' },
+        after: { type: 'string', description: 'Block id to insert after.' },
+        at: { type: 'string', enum: ['start', 'end'], description: 'Without before/after: start or end (default) of the current tab.' },
+      },
+      required: ['markdown'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'delete_blocks',
+    description: 'Delete one block, or a run of blocks (block_id through through_block_id). The person can bring it back from History.',
+    parameters: {
+      type: 'object',
+      properties: { block_id: { type: 'string' }, through_block_id: { type: 'string' } },
+      required: ['block_id'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'move_blocks',
+    description: 'Move one block, or a run of blocks such as a section, right before or after another block. Moved blocks get new ids, which are returned.',
+    parameters: {
+      type: 'object',
+      properties: {
+        block_id: { type: 'string' }, through_block_id: { type: 'string' },
+        before: { type: 'string', description: 'Block id to move it before.' },
+        after: { type: 'string', description: 'Block id to move it after.' },
+      },
+      required: ['block_id'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'edit_table',
+    description: 'Change a table that is already on the page without resending it. op "set_cell" needs row, column and text; "add_row" needs cells (and row to place it, otherwise it goes last); "delete_row" needs row. Rows and columns count from 1; row 1 is the header.',
+    parameters: {
+      type: 'object',
+      properties: {
+        block_id: { type: 'string', description: 'The table\'s block id.' },
+        op: { type: 'string', enum: ['set_cell', 'add_row', 'delete_row'] },
+        row: { type: 'integer', minimum: 1 },
+        column: { type: 'integer', minimum: 1 },
+        text: { type: 'string' },
+        cells: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['block_id', 'op'], additionalProperties: false,
     },
   },
   {
@@ -263,9 +343,10 @@ export class PageTools {
   async run(id: string, name: string, a: Record<string, unknown>): Promise<string> {
     if (a.__invalid_json) throw new Error('Your tool arguments were not valid JSON. Send the call again.');
     const str = (k: string) => (typeof a[k] === 'string' ? (a[k] as string) : '');
+    const opt = (k: string) => str(k) || undefined;
     switch (name) {
       case 'read_page': {
-        const md = pageAsMarkdown(this.doc);
+        const md = this.agent.readBlocks();
         return md.length > MAX_READ ? `${md.slice(0, MAX_READ)}\n\n(…page truncated)` : md || '(empty page)';
       }
       case 'write_paragraph': {
@@ -295,14 +376,50 @@ export class PageTools {
         this.changes.push(`Added heading “${str('text').slice(0, 60)}”`);
         return 'ok';
       }
+      case 'read_blocks':
+        return this.agent.readBlocks({ tab: opt('section') || opt('from') ? undefined : this.tab, section: opt('section'), from: opt('from'), limit: Number(a.limit) || undefined }) || '(no blocks)';
       case 'replace_text': {
-        const hit = findText(this.doc, this.tab, str('find'));
-        if (!hit) throw new Error('That text is not on the page (in this tab). Call read_page and quote it exactly, within one block.');
-        const len = str('find').trim().length;
-        this.doc.transact(() => hit.text.delete(hit.offset, len));
-        this.caret(hit.text, hit.offset);
-        await this.typeInto(hit.text, hit.offset, str('replace'));
-        this.changes.push(str('replace') ? 'Rewrote text' : 'Deleted text');
+        const scope = { blockId: opt('block_id'), tab: opt('block_id') ? undefined : this.tab, occurrence: Number(a.occurrence) || undefined, all: a.all === true };
+        // Models often get the case or the surrounding spaces slightly wrong: fall back to a looser match.
+        let find = str('find');
+        let matchCase = true;
+        try { hitsToReplace(this.doc, find, scope); } catch (e) {
+          if (!/is not on the page/.test((e as Error).message)) throw e;
+          find = find.trim();
+          matchCase = false;
+        }
+        const r = await this.agent.replaceText(find, str('replace'), { ...scope, matchCase });
+        this.changes.push(r.replaced > 1 ? `Changed text in ${r.replaced} places` : str('replace') ? 'Rewrote text' : 'Deleted text');
+        return `replaced ${r.replaced}`;
+      }
+      case 'replace_blocks': {
+        const ids = this.agent.replaceBlocks(str('block_id'), str('markdown'), opt('through_block_id'));
+        this.changes.push(opt('through_block_id') ? 'Rewrote a section' : 'Rewrote a block');
+        return `replaced; new blocks: ${ids.join(', ')}`;
+      }
+      case 'insert_blocks': {
+        const ids = this.agent.insertBlocks(str('markdown'), { before: opt('before'), after: opt('after'), at: a.at === 'start' ? 'start' : 'end', tab: this.tab });
+        this.changes.push(`Added ${ids.length === 1 ? 'a block' : `${ids.length} blocks`}`);
+        return `inserted ${ids.join(', ')}`;
+      }
+      case 'delete_blocks': {
+        const n = this.agent.deleteBlocks(str('block_id'), opt('through_block_id'));
+        this.changes.push(`Deleted ${n === 1 ? 'a block' : `${n} blocks`}`);
+        return `deleted ${n}`;
+      }
+      case 'move_blocks': {
+        if (!opt('before') && !opt('after')) throw new Error('Give before or after: the block id to move next to.');
+        const ids = this.agent.moveBlocks(str('block_id'), { before: opt('before'), after: opt('after') }, opt('through_block_id'));
+        this.changes.push(`Moved ${ids.length === 1 ? 'a block' : `${ids.length} blocks`}`);
+        return `moved; new blocks: ${ids.join(', ')}`;
+      }
+      case 'edit_table': {
+        const id = str('block_id');
+        if (a.op === 'set_cell') this.agent.setTableCell(id, Number(a.row), Number(a.column), str('text'));
+        else if (a.op === 'add_row') this.agent.addTableRow(id, Array.isArray(a.cells) ? a.cells.map(String) : [], Number(a.row) || null);
+        else if (a.op === 'delete_row') this.agent.removeTableRow(id, Number(a.row));
+        else throw new Error('op must be set_cell, add_row or delete_row');
+        this.changes.push('Edited a table');
         return 'ok';
       }
       case 'insert_table': {
