@@ -12,6 +12,7 @@ import {
 } from './pages.ts';
 import { handleContent, readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
+import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
 
 const CONTENT = new Set(['content', 'paragraphs', 'headings', 'html-blocks', 'ui', 'tables', 'mind-maps', 'actions', 'tabs']);
@@ -123,6 +124,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       return send(res, 200, { ok: true });
     }
 
+    if (path.startsWith('/api/ai/')) return handleAiApi(req, res, db, who, path);
+
     if (path === '/api/pages' && method === 'GET') {
       if (who.superAgent) return send(res, 200, { pages: await db.query('select id, title, updated_at from pages order by updated_at desc limit 500') });
       return send(res, 200, { pages: await listPages(db, who.id) });
@@ -197,6 +200,8 @@ async function pageRoutes(c: PageCtx): Promise<void> {
       return send(res, 200, { ok: true });
     }
   }
+
+  if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
 
   if (sub && CONTENT.has(sub)) {
     return handleContent({

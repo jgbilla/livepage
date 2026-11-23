@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type Me, type PageSummary } from '../api';
 import { collabUrl } from '../config';
 import { Link, navigate } from '../router';
+import { AiSettings } from './AiSettings';
 
 export function HomeScreen({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [pages, setPages] = useState<PageSummary[] | null>(null);
@@ -44,6 +45,11 @@ export function HomeScreen({ me, onLogout }: { me: Me; onLogout: () => void }) {
             ))}
           </ul>
         )}
+        <section className="tokens">
+          <h2>AI assistant</h2>
+          <p className="muted small">The “✦ Ask AI” button on every page uses this. Bring your own key for any provider, or point it at a local model.</p>
+          <AiSettings />
+        </section>
         <AgentTokens />
       </main>
     </div>

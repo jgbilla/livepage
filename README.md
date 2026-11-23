@@ -13,6 +13,7 @@ An open-source, self-hostable writing canvas where **people and AI agents edit t
 - Accounts (email and password), your own page list, live page titles
 - Sharing: invite links that grant edit, comment or view access; view-only people can't change anything (enforced on the server); the owner manages who has access
 - Personal agent tokens, so any AI joins your pages with your access
+- Built-in AI assistant (**✦ Ask AI** on every page): bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model; it edits the page live with its own caret
 - Real-time collaborative editor (TipTap + Yjs + Hocuspocus) with live carets and a presence bar
 - Any mix of blocks on one page: text, tables, mind maps and custom UI, all editable by people and agents
 - Optional tabs at the top of a page, each its own live document
@@ -65,6 +66,17 @@ Prefer a database on the same machine? The bundled Postgres is an opt-in profile
 DATABASE_URL=postgres://livepage:livepage@db:5432/livepage docker compose --profile local-db up --build
 ```
  For a real deployment, serve the sandbox from a **different domain** from the app (see SPEC.md §12).
+
+## Built-in assistant
+
+Every page has a **✦ Ask AI** button. Pick a provider on your home page (or right in the panel), paste your own API key, and the assistant works on the page live next to you, with its own caret: it writes and rewrites text, adds headings, tables, mind maps and custom UI blocks, and streams them in as the model generates them. Select text first to work on just that part.
+
+![Ask AI panel next to a page the assistant just edited](docs/ask-ai.png)
+
+- **Any model:** Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, or any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, Groq, Together…). **Test & list models** checks the key and lists what you can use.
+- **Your key stays on the server:** encrypted with AES-256-GCM using `AI_KEY_SECRET`, only decrypted to make your own requests, never sent to the browser or to HTML blocks.
+- **Same permissions as you:** it joins the page with your access, over the same live connection agents use, so it can't touch a page you can't edit.
+- **Self-hosting:** set `AI_KEY_SECRET` (a long random string; `render.yaml` generates one). Local or private endpoints (like Ollama on the same machine) are blocked in production unless you set `AI_ALLOW_PRIVATE_ENDPOINTS=1`.
 
 ## Connect an AI
 
@@ -130,6 +142,7 @@ packages/agent  Live agent client, demo script, MCP server
 - Passwords are hashed with scrypt; sessions are random tokens stored hashed, in an HttpOnly, SameSite=Lax cookie (Secure in production). Cross-site writes are rejected by an Origin check.
 - Every live connection is authenticated and checked against the page's members; viewers and commenters connect read-only, so the server drops their edits.
 - HTML blocks run on a separate origin in a sandboxed iframe with a strict CSP (see SPEC.md §6). The app itself is served with a CSP that only allows frames from the sandbox.
+- AI API keys for the built-in assistant are encrypted at rest (AES-256-GCM, bound to the user) with `AI_KEY_SECRET` and only ever used server-side. The endpoint URLs people enter are checked so the server can't be pointed at private networks (unless `AI_ALLOW_PRIVATE_ENDPOINTS=1`).
 - The shared `AGENT_TOKEN` exists for local development only and is ignored when `NODE_ENV=production`.
 - Not yet: email verification, password reset, and two-factor sign-in.
 

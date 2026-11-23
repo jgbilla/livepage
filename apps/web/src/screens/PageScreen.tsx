@@ -8,6 +8,7 @@ import { Link } from '../router';
 import { PageEditor } from '../editor/PageEditor';
 import { TabBar } from '../TabBar';
 import { ShareDialog } from './ShareDialog';
+import { AssistantPanel } from './AssistantPanel';
 
 type Peer = { name: string; color: string; kind?: string; tab?: string };
 
@@ -31,6 +32,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [title, setTitle] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') || MAIN_TAB);
 
   const selectTab = useCallback((id: string) => {
@@ -86,9 +88,10 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
             </span>
           ))}
         </div>
+        {!readOnly && <button type="button" className={`ask-ai ${asking ? 'on' : ''}`} onClick={() => setAsking((v) => !v)}>✦ Ask AI</button>}
         {role === 'owner' && <button type="button" className="primary" onClick={() => setSharing(true)}>Share</button>}
       </header>
-      <main className={`page ${readOnly ? 'read-only' : ''}`}>
+      <main className={`page ${readOnly ? 'read-only' : ''} ${asking ? 'with-assistant' : ''}`}>
         <input
           className="page-title-input"
           placeholder="Untitled"
@@ -100,6 +103,7 @@ function LivePage({ pageId, me, role }: { pageId: string; me: Me; role: Role }) 
         <TabBar doc={doc} active={tab} onSelect={selectTab} peers={peers} readOnly={readOnly} />
         <PageEditor key={tab} doc={doc} provider={provider} user={user} tab={tab} readOnly={readOnly} />
       </main>
+      {asking && <AssistantPanel pageId={pageId} tab={tab} onClose={() => setAsking(false)} />}
       {sharing && <ShareDialog pageId={pageId} onClose={() => setSharing(false)} />}
     </div>
   );
