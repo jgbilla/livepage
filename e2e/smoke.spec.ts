@@ -311,6 +311,23 @@ test('page tabs and workspace tabs', async ({ page }) => {
   await expect(strip.locator('.wt-title')).toHaveCount(2);
   await strip.locator('.wt-title', { hasText: 'Tabs page' }).click();
   await expect(page.getByLabel('Page title')).toHaveValue('Tabs page');
+
+  // A page that is already open: clicking it in the sidebar goes to its tab instead of opening it twice.
+  const otherId = await newPage(page.request, 'Second tabs page');
+  await strip.getByRole('button', { name: 'New tab' }).click();
+  await expect(page.locator('.wt-visible .home')).toBeVisible();
+  await page.locator(`.sidebar a[href="/p/${otherId}"]`).click();
+  await expect(page.locator('.wt-visible').getByLabel('Page title')).toHaveValue('Second tabs page');
+  await expect(strip.locator('.wt-title')).toHaveCount(3);
+  await page.locator(`.sidebar a[href="/p/${pageId}"]`).click();
+  await expect(page.locator('.wt-visible').getByLabel('Page title')).toHaveValue('Tabs page');
+  await expect(strip.locator('.wt-title')).toHaveCount(3);
+  await expect(strip.locator('.wt-tab-active .wt-title')).toHaveText('Tabs page');
+  await expect(strip.locator('.wt-title', { hasText: 'Second tabs page' })).toHaveCount(1);
+  // Back returns to the tab you came from.
+  await page.goBack();
+  await expect(page.locator('.wt-visible').getByLabel('Page title')).toHaveValue('Second tabs page');
+  await expect(strip.locator('.wt-title')).toHaveCount(3);
 });
 
 // Serial: an "any available agent" task goes to whichever agent of the account polls first.
