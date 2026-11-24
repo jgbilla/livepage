@@ -24,6 +24,7 @@ import { renderCaret } from './caret';
 import { Icon } from '../design/Icon';
 import { SlashCommands, SlashMenu, openSlashMenu, type SlashContext } from './SlashMenu';
 import { SelectionMenu } from './SelectionMenu';
+import { LpTableView, TABLE_CELL_MIN_WIDTH, TableTouchResize } from './TableResize';
 type User = { id: string; name: string; color: string };
 
 type Props = {
@@ -49,7 +50,9 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         Placeholder.configure({
           placeholder: ({ editor: e }) => (e.isEmpty ? 'Write, or type / to add a heading, table, mind map, live HTML block…' : 'Type / for blocks, [[ to link a page'),
         }),
-        Table.configure({ resizable: false }),
+        // Drag a column border to resize it (a mouse here; touch in TableTouchResize). Widths live in the doc.
+        Table.configure({ resizable: !readOnly, handleWidth: 6, cellMinWidth: TABLE_CELL_MIN_WIDTH, lastColumnResizable: true, View: LpTableView }),
+        TableTouchResize,
         TableRow,
         TableHeader,
         TableCell,

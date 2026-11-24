@@ -37,6 +37,27 @@ type Ctx = { doc: Y.Doc; opts: RenderOptions; blocks: RenderedBlock[]; notes: st
 
 const tag = (name: string, inner: string, attrs = '') => `<${name}${attrs}>${inner}</${name}>`;
 
+/** Column widths dragged in the editor (each first-row cell's colwidth), as a <colgroup>. */
+function colgroup(table: Y.XmlElement): { html: string; style: string } | null {
+  const first = table.toArray().find((r): r is Y.XmlElement => r instanceof Y.XmlElement);
+  if (!first) return null;
+  const cols: (number | null)[] = [];
+  for (const c of first.toArray()) {
+    if (!(c instanceof Y.XmlElement)) continue;
+    const span = Math.max(1, Math.min(100, Number(c.getAttribute('colspan') ?? 1) || 1));
+    const w = c.getAttribute('colwidth') as unknown;
+    for (let i = 0; i < span; i++) {
+      const n = Array.isArray(w) ? Number(w[i]) : NaN;
+      cols.push(Number.isFinite(n) && n > 0 ? Math.min(4000, Math.round(n)) : null);
+    }
+  }
+  if (!cols.some((w) => w)) return null;
+  // Like the editor: every column sized means the table is exactly that wide, otherwise at least that wide.
+  const total = cols.reduce<number>((s, w) => s + (w ?? 60), 0);
+  const style = cols.every((w) => w) ? ` style="table-layout:fixed;width:${total}px"` : ` style="table-layout:fixed;min-width:${total}px"`;
+  return { html: `<colgroup>${cols.map((w) => (w ? `<col style="width:${w}px">` : '<col>')).join('')}</colgroup>`, style };
+}
+
 function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
   if (node instanceof Y.XmlText) return tag('p', escapeHtml(plainText(node)));
   const el = node;
@@ -51,7 +72,7 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
     case 'orderedList': { const s = Number(el.getAttribute('start') ?? 1); return tag('ol', kids(), s > 1 ? ` start="${s}"` : ''); }
     case 'listItem': case 'taskItem': return tag('li', kids());
     case 'taskList': return tag('ul', kids());
-    case 'table': return tag('div', tag('table', kids()), ' class="table"');
+    case 'table': { const c = colgroup(el); return tag('div', tag('table', (c?.html ?? '') + kids(), c?.style ?? ''), ' class="table"'); }
     case 'tableRow': return tag('tr', kids());
     case 'tableHeader': return tag('th', kids());
     case 'tableCell': return tag('td', kids());
