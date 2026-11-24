@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from './design/Icon';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 import {
-  acceptOffer, declineOffer, guessName, HERE, hostOf, hrefFor, initialOf, nextColor, opensNewWindow, preconnect, removeLink, saveLink,
+  acceptOffer, declineOffer, guessName, HERE, hostOf, hrefFor, initialOf, nextColor, onSwitchClick, opensNewWindow, preconnect, removeLink, saveLink,
   toOrigin, useWorkspaceLinks, type WsLink,
 } from './workspaceLinks';
 
@@ -66,8 +66,8 @@ export function WorkspaceMenuButton() {
                     <Icon name="check" className="ws-row-check" label="This workspace" />
                   </button>
                 ) : (
-                  <a role="menuitem" className="ws-row-main" href={hrefFor(url)} target={newWindow ? '_blank' : undefined} rel="noopener"
-                    onClick={() => setOpen(false)} title={newWindow ? `Open ${label} in its own window` : `Switch to ${label}`}>
+                  <a role="menuitem" className="ws-row-main" href={hrefFor(url)}
+                    onClick={(e) => { setOpen(false); onSwitchClick(e, url); }} title={newWindow ? `Open ${label} in its own window` : `Switch to ${label}`}>
                     <WsTile link={l} size={28} />
                     <span className="ws-row-text"><span className="ws-row-name">{label}</span><span className="ws-row-host">{hostOf(url)}</span></span>
                     {newWindow && <Icon name="external" className="ws-row-check" />}
