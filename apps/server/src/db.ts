@@ -69,6 +69,8 @@ create index if not exists blocks_type_idx on blocks (type);
 -- Neon Auth (Google and other social sign-in) links to the same users rows.
 alter table users add column if not exists neon_auth_id text unique;
 alter table users alter column password_hash drop not null;
+-- The other Livepage copies this person switches to from the sidebar (see workspace-links.ts).
+alter table users add column if not exists workspace_links jsonb not null default '[]';
 create index if not exists page_members_user_idx on page_members (user_id);
 -- Built-in AI assistant: each person's own provider, model and API key (key encrypted with AI_KEY_SECRET).
 create table if not exists ai_settings (

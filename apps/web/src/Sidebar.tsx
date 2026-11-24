@@ -15,6 +15,8 @@ import { Icon } from './design/Icon';
 import { ThemeSwitch } from './design/theme';
 import { initials } from './Presence';
 import { colorFor } from './api';
+import { WorkspaceMenuButton, WorkspaceOffer } from './WorkspaceSwitcher';
+import { initWorkspaceLinks } from './workspaceLinks';
 
 // ---------- layout + open/closed state ----------
 
@@ -53,6 +55,7 @@ export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => voi
   };
   const { path, search } = useLocation();
   useEffect(() => setDrawer(false), [path, search, narrow]);
+  useEffect(() => { void initWorkspaceLinks(me.id); }, [me.id]);
   useEffect(() => {
     if (!drawer) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
@@ -67,6 +70,7 @@ export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => voi
         {open && narrow && <div className="sidebar-scrim" onClick={toggle} />}
         <div className="layout-main">{children}</div>
       </div>
+      <WorkspaceOffer />
       </SwitcherProvider>
     </SidebarCtx.Provider>
   );
@@ -226,7 +230,7 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
     <aside className="sidebar" aria-label="Pages and folders" style={narrowNow() ? undefined : { width: width.value }}>
       <div className="sb-head">
-        <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true" />Livepage</Link>
+        <WorkspaceMenuButton />
         <SidebarToggle />
       </div>
       <nav className="sb-nav-list" aria-label="Go to">
