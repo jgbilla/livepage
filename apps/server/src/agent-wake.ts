@@ -37,7 +37,7 @@ import { config } from './config.ts';
 import { decryptKey, encryptKey } from './assistant/settings.ts';
 import { roleFor } from './pages.ts';
 import type { AgentEvent } from './agent-push.ts';
-import { isListening } from './agent-requests.ts';
+import { isWaitingNow } from './agent-requests.ts';
 
 export type WakeEvents = { tasks: boolean; asks: boolean; mentions: boolean };
 type ConfigRow = {
@@ -173,6 +173,17 @@ async function noteError(db: Db, tokenId: string, msg: string | null) {
   await db.query('update agent_wake_configs set last_error = $2, last_error_at = case when $2::text is null then null else now() end where token_id = $1', [tokenId, msg]);
 }
 
+/** The token got a new value elsewhere (Connect > new key): keep the copy sessions are given in step. */
+export async function tokenRotated(db: Db, userId: string, tokenId: string, token: string) {
+  await db.query('update agent_wake_configs set agent_token_enc = $3, updated_at = now() where token_id = $1 and user_id = $2', [tokenId, userId, encryptKey(userId, token)]);
+}
+
+/** For a task any agent may take when none is listening: one of this person's agents that wakes for tasks. */
+export async function wakeableForTasks(db: Db, userId: string): Promise<string | null> {
+  const rows = await db.query<{ token_id: string; events: string }>('select token_id, events from agent_wake_configs where user_id = $1 order by created_at', [userId]);
+  return rows.find((r) => parseEvents(r.events).tasks)?.token_id ?? null;
+}
+
 // ---- Waking
 
 type Work = { key: string; title: string; kind: 'tasks' | 'asks' | 'mentions'; followUp: boolean; cancel: boolean };
@@ -251,7 +262,7 @@ export async function wakeForEvent(db: Db, tokenId: string, e: AgentEvent): Prom
   }
   if (work.cancel) return;
   // Someone is listening (the agent's own loop, or a session we started that is still polling): it gets the work directly.
-  if (isListening(tokenId)) return;
+  if (isWaitingNow(tokenId)) return;
 
   // Claim the work so only one session starts for it (across servers, and across events arriving together).
   const lock = `${tokenId}|${work.key}`;

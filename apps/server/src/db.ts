@@ -219,6 +219,10 @@ create table if not exists agent_task_pages (
   first_at timestamptz not null default now(),
   primary key (task_id, page_id)
 );
+-- "Any available agent": the first of your agents that is listening takes the task (token_id is set when it confirms).
+alter table agent_tasks add column if not exists any_agent boolean not null default false;
+alter table agent_tasks add column if not exists delivered_to text;
+alter table agent_tasks add column if not exists delivery_count int not null default 0;
 -- Wake a cloud agent (agent-wake.ts): when one of your agents gets work and isn't listening, Livepage starts
 -- a session for it with its provider (Devin). Keys are encrypted with AI_KEY_SECRET, bound to the person.
 create table if not exists agent_wake_configs (

@@ -1231,6 +1231,69 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .task-dialog-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--lp-space-3); }
 .task-dialog-row .field { min-width: 0; }
 
+/* Whether each agent is listening: green = picks work up now, amber = connected but not listening, grey = away */
+.presence-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--lp-border-strong); }
+.presence-listening { background: var(--lp-success); box-shadow: 0 0 0 3px var(--lp-success-soft); }
+.presence-idle { background: var(--lp-warning); }
+.presence-unconfirmed { background: var(--lp-danger); box-shadow: 0 0 0 3px var(--lp-danger-soft); }
+.agent-strip { display: flex; align-items: center; gap: var(--lp-space-3); max-width: 1320px; margin: 0 auto var(--lp-space-3); min-width: 0; }
+.agent-strip-sum { font-size: var(--lp-text-sm); color: var(--lp-text-secondary); white-space: nowrap; }
+.agent-strip ul { list-style: none; margin: 0; padding: 2px; display: flex; gap: var(--lp-space-1-5); min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.agent-strip ul::-webkit-scrollbar { display: none; }
+.agent-chip { display: inline-flex; align-items: center; gap: var(--lp-space-1-5); min-height: var(--lp-control-sm); padding: 0 var(--lp-space-2-5) 0 var(--lp-space-1);
+  border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-full); background: var(--lp-surface); color: var(--lp-text-secondary);
+  font: inherit; font-size: var(--lp-text-sm); white-space: nowrap; cursor: pointer; }
+.agent-chip:hover { border-color: var(--lp-border-strong); color: var(--lp-text); }
+.agent-chip.on { color: var(--lp-text); }
+.agent-chip .peer { margin: 0; cursor: pointer; }
+.agent-chip-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.peer-any .icon { color: var(--lp-on-agent); }
+
+/* A queued task that nobody is listening for */
+.task-card-stuck { border-left: 3px solid var(--lp-warning); }
+.task-card-note.stuck { color: var(--lp-warning); }
+.task-card-note.stuck .icon { vertical-align: -2px; margin-right: 4px; }
+.task-stuck, .task-warn { display: flex; gap: var(--lp-space-2-5); padding: var(--lp-space-3); border-radius: var(--lp-radius-lg); background: var(--lp-warning-soft); color: var(--lp-text); }
+.task-stuck { margin-top: var(--lp-space-4); }
+.task-warn { margin-top: var(--lp-space-3); font-size: var(--lp-text-sm); }
+:is(.task-stuck, .task-warn) > .icon { color: var(--lp-warning); margin-top: 3px; flex: none; }
+.task-stuck p, .task-warn p { margin: 2px 0 0; line-height: var(--lp-leading-snug); }
+.task-warn p { margin: 0; }
+.task-warn code { font: var(--lp-text-xs)/1.4 var(--lp-font-mono); background: var(--lp-surface); padding: 1px 5px; border-radius: var(--lp-radius-sm); }
+.task-warn button.link { font-size: inherit; }
+.task-stuck-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lp-space-2); margin-top: var(--lp-space-2-5); }
+.task-stuck-pick { width: auto; max-width: 100%; min-height: var(--lp-control-md); border: var(--lp-border-width) solid var(--lp-border-strong); background: var(--lp-surface); color: var(--lp-text);
+  border-radius: var(--lp-radius-md); padding: 0 var(--lp-space-2); font: inherit; font-size: var(--lp-text-md); }
+.task-stuck-actions button { min-height: var(--lp-control-md); }
+
+/* Picking who gets a task */
+.agent-picker { display: flex; flex-direction: column; border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-md); overflow: hidden; max-height: 220px; overflow-y: auto; }
+.agent-option { display: flex; align-items: center; gap: var(--lp-space-2); min-height: 40px; padding: var(--lp-space-1-5) var(--lp-space-3); cursor: pointer; font-weight: var(--lp-weight-regular);
+  border-top: var(--lp-border-width) solid var(--lp-border); }
+.agent-option:first-child { border-top: 0; }
+.agent-option:hover { background: var(--lp-hover); }
+.agent-option.on { background: var(--lp-agent-soft); }
+.agent-option input { margin: 0; accent-color: var(--lp-agent); flex: none; }
+.agent-option .peer { margin: 0; }
+.agent-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lp-text); }
+.agent-option-status { font-size: var(--lp-text-xs); color: var(--lp-text-tertiary); white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.agent-option-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--lp-border-strong); }
+.agent-option-status.on { color: var(--lp-success); }
+.agent-option-status.on::before { background: var(--lp-success); }
+
+/* Connect an agent: copy-paste steps */
+.connect-dialog { max-width: 600px; }
+.connect-steps { margin: var(--lp-space-3) 0 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: var(--lp-space-4); font-size: var(--lp-text-md); line-height: var(--lp-leading-ui); }
+.connect-steps > li::marker { color: var(--lp-text-tertiary); font-weight: var(--lp-weight-semibold); }
+.connect-steps .muted.small { display: block; margin-top: var(--lp-space-1); }
+.copy-line { display: flex; align-items: flex-start; gap: var(--lp-space-1); margin-top: var(--lp-space-1-5); background: var(--lp-surface-sunken); border: var(--lp-border-width) solid var(--lp-border);
+  border-radius: var(--lp-radius-md); padding: var(--lp-space-1-5) var(--lp-space-1) var(--lp-space-1-5) var(--lp-space-2-5); }
+.copy-line code { flex: 1; min-width: 0; font: var(--lp-text-xs)/1.5 var(--lp-font-mono); overflow-wrap: anywhere; user-select: all; padding-top: 3px; }
+.copy-line .icon-btn { flex: none; }
+.connect-more { margin-top: var(--lp-space-2); }
+.connect-more summary { cursor: pointer; font-size: var(--lp-text-sm); color: var(--lp-text-secondary); }
+.connect-more p { margin: var(--lp-space-2) 0 0; }
+
 /* Phone: one column at a time, picked with tabs */
 @media (max-width: 900px) {
   .tasks-main { padding: var(--lp-space-3) var(--lp-space-4) 96px; }
@@ -1248,6 +1311,8 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   .task-card { padding: var(--lp-space-3); }
   .task-sheet { width: 100vw; border-left: 0; }
   .task-dialog-row { grid-template-columns: 1fr; gap: 0; }
+  .agent-strip { margin-bottom: var(--lp-space-2); gap: var(--lp-space-2); }
+  .agent-strip-sum { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .task-live { animation: none; } }
 .field-hint { font-weight: var(--lp-weight-regular); color: var(--lp-text-tertiary); font-size: var(--lp-text-sm); margin-left: var(--lp-space-1); }

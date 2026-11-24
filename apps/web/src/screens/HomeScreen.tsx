@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, type Me } from '../api';
-import { collabUrl } from '../config';
 import { AiSettings } from './AiSettings';
 import { Link } from '../router';
 import { SidebarToggle } from '../Sidebar';
 import { newPage, openToday, titleOf, useWorkspace } from '../workspace';
+import { ConnectAgentDialog, ConnectSteps } from './ConnectAgent';
 import { Icon } from '../design/Icon';
 import { WakeDialog, type Wake } from './WakeDialog';
 
@@ -91,7 +91,8 @@ type Token = { id: string; name: string; created_at: string; last_used_at: strin
 // Agent tokens let any AI act on your pages with your access (MCP or HTTP).
 function AgentTokens() {
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [fresh, setFresh] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<{ token: string; name: string } | null>(null);
+  const [connect, setConnect] = useState<Token | null>(null);
   const load = () => api<{ tokens: Token[] }>('/tokens').then((r) => setTokens(r.tokens));
   useEffect(() => { void load(); }, []);
 
@@ -99,7 +100,7 @@ function AgentTokens() {
     const name = prompt('Name this agent (for example "Claude on my laptop")', 'My agent');
     if (!name) return;
     const r = await api<{ token: string }>('/tokens', { body: { name } });
-    setFresh(r.token);
+    setFresh({ token: r.token, name });
     void load();
   };
   const rename = async (t: Token) => {
@@ -141,9 +142,9 @@ function AgentTokens() {
       {fresh && (
         <div className="token-fresh">
           <p><b>Copy this token now.</b> It won't be shown again.</p>
-          <code className="copy">{fresh}</code>
-          <p className="small">Connect Claude Code (or any MCP client) from a clone of the repo:</p>
-          <code className="copy">{`claude mcp add livepage -e LIVEPAGE_URL=${collabUrl()} -e AGENT_TOKEN=${fresh} -- pnpm --dir /path/to/livepage agent:mcp`}</code>
+          <code className="copy">{fresh.token}</code>
+          <p className="small">It's filled in below. Two steps and {fresh.name} picks up Ask AI requests, tasks and @mentions:</p>
+          <ConnectSteps token={fresh.token} name={fresh.name} />
           <button type="button" className="link" onClick={() => setFresh(null)}>Done</button>
         </div>
       )}
@@ -154,6 +155,7 @@ function AgentTokens() {
           <button type="button" className="link" onClick={() => setSecret(null)}>Done</button>
         </div>
       )}
+      {connect && <ConnectAgentDialog agent={connect} onClose={() => { setConnect(null); void load(); }} />}
       <ul className="token-list">
         {tokens.map((t) => (
           <li key={t.id}>
@@ -162,6 +164,7 @@ function AgentTokens() {
             <button type="button" className="ghost" title={t.webhook_url ?? 'Get a webhook call when there is work for this agent'} onClick={() => webhook(t)}>
               {t.webhook_url ? 'Webhook on' : 'Add webhook'}
             </button>
+            <button type="button" className="ghost" onClick={() => setConnect(t)}>Connect</button>
             <button type="button" className="ghost" title={t.wake ? `Starts a ${t.wake.provider_label} session when it gets work` : 'Start a cloud agent session (Devin) when this agent gets work'} onClick={() => {
               if (!t.wake && !confirm(`Waking ${t.name} with Devin gives it a new token, so Devin's sessions can use it. Anything else using its current token will need the new one. Continue? (Or use Connect Devin to make a separate agent.)`)) return;
               setWaking(t);

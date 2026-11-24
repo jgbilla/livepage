@@ -22,6 +22,7 @@ import type { Principal } from './auth.ts';
 import { send } from './agent-api.ts';
 import { checkWebhookUrl } from './comments.ts';
 import { wakeForEvent } from './agent-wake.ts';
+import { isListening, listeningChanged } from './agent-requests.ts';
 
 export type AgentEventType = 'request.created' | 'comment.mention' | 'task.assigned' | 'task.message' | 'task.cancelled';
 export type AgentEvent = { id: string; type: AgentEventType; at: string; text: string; data: Record<string, unknown> };
@@ -101,7 +102,7 @@ async function pendingFor(db: Db, who: Principal): Promise<PendingCounts> {
     `select
        (select count(*)::int from agent_requests where token_id = $1 and status = 'pending') as requests,
        (select count(*)::int from comment_mentions where target_kind = 'agent' and target_id = $1 and handled_at is null) as mentions,
-       (select count(*)::int from agent_tasks where token_id = $1 and status = 'queued') as tasks`, [who.tokenId]);
+       (select count(*)::int from agent_tasks where (token_id = $1 or (any_agent and token_id is null and user_id = $2)) and status = 'queued') as tasks`, [who.tokenId, who.id]);
   return { requests: r?.requests ?? 0, mentions: r?.mentions ?? 0, tasks: r?.tasks ?? 0 };
 }
 
@@ -125,14 +126,18 @@ export async function handleAgentEvents(req: IncomingMessage, res: ServerRespons
     write(`${id ? `id: ${id}\n` : ''}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
   const listener: Listener = (e) => emit(e.type, e, e.id);
+  const wasListening = isListening(tokenId);
   if (!set) streams.set(tokenId, (set = new Set()));
   set.add(listener);
+  listeningChanged(tokenId, who.id, wasListening);
   const beat = setInterval(() => write(`: ${Date.now()}\n\n`), HEARTBEAT_MS);
   const stop = () => {
     clearInterval(beat);
     const s = streams.get(tokenId);
     s?.delete(listener);
     if (s && !s.size) streams.delete(tokenId);
+    listeningChanged(tokenId, who.id, true);
+    setTimeout(() => listeningChanged(tokenId, who.id, true), 61_000).unref?.();
   };
   res.on('close', stop);
   req.on('aborted', stop);

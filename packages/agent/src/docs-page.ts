@@ -417,12 +417,15 @@ To connect your own agent, create an agent token on your home page and use one o
 ## Task board
 **Tasks** in the sidebar is a board for handing jobs to your agents: give a task a title, some details and optionally a page, and pick which agent does it. The board shows each task as **Queued**, **Working**, **Needs you** or **Done** (failed and cancelled tasks sit with the finished ones), with the agent's latest note on the card. The agent gets the task the moment you hand it out, writes short notes as it goes, asks you a question when it is stuck (the task moves to Needs you, and the sidebar shows a count), and finishes with a summary. Pages it edits while working are listed on the task by themselves. Answer a question or write on a finished task and it goes back to the agent with the whole conversation. From a page, **··· → Hand to an agent** starts a task about that page. The board updates live on all your devices.
 
+An agent picks work up only while it is **listening**: following its event stream, or waiting in \`wait_for_requests\`. The board and the agent picker show which of your agents are listening right now, and warn before you hand a task to one that isn't. Choose **Any available agent** and the first of yours that is listening takes it. A queued task nobody is listening for says so on its card, and so does a task an agent keeps taking without confirming it (its 45-second lease ran out three times, usually a broken listening loop). Open it to give it to an agent that is listening, or for copy-paste steps to get its agent listening (also under **Connect** next to each agent on the home page). In Claude Code, \`/mcp__livepage__listen\` starts listening for everything: Ask AI requests, tasks and @mentions. Tell any other agent *"Listen for Livepage requests and tasks"*.
+
 ## Hosted MCP (any client, nothing to install)
 Every Livepage app serves an MCP endpoint at \`https://<your app>/mcp\` (Streamable HTTP). Connect with that address and the header \`Authorization: Bearer lp_...\`.
 **Claude Code**
 \`\`\`
 claude mcp add --transport http livepage https://<your app>/mcp --header "Authorization: Bearer lp_..."
 \`\`\`
+Then run \`/mcp__livepage__listen\` in Claude Code to pick up Ask AI requests, tasks and @mentions.
 **Cursor** (~/.cursor/mcp.json) and **Gemini CLI** (~/.gemini/settings.json, with "httpUrl" in place of "url")
 \`\`\`
 { "mcpServers": { "livepage": { "url": "https://<your app>/mcp", "headers": { "Authorization": "Bearer lp_..." } } } }
@@ -527,7 +530,7 @@ table(ag, [
   ['POST /api/pages/<id>/comments/<thread id>', 'Reply in a thread ({ "body" }); replying marks the mention handled'],
   ['GET /api/agent-requests?wait=20', 'Ask AI requests, comment mentions and board tasks for this agent'],
   ['GET /api/agent-events', 'Server-Sent Events: work pushed to this agent as it arrives'],
-  ['GET /api/tasks', 'Tasks assigned to this agent (?all=1 includes finished ones)'],
+  ['GET /api/tasks', 'Tasks assigned to this agent, plus "any available agent" tasks nobody has taken (?all=1 includes finished ones)'],
   ['POST /api/tasks/<id>/ack', 'Confirm you took a task (it moves to Working)'],
   ['POST /api/tasks/<id>/update', 'Report ({ "status": "working" | "needs_you" | "done" | "failed", "note", "pages" }); returns anything the person wrote since'],
   ['POST /api/agent-requests/<id>/reply', 'Answer in the Ask panel ({ "text", "done" }); done: false posts a progress note'],
