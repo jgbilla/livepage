@@ -47,6 +47,8 @@ type TaskRow = {
   page_id: string | null; page_title: string | null; status: TaskStatus; note: string;
   delivered_at: string | null; delivered_to: string | null; delivered_to_name: string | null; delivery_count: number; agent_seen_at: string | null; last_message_at: string | null;
   created_at: string; updated_at: string; done_at: string | null;
+  /** The agent is a cloud agent that starts a session for tasks (agent-wake.ts). */
+  agent_wakes?: boolean;
 };
 export type TaskEvent = {
   id: string; kind: 'created' | 'note' | 'status' | 'message' | 'page' | 'assigned';
@@ -55,8 +57,9 @@ export type TaskEvent = {
 };
 
 const COLS = `t.id, t.user_id, t.token_id, t.any_agent, k.name as agent_name, k.last_used_at as agent_last_used, t.title, t.details, t.page_id, p.title as page_title, t.status, t.note,
-  t.delivered_at, t.delivered_to, d.name as delivered_to_name, t.delivery_count, t.agent_seen_at, t.last_message_at, t.created_at, t.updated_at, t.done_at`;
-const FROM = 'agent_tasks t left join api_tokens k on k.id = t.token_id left join api_tokens d on d.id = t.delivered_to left join pages p on p.id = t.page_id';
+  t.delivered_at, t.delivered_to, d.name as delivered_to_name, t.delivery_count, t.agent_seen_at, t.last_message_at, t.created_at, t.updated_at, t.done_at,
+  (w.token_id is not null and position('tasks' in w.events) > 0) as agent_wakes`;
+const FROM = 'agent_tasks t left join api_tokens k on k.id = t.token_id left join api_tokens d on d.id = t.delivered_to left join pages p on p.id = t.page_id left join agent_wake_configs w on w.token_id = t.token_id';
 
 const isTaskId = (s: string) => /^tk_[\w-]{8,40}$/.test(s);
 const clip = (s: unknown, n: number) => String(s ?? '').trim().slice(0, n);
@@ -92,13 +95,14 @@ export const ANY = 'any';
 const unclaimed = (t: TaskRow) => t.any_agent && !t.token_id;
 
 function shape(t: TaskRow, pages: { id: string; title: string }[] = [], anyListening = false) {
-  const { user_id: _u, delivered_at: _d, agent_seen_at: _s, agent_last_used: _l, delivered_to: _dt, delivered_to_name: _dn, delivery_count: _c, ...rest } = t;
+  const { user_id: _u, delivered_at: _d, agent_seen_at: _s, agent_last_used: _l, delivered_to: _dt, delivered_to_name: _dn, delivery_count: _c, agent_wakes: _w, ...rest } = t;
   const p = t.token_id ? presenceOf(t.token_id, t.agent_last_used) : null;
   return {
     ...rest, agent_name: unclaimed(t) ? 'Any available agent' : t.agent_name ?? 'Removed agent', page_title: t.page_id ? t.page_title || 'Untitled' : null,
     delivery: delivery(t), agent_online: t.token_id ? isOnline(t.token_id) : false,
     // Whether anyone will pick it up now: the assigned agent is listening, or (any agent) one of yours is.
-    agent_listening: p ? p.listening : unclaimed(t) && anyListening, agent_last_seen_at: p?.last_seen_at ?? null,
+    // A cloud agent (Devin) isn't listening but starts a session for the task, so it isn't stuck either.
+    agent_listening: p ? p.listening || !!t.agent_wakes : unclaimed(t) && anyListening, agent_last_seen_at: p?.last_seen_at ?? null,
     // Taken again and again but never confirmed: the agent's loop is likely broken (it doesn't call ack or update_task).
     unconfirmed: t.delivery_count >= UNCONFIRMED_AFTER ? { agent_name: t.delivered_to_name ?? t.agent_name ?? 'The agent', times: t.delivery_count } : null,
     pages, url: taskUrl(t.id),
@@ -107,8 +111,10 @@ function shape(t: TaskRow, pages: { id: string; title: string }[] = [], anyListe
 
 /** Is any of this person's agents listening right now? (for "any available agent" tasks) */
 async function anyListeningFor(db: Db, userId: string): Promise<boolean> {
-  const rows = await db.query<{ id: string }>('select id from api_tokens where user_id = $1', [userId]);
-  return rows.some((r) => isReady(r.id));
+  const rows = await db.query<{ id: string; wakes: boolean }>(
+    `select t.id, (w.token_id is not null and position('tasks' in w.events) > 0) as wakes
+       from api_tokens t left join agent_wake_configs w on w.token_id = t.id where t.user_id = $1`, [userId]);
+  return rows.some((r) => isReady(r.id) || r.wakes); // a cloud agent with wake takes it when nobody listens
 }
 
 async function events(db: Db, taskId: string): Promise<TaskEvent[]> {

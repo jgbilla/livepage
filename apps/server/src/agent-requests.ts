@@ -10,6 +10,7 @@
 //   Person (session cookie)
 //     GET    /api/agents                                -> { agents: your agent tokens + online status, target, saved }
 //     PUT    /api/agents/target                         { target: 'builtin' | <token id> } -> who answers Ask AI and @AI
+//     PUT    /api/agents/task-target                    { target: <token id> | 'any' | null } -> who new tasks go to by default
 //     POST   /api/pages/:page/agent-requests            { tokenId, prompt, tab?, selection? } -> { request }
 //                                                       (question and answer also go in the page's Ask AI chat, chats.ts)
 //     GET    /api/agent-requests/:id?wait=25            -> { request } (returns early when it changes)
@@ -207,8 +208,24 @@ async function claimMentions(db: Db, who: Principal) {
 
 /** People: list your agents with online status. */
 export async function listAgents(db: Db, userId: string) {
-  const rows = await db.query('select id, name, last_used_at from api_tokens where user_id = $1 order by created_at desc', [userId]);
-  return rows.map((t) => ({ id: t.id, name: t.name, online: isOnline(t.id), last_used_at: t.last_used_at, ...presenceOf(t.id, t.last_used_at) }));
+  const rows = await db.query(
+    `select t.id, t.name, t.last_used_at, w.provider as wake_provider, w.events as wake_events
+       from api_tokens t left join agent_wake_configs w on w.token_id = t.id where t.user_id = $1 order by t.created_at desc`, [userId]);
+  return rows.map((t) => ({
+    id: t.id, name: t.name, online: isOnline(t.id), last_used_at: t.last_used_at, ...presenceOf(t.id, t.last_used_at),
+    // A cloud agent (agent-wake.ts) that starts a session for tasks when it isn't listening: it takes work any time.
+    wakes: t.wake_provider && String(t.wake_events).split(',').includes('tasks') ? (t.wake_provider === 'devin' ? 'Devin' : t.wake_provider) : null,
+  }));
+}
+
+export const ANY_AGENT = 'any';
+/** Who new tasks go to by default: the saved pick (if that agent still exists), else an agent that wakes for tasks (a cloud agent is always reachable), else none. */
+export async function getTaskTarget(db: Db, userId: string, agents: { id: string; wakes: string | null }[]): Promise<{ target: string | null; saved: boolean }> {
+  const [row] = await db.query('select task_target from users where id = $1', [userId]);
+  const saved = row?.task_target as string | null;
+  if (saved === ANY_AGENT && agents.length > 1) return { target: ANY_AGENT, saved: true };
+  if (saved && agents.some((a) => a.id === saved)) return { target: saved, saved: true };
+  return { target: agents.find((a) => a.wakes)?.id ?? null, saved: false };
 }
 
 export async function handleAgentRequests(req: IncomingMessage, res: ServerResponse, db: Db, who: Principal, url: URL, path: string): Promise<boolean> {
@@ -218,8 +235,23 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     if (who.kind !== 'human') { send(res, 403, { error: 'For people only.' }); return true; }
     const [agents, target, [row]] = await Promise.all([listAgents(db, who.id), getAskTarget(db, who.id),
       db.query('select ask_target from users where id = $1', [who.id])]);
+    const task = await getTaskTarget(db, who.id, agents);
     // saved=false: never picked on any device yet, so a browser may send the pick it remembers from before.
-    send(res, 200, { agents, target, saved: row?.ask_target != null });
+    send(res, 200, { agents, target, saved: row?.ask_target != null, task_target: task.target, task_target_saved: task.saved });
+    return true;
+  }
+  // The default agent for new tasks (the task form starts on it), saved per person so every device agrees.
+  if (path === '/api/agents/task-target' && method === 'PUT') {
+    if (who.kind !== 'human' || who.superAgent) { send(res, 403, { error: 'For people only.' }); return true; }
+    const b = await readJson(req);
+    const target = b.target == null ? null : String(b.target);
+    if (target && target !== ANY_AGENT) {
+      const [tok] = await db.query('select id from api_tokens where id = $1 and user_id = $2', [target, who.id]);
+      if (!tok) { send(res, 404, { error: 'That agent is not one of yours.' }); return true; }
+    }
+    await db.query('update users set task_target = $2 where id = $1', [who.id, target]);
+    bumpTasks(who.id); // open boards on your other devices pick it up
+    send(res, 200, { task_target: target });
     return true;
   }
   if (path === '/api/agents/target' && method === 'PUT') {
