@@ -290,6 +290,35 @@ test('the / menu inserts blocks, including a footnote', async ({ page }) => {
     .toContain('The source of the claim');
 });
 
+test('headings fold: hide a section, keep it after a reload, agents still read it', async ({ page }) => {
+  const pageId = await newPage(page.request, 'Folding');
+  await openPage(page, pageId);
+  await caretAtEnd(page);
+  const k = page.keyboard;
+  await k.type('## Plan'); await k.press('Enter'); await k.type('Hidden line one'); await k.press('Enter'); await k.type('Hidden line two'); await k.press('Enter');
+  await k.type('## Next'); await k.press('Enter'); await k.type('Still visible'); await k.press('Enter');
+  await k.type('/toggle'); await expect(page.locator('.slash-menu')).toBeVisible(); await k.press('Enter'); await k.type('A toggle heading');
+  await expect(page.locator('.ProseMirror h1[data-toggle="true"]')).toContainText('A toggle heading');
+
+  const plan = page.locator('.ProseMirror h2', { hasText: 'Plan' });
+  await plan.hover();
+  await plan.getByRole('button', { name: 'Collapse section' }).click();
+  await expect(page.getByText('Hidden line one')).toBeHidden();
+  await expect(page.getByText('Still visible')).toBeVisible();
+  await expect(plan.locator('.fold-more')).toHaveText('2 blocks');
+
+  // Folding is a view choice: the page and the agents' outline still have everything.
+  expect(await markdown(page.request, pageId)).toContain('Hidden line two');
+  const outline = await (await page.request.get(`/api/pages/${pageId}/outline`)).json();
+  expect(outline.tabs[0].headings.find((h: { text: string }) => h.text === 'Plan').blocks).toBe(3);
+
+  await page.reload();
+  await expect(page.locator('.ProseMirror h2', { hasText: 'Plan' })).toBeVisible();
+  await expect(page.getByText('Hidden line one')).toBeHidden();
+  await page.locator('.fold-more').click();
+  await expect(page.getByText('Hidden line one')).toBeVisible();
+});
+
 test('page tabs and workspace tabs', async ({ page }) => {
   const pageId = await newPage(page.request, 'Tabs page');
   await openPage(page, pageId);

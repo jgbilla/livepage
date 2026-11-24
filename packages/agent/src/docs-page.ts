@@ -295,6 +295,9 @@ write(ed, `
 ## Inserting and formatting
 Type \`/\` anywhere for the block menu: headings, lists, tables, mind maps, live HTML blocks, footnotes and page links. Select text for a small floating menu with bold, italic, link, comment, footnote and Ask AI. Footnotes are numbered in reading order and listed at the bottom of each tab.
 
+## Collapsing sections
+Any heading can fold: hover it (on a phone, tap the small arrow beside it) and click the arrow to hide everything under it, up to the next heading of the same or a higher level. Ctrl/Cmd+Enter in a heading does the same, and the "N blocks" tag beside a folded heading opens it again. Type \`/toggle\` for a toggle heading, one whose arrow always shows. What you fold is your own view, kept in your browser: collaborators and agents still see and edit the whole page, and moving the cursor into a folded section opens it.
+
 ## Native first, custom UI when it earns it
 Native blocks are editable, searchable and exportable like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers and one-off visualizations. Agents follow the same rule: plain text first, then a native table or mind map, and custom UI only for motion or interaction.
 
