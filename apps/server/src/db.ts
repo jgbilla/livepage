@@ -178,6 +178,8 @@ alter table pages add column if not exists published_slug text unique;
 alter table pages add column if not exists published_at timestamptz;
 -- Who answers @AI and Ask AI for this person: 'builtin', one of their agent token ids, or null (never picked: built-in).
 alter table users add column if not exists ask_target text;
+-- The person's time zone, as their browser last reported it (clock.ts): agents file new pages by that day.
+alter table users add column if not exists time_zone text;
 -- When an agent listening with wait_for_requests was handed a comment mention (it can still find it with get_mentions).
 alter table comment_mentions add column if not exists delivered_at timestamptz;
 -- Task board: jobs handed to one of your agents (tasks.ts). Events are the task's timeline.

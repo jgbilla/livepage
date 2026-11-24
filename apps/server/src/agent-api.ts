@@ -33,10 +33,12 @@
 //
 // Organizing (routes.ts): each person has their own folder tree; tags belong to the page.
 //   GET    /api/pages?path=a/b&tag=x&tag=y&match=any|all -> { pages (with folder_id, path, tags), folders, tags, views }
-//   POST   /api/pages          { title, path? | folder_id?, tags? } -> { page }
+//   POST   /api/pages          { title, path? | folder_id?, tags?, date? } -> { page (with path) }
+//          No path or folder_id: the page goes in today's daily folder YYYY/MM/DD (the person's local date,
+//          from `date` or the time zone their browser reported). path "" or folder_id null = top level.
 //   PATCH  /api/pages/:page    { title?, path? | folder_id?, tags? }   (move only changes your own tree)
 //   PUT    /api/pages/:page/tags { tags }    POST { tag }    DELETE /tags/:tag
-//   POST   /api/daily          { date: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily")
+//   POST   /api/daily          { date?: "YYYY-MM-DD" } -> { page, created }   (folder YYYY/MM/DD, page "daily"; no date = the person's today)
 //   GET/POST /api/folders      { name, parent_id? } or { path } (mkdir -p);  PATCH/DELETE /api/folders/:id
 //   GET    /api/tags;  GET/POST /api/views { name, tags, match };  PATCH/DELETE /api/views/:id
 // Comments (routes.ts + comments.ts; commenters can use these too):
@@ -58,7 +60,7 @@
 //   POST   /api/pages/:page/fields { fields: { name: text } }      fill them in
 //   GET    /api/pages/:page/export?format=md       -> the page as a Markdown file (footnotes, [[links]], frontmatter)
 //   GET    /api/export                              -> zip of all your pages as an Obsidian-style vault
-//   POST   /api/import         { files: [{ path, content }], into?: "Folder" }  Markdown files or a vault
+//   POST   /api/import         { files: [{ path, content }], into?: "Folder" }  Markdown files or a vault (no into = today's YYYY/MM/DD folder, "" = top level)
 //   POST   /api/pages/:page/publish -> { url }   DELETE unpublishes. Public at /pub/<slug>.
 //
 // Auth: "Authorization: Bearer lp_..." (an agent token a person creates in the app; the agent

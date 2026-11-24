@@ -7,7 +7,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 const MAIN_TAB = 'main';
 import { api } from './api';
 import { navigate, openTab } from './router';
-import { reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';
+import { localDate, reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';
 import { Icon } from './design/Icon';
 import { hostOf, switchTo, useWorkspaceLinks } from './workspaceLinks';
 import { WsTile } from './WorkspaceSwitcher';
@@ -119,7 +119,7 @@ function Switcher({ onClose }: { onClose: () => void }) {
     if (i < createAt) { onClose(); switchTo(wsHits[i - results.length].url); return; }
     if (createRow) {
       onClose();
-      const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: q.trim() } });
+      const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: q.trim(), date: localDate() } });
       await reloadWorkspace();
       navigate(`/p/${page.id}`);
     }

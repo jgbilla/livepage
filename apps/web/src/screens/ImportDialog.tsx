@@ -4,7 +4,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { api } from '../api';
 import { Link } from '../router';
 import { saveBlob } from '../PageMenu';
-import { reloadWorkspace } from '../workspace';
+import { localDate, reloadWorkspace } from '../workspace';
 import { Icon } from '../design/Icon';
 
 type File2 = { path: string; content: string };
@@ -30,7 +30,8 @@ async function readAll(list: FileList): Promise<{ files: File2[]; skipped: numbe
 }
 
 export function ImportDialog({ onClose }: { onClose: () => void }) {
-  const [into, setInto] = useState('Imported');
+  const [into, setInto] = useState('');
+  const todayPath = localDate().replace(/-/g, '/');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
@@ -45,7 +46,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       setOther(skipped);
       if (!files.length) throw new Error('No Markdown (.md) files found there.');
       setBusy(`Importing ${files.length} page${files.length === 1 ? '' : 's'}…`);
-      const r = await api<Report>('/import', { body: { files, into: into.trim() || undefined } });
+      const r = await api<Report>('/import', { body: { files, into: into.trim() || undefined, date: localDate() } });
       setReport(r);
       await reloadWorkspace();
     } catch (e) {
@@ -79,7 +80,8 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
         </p>
         <label className="field">
           <span className="small">Put them in the folder</span>
-          <input value={into} onChange={(e) => setInto(e.target.value)} placeholder="Top level" />
+          <input value={into} onChange={(e) => setInto(e.target.value)} placeholder={`Today's folder (${todayPath})`} />
+          <span className="muted small">Leave empty for today's folder, or type / for the top level.</span>
         </label>
         <div className="row import-picks">
           <label className="button-link">

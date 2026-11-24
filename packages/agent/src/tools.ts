@@ -94,6 +94,8 @@ citation belongs to, plus url, title and author. Footnotes number themselves and
 Pages can have tabs (shown at the top). Writing tools take an optional tab; add_tab creates one.
 Pages live in folders in each person's sidebar (like Obsidian) and can have tags. list_pages shows folder paths and tags;
 create_page, move_page, set_page_tags and open_daily_page (folder YYYY/MM/DD, page "daily") organize them.
+New pages go in today's daily folder YYYY/MM/DD (the person's local date) unless you give a path; pass a path
+when the person names a folder, or "" for the top level.
 Link pages and tabs inside write_paragraph text with [[p_id]] or [[p_id#tab_id]]; the link shows the target's current title
 and survives renames and moves. read_page shows links the same way; get_backlinks lists pages that link to a page.
 search_pages finds pages by any words in them; get_link_graph shows how pages link together.
@@ -321,18 +323,20 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
   server.tool('create_folder', 'Create a folder path (like mkdir -p).', { path: folderPath },
     async ({ path }) => tryText(async () => `created ${(await http('POST', '/folders', { path })).folder.path}`));
 
-  server.tool('create_page', 'Create a page, optionally in a folder path, with tags, or from a template (ids from list_templates). Returns the page id, and any {{fields}} left to fill in.',
+  server.tool('create_page', 'Create a page, with tags or from a template (ids from list_templates). Without a path it goes in today\'s daily folder YYYY/MM/DD (the person\'s local date). Returns the page id and folder, and any {{fields}} left to fill in.',
     {
       title: z.string().optional().describe('Omit with a template to use the template title (its {{date}} etc. filled in).'),
-      path: folderPath.optional(), tags: z.array(z.string()).optional(),
+      path: folderPath.optional().describe('Folder path like "Projects/Book" (created if missing) when the person names one; "" = top level. Omit for today\'s daily folder.'),
+      tags: z.array(z.string()).optional(),
       template: z.string().regex(/^p_[\w-]{8,40}$/).optional().describe('Template page id'),
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Date for {{date}} in the template (the person\'s local date). Defaults to today.'),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('The person\'s local date, for the daily folder and {{date}}. Defaults to their today.'),
     },
     async ({ title, path, tags, template, date }) => tryText(async () => {
-      const r = await http('POST', '/pages', { title: title ?? (template ? undefined : ''), path: path || undefined, tags, template_id: template, date });
-      if (!template) return `created ${r.page.id}`;
+      const r = await http('POST', '/pages', { title: title ?? (template ? undefined : ''), path, tags, template_id: template, date });
+      const where = `  in ${r.page.path || 'the top level'}`;
+      if (!template) return `created ${r.page.id}${where}`;
       const { fields } = await http<{ fields: string[] }>('GET', `/pages/${r.page.id}/fields`);
-      return `created ${r.page.id}  "${r.page.title}"${fields.length ? `\nfields to fill in: ${fields.map((f) => `{{${f}}}`).join(', ')}` : ''}`;
+      return `created ${r.page.id}  "${r.page.title}"${where}${fields.length ? `\nfields to fill in: ${fields.map((f) => `{{${f}}}`).join(', ')}` : ''}`;
     }));
 
   server.tool('list_templates', 'List the templates you can use (pages marked as templates), and which one daily pages start from.', {},
@@ -360,11 +364,12 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     }));
 
   server.tool('import_markdown', 'Create a page from Markdown. Frontmatter title/tags, #tags, [[Page title]] links to your pages, [^1] footnotes, tables and ```livepage-html blocks are understood.',
-    { markdown: z.string(), title: z.string().optional().describe('Defaults to the frontmatter title or "Imported"'), path: folderPath.optional() },
+    { markdown: z.string(), title: z.string().optional().describe('Defaults to the frontmatter title or "Imported"'),
+      path: folderPath.optional().describe('Folder path when the person names one; "" = top level. Omit for today\'s daily folder YYYY/MM/DD.') },
     async ({ markdown, title, path }) => tryText(async () => {
       const name = `${(title || 'Imported').replace(/[\\/]/g, '-')}.md`;
-      const r = await http<{ pages: { id: string; title: string }[]; unresolved: string[] }>('POST', '/import', { files: [{ path: name, content: markdown }], into: path || undefined });
-      return `created ${r.pages[0]?.id}${r.unresolved.length ? `\nlinks not found: ${r.unresolved.join(', ')}` : ''}`;
+      const r = await http<{ pages: { id: string; title: string; path: string }[]; unresolved: string[] }>('POST', '/import', { files: [{ path: name, content: markdown }], into: path });
+      return `created ${r.pages[0]?.id}  in ${r.pages[0]?.path || 'the top level'}${r.unresolved.length ? `\nlinks not found: ${r.unresolved.join(', ')}` : ''}`;
     }));
 
   server.tool('export_markdown', 'Get a page as a Markdown file (frontmatter, [[links]] by title, footnotes as [^1]).', { page },
@@ -382,11 +387,9 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
 
   server.tool('open_daily_page',
     'Get (or create) the daily page for a date: folder YYYY/MM/DD, page titled "daily". Returns the page id to write into.',
-    { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('YYYY-MM-DD. Pass the person\'s local date when you know it; defaults to today where this MCP server runs.') },
+    { date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('YYYY-MM-DD. Defaults to the person\'s today (their own time zone).') },
     async ({ date }) => tryText(async () => {
-      const d = new Date();
-      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const r = await http('POST', '/daily', { date: date ?? today });
+      const r = await http('POST', '/daily', { date });
       return `${r.created ? 'created' : 'opened'} ${r.page.id}  ${r.page.path}/daily`;
     }));
 

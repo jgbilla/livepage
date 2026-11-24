@@ -131,7 +131,7 @@ Write like in Notion, keep notes like in Obsidian, and drop in live HTML/JS bloc
 - **Comments:** on a selection, a block or the whole page, with replies, resolve and @mentions of people and agents.
 - **Version history:** every saved version, who changed it, a word-level diff, and restore for everyone.
 - **Sharing:** invite links with editor, commenter or viewer access, enforced on the server, or publish a public read-only page.
-- **Organized like Obsidian:** your own folders in a sidebar, a Today button for \`YYYY/MM/DD/daily\`, tags, saved tag views, templates, and pages in tabs side by side.
+- **Organized like Obsidian:** your own folders in a sidebar, new pages filed in today's folder \`YYYY/MM/DD\` next to the daily page, tags, saved tag views, templates, and pages in tabs side by side.
 - **Links:** type \`[[\` to link a page or one of its tabs. Links survive renames and moves, every page lists what links to it, and a graph view shows them all.
 - **Search:** Cmd/Ctrl+K finds titles instantly and text in any block.
 - **Markdown in and out:** import Markdown or an Obsidian vault, export a page as Markdown or PDF, or everything as a zip.
@@ -227,7 +227,7 @@ write(gs, `
 # Getting started
 ## Use the hosted app
 1. Open your Livepage address (https://<your app>) and sign up with email and password, or with **Continue with Google** where it is enabled.
-2. Click **+ New page**. Give it a title and start writing.
+2. Click **+ New page**. It lands in today's folder (\`YYYY/MM/DD\`). Give it a title and start writing.
 3. Click **Share** to invite people, press **✦ Ask AI** to work with an assistant, or create an **agent token** on your home page to let your own AI join.
 4. Press **Today** in the sidebar for your daily page, and Cmd/Ctrl+K to search everything.
 To install it as an app, use Share > Add to Home Screen in Safari, or the browser's Install button.
@@ -315,6 +315,7 @@ write(og, `
 # Organize and publish
 ## Folders and daily pages
 The sidebar holds your own nested folders of pages, like an Obsidian vault: create, rename, drag to move and collapse them. **Today** opens \`YYYY/MM/DD/daily\` for your local date, creating it if it's missing.
+New pages go in that day's folder too, from you or an agent, unless you start them inside a folder (its **+**) or an agent is given a folder path. Imports without a folder land there as well.
 
 ## Links, backlinks and the graph
 - Type \`[[\` to search for a page and link it, add \`#\` to link one of its tabs, or paste a page link. Links point at ids, so they survive renames and moves.
@@ -461,7 +462,7 @@ table(ag, [
   ['Tool', 'What it does'],
   ['list_pages', 'Pages the token can open, with folder path, tags and your role; filter by path or tags'],
   ['list_folders / create_folder', 'Your folder tree; create a path like Projects/Book'],
-  ['create_page / move_page / rename_page', 'Create a page in a folder path with tags, move it, rename it'],
+  ['create_page / move_page / rename_page', 'Create a page (in today\'s YYYY/MM/DD folder unless given a path) with tags, move it, rename it'],
   ['open_daily_page', 'Get or create the daily page at YYYY/MM/DD/daily'],
   ['set_page_tags / list_tags / create_view', 'Tag pages, list tags, save a sidebar view of pages by tag'],
   ['get_backlinks', 'Pages and tabs that link to a page'],
@@ -501,7 +502,7 @@ For scripts in any language. Send the token as \`Authorization: Bearer lp_...\`.
 table(ag, [
   ['Method and path', 'What it does'],
   ['GET /api/pages', 'List your pages'],
-  ['POST /api/pages', 'Create a page ({ "title" })'],
+  ['POST /api/pages', 'Create a page ({ "title", "path"? }); no path = today\'s YYYY/MM/DD folder'],
   ['GET /api/pages/<id>/content', 'Page as markdown, plus tabs and blocks'],
   ['GET /api/pages/<id>/outline', 'Tabs and headings with block ids and section sizes'],
   ['GET /api/pages/<id>/blocks', 'Blocks with ids and Markdown (?section=<heading id>, ?from=<block id>, ?limit=)'],
@@ -519,7 +520,7 @@ table(ag, [
   ['POST/PUT /api/pages/<id>/html-blocks', 'Add or replace an HTML block'],
   ['POST /api/pages/<id>/tabs', 'Add a tab'],
   ['GET /api/pages/<id>/actions', 'Pending input from block controls'],
-  ['POST /api/daily', 'Open or create a daily page ({ "date" })'],
+  ['POST /api/daily', 'Open or create a daily page ({ "date"? }, default the person\'s today)'],
   ['GET /api/mentions?wait=30', 'Long-poll for comments that @mention this agent'],
   ['POST /api/pages/<id>/comments', 'Comment on the page ({ "body", "quote" })'],
   ['POST /api/pages/<id>/comments/<thread id>', 'Reply in a thread ({ "body" }); replying marks the mention handled'],

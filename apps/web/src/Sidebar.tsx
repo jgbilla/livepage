@@ -270,7 +270,7 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <div className="sb-scroll">
         <Section id="files" label="Pages" className={`sb-files ${rootOver ? 'drop-over' : ''}`}
           actions={<>
-            <button type="button" className="sb-mini" onClick={() => void run(() => newPage(null))} title="New page" aria-label="New page"><Icon name="plus" /></button>
+            <button type="button" className="sb-mini" onClick={() => void run(() => newPage(null))} title="New page (in today's folder)" aria-label="New page"><Icon name="plus" /></button>
             <button type="button" className="sb-mini" onClick={() => setCreating({ parentId: null })} title="New folder" aria-label="New folder"><Icon name="folder-plus" /></button>
           </>}
           dropProps={{
