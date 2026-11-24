@@ -8,7 +8,7 @@
 // with reply_to_request. The panel shows which agents are online and streams the status.
 //
 //   Person (session cookie)
-//     GET    /api/agents                                -> { agents: your agent tokens + online status, target }
+//     GET    /api/agents                                -> { agents: your agent tokens + online status, target, saved }
 //     PUT    /api/agents/target                         { target: 'builtin' | <token id> } -> who answers Ask AI and @AI
 //     POST   /api/pages/:page/agent-requests            { tokenId, prompt, tab?, selection? } -> { request }
 //                                                       (question and answer also go in the page's Ask AI chat, chats.ts)
@@ -173,8 +173,10 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
 
   if (path === '/api/agents' && method === 'GET') {
     if (who.kind !== 'human') { send(res, 403, { error: 'For people only.' }); return true; }
-    const [agents, target] = await Promise.all([listAgents(db, who.id), getAskTarget(db, who.id)]);
-    send(res, 200, { agents, target });
+    const [agents, target, [row]] = await Promise.all([listAgents(db, who.id), getAskTarget(db, who.id),
+      db.query('select ask_target from users where id = $1', [who.id])]);
+    // saved=false: never picked on any device yet, so a browser may send the pick it remembers from before.
+    send(res, 200, { agents, target, saved: row?.ask_target != null });
     return true;
   }
   if (path === '/api/agents/target' && method === 'PUT') {
@@ -185,7 +187,7 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
       const [tok] = await db.query('select id from api_tokens where id = $1 and user_id = $2', [target, who.id]);
       if (!tok) { send(res, 404, { error: 'That agent is not one of yours.' }); return true; }
     }
-    await db.query('update users set ask_target = $2 where id = $1', [who.id, target === BUILTIN ? null : target]);
+    await db.query('update users set ask_target = $2 where id = $1', [who.id, target]);
     send(res, 200, { target });
     return true;
   }

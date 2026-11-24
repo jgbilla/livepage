@@ -111,9 +111,13 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
   }, []);
   // Your connected agents and whether they're online; refreshed while the panel is open.
   useEffect(() => {
-    const load = () => api<{ agents: Agent[]; target?: string }>('/agents').then((r) => {
+    const load = () => api<{ agents: Agent[]; target?: string; saved?: boolean }>('/agents').then((r) => {
       setAgents(r.agents);
-      if (r.target) { setTargetState(r.target); saveTarget(r.target); } // picked on another device
+      const local = loadTarget();
+      if (!r.saved && local !== BUILTIN && r.agents.some((a) => a.id === local)) {
+        // Picked in this browser before picks were saved to the account: keep it, and save it.
+        void api('/agents/target', { method: 'PUT', body: { target: local } }).catch(() => {});
+      } else if (r.target) { setTargetState(r.target); saveTarget(r.target); } // the account's pick, maybe made on another device
     }).catch(() => {});
     void load();
     const t = setInterval(load, 15_000);
