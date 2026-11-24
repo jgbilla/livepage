@@ -9,7 +9,7 @@
 // doesn't know yet has to be accepted first, so no other site can slip an entry into your list.
 import { useSyncExternalStore } from 'react';
 import { api } from './api';
-import { isStandalone } from './pwa';
+import { isIos, isStandalone } from './pwa';
 
 export type WsLink = { url: string; name: string; icon?: string; color: number; at: number; gone?: true };
 
@@ -68,8 +68,6 @@ export function useWorkspaceLinks() {
   return { self: all.find((l) => l.url === HERE) ?? null, others: all.filter((l) => l.url !== HERE), all, offer: s.offer };
 }
 
-/** The name to show for this workspace: yours, or "Livepage" until you name it. */
-export const useWorkspaceName = () => useWorkspaceLinks().self?.name ?? 'Livepage';
 
 export function nextColor(links = state.links) {
   const used = new Set(visible(links).map((l) => l.color));
@@ -139,13 +137,51 @@ export function hrefFor(url: string) {
   return `${url}/#lp-ws=${b64(JSON.stringify({ from: HERE, links }))}`;
 }
 
-/** An installed app opens the other workspace in its own window (its own installed app, if you have one). */
-export const opensNewWindow = () => isStandalone();
+/**
+ * How a switch opens the other workspace, which matters most in an installed app: Safari keeps an
+ * installed app bound to one address, so a plain link to the other workspace leaves the app.
+ * - A browser tab, and the iPhone or iPad Home Screen app: in place. On iOS a new-window link drops
+ *   you into Safari (outside the app, with its own sign-in), while going in place keeps you inside
+ *   the app, and switching back returns to it.
+ * - An installed desktop app (Safari's Add to Dock, Chrome, Edge): a window of the same app, opened
+ *   by script (Safari keeps windows a page opens inside the app; links to other sites go to your
+ *   browser). One window per workspace: switching again brings that window back.
+ */
+export const opensNewWindow = () => isStandalone() && !isIos();
+
+/** The window name for a workspace's window in an installed desktop app, so switching finds it again. */
+const windowName = (url: string) => `lp-ws ${url}`;
+const opened = new Map<string, Window>();
 
 export function switchTo(url: string) {
   const href = hrefFor(url);
-  if (opensNewWindow()) window.open(href, '_blank', 'noopener');
-  else location.assign(href);
+  if (!opensNewWindow()) { location.assign(href); return; }
+  const had = opened.get(url);
+  if (had && !had.closed) { had.focus(); return; }
+  // Not noopener: a named window can only be found again by the windows related to it, so this
+  // finds the window you came from, or the one opened last time. The other side is a workspace you
+  // added yourself. Found or not, a switch always shows the workspace.
+  const w = window.open(href, windowName(url));
+  if (w) opened.set(url, w);
+  else location.assign(href); // blocked: switch in place rather than doing nothing
+}
+
+/** In an installed desktop app, name this window after its workspace, so the others switch back to it instead of opening another. */
+export function nameThisWindow() {
+  if (typeof window === 'undefined' || !opensNewWindow()) return;
+  if (!window.name || window.name.startsWith('lp-ws ')) window.name = windowName(HERE);
+  // Switching back to this window while it is already on the home screen only changes the #, so the
+  // page doesn't reload: there is nothing new to take, just tidy the address.
+  addEventListener('hashchange', () => {
+    if (location.hash.startsWith('#lp-ws=')) history.replaceState(history.state, '', location.pathname + location.search);
+  });
+}
+
+/** A workspace row was clicked: switch, unless you asked for a new tab or window (Cmd/Ctrl/Shift/middle click). */
+export function onSwitchClick(e: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void }, url: string) {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  switchTo(url);
 }
 
 /** Warm up the connection to the other workspaces (and wake a sleeping free server) when the menu opens. */

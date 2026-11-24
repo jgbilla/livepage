@@ -13,7 +13,8 @@ import { useNarrow } from './Sidebar';
 import { HScrollEdges, useHScroll } from './HScroll';
 import { Icon, type IconName } from './design/Icon';
 import { titleOf, useWorkspace, type Workspace } from './workspace';
-import { useWorkspaceName } from './workspaceLinks';
+import { useWorkspaceLinks } from './workspaceLinks';
+import { useAppIdentity } from './appIdentity';
 import {
   activateTab, closeOtherTabs, closeTab, closeTabsToRight, cycleTab, focusGroup, initTabs, moveTab, nthTab, openInTab,
   setSplit, setTabPath, splitTab, tabsSnapshot, togglePin, useTabs, type WTab,
@@ -112,10 +113,13 @@ export function WorkspaceTabs({ me, screenFor }: { me: Me; screenFor: ScreenFor 
   const focused = st.groups[st.focus].tabs.find((t) => t.id === st.groups[st.focus].active)!;
   const focusedTitle = tabLabel(focused.path, ws).title;
   // Named workspaces (say, Work and Personal) put their name there, so browser tabs tell them apart.
-  const appName = useWorkspaceName();
+  const self = useWorkspaceLinks().self;
+  const appName = self?.name ?? 'Livepage';
   useEffect(() => { document.title = focused.path === '/' ? appName : `${focusedTitle} · ${appName}`; }, [focusedTitle, focused.path, appName]);
   // What an iPhone suggests calling it on the home screen.
   useEffect(() => { document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', appName); }, [appName]);
+  // ...and its icon there, marked with this workspace's tile so two installed workspaces look different.
+  useAppIdentity(self);
 
   useShortcuts();
 
