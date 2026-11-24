@@ -236,6 +236,21 @@ kbd, .sb-search kbd, .switcher-kbd { font: var(--lp-weight-medium) var(--lp-text
 .editor th { background: var(--lp-bg-subtle); text-align: left; font-weight: var(--lp-weight-semibold); color: var(--lp-text); }
 .editor td p, .editor th p { margin: 0; }
 .editor .selectedCell { background: var(--lp-accent-soft); }
+/* Column widths: drag a column border (TableResize.ts). A table wider than the page scrolls sideways
+   inside its wrapper, so the page itself never scrolls sideways (phones included). */
+.editor .tableWrapper { overflow-x: auto; overflow-y: hidden; margin: var(--lp-space-4) 0; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.editor .tableWrapper > table { margin: 0; }
+.editor th, .editor td { position: relative; }
+.editor .column-resize-handle { position: absolute; top: 0; bottom: 0; right: -2px; width: 3px; z-index: 2; background: var(--lp-accent); pointer-events: none; }
+.editor tr > :last-child > .column-resize-handle { right: 0; }
+.ProseMirror.resize-cursor, .table-resizing, .table-resizing * { cursor: col-resize; }
+.table-resizing .editor { user-select: none; -webkit-user-select: none; }
+/* Touch: the table holding the cursor shows a grip on each column border of its header row. */
+@media (pointer: coarse) {
+  .editor .table-active tr:first-child > ::after { content: ''; position: absolute; top: 50%; right: -3px; width: 6px; height: 22px; margin-top: -11px; z-index: 2;
+    border-radius: var(--lp-radius-full); background: var(--lp-surface); box-shadow: inset 0 0 0 1.5px var(--lp-accent); pointer-events: none; }
+  .editor .table-active tr:first-child > :last-child::after { right: 1px; }
+}
 
 /* Tabs: underline tabs, the active one in ink */
 .tabbar { display: flex; align-items: flex-end; gap: var(--lp-space-1); margin: 0; overflow-x: auto; overflow-y: hidden; }
@@ -971,6 +986,8 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
   .page { max-width: none; padding: 0; }
   .editor .ProseMirror { min-height: 0; }
   .html-block, .mind-map, .editor table { break-inside: avoid; }
+  .editor .tableWrapper { overflow: visible; }
+  .column-resize-handle, .editor .table-active tr:first-child > ::after { display: none !important; }
   .html-block { border: 0; }
   .template-field, .template-var { background: none; box-shadow: none; color: inherit; }
   a { color: inherit; }

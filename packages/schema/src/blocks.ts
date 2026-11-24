@@ -449,9 +449,14 @@ export function insertTableRow(doc: Y.Doc, tableId: string, cells: string[], row
     // Nothing goes above a header row.
     const first = rows[0] && rowsOf(rows[0]).some((c) => c.nodeName === 'tableHeader') ? 1 : 0;
     at = Math.max(first, Math.min(row ? row - 1 : rows.length, rows.length));
+    // Column widths someone dragged (each cell's colwidth) carry over to the new row.
+    const model = rows[at === 0 ? 0 : at - 1] ?? rows[0];
+    const widths = model ? rowsOf(model).map((c) => c.getAttribute('colwidth')) : [];
     const el = new Y.XmlElement('tableRow');
     el.insert(0, Array.from({ length: width }, (_, i) => {
       const c = new Y.XmlElement('tableCell');
+      const w = widths[i];
+      if (Array.isArray(w) && w.length === 1) c.setAttribute('colwidth', [...w] as never); // an array, as the editor stores it
       c.insert(0, cellContent(doc, String(cells[i] ?? '')));
       return c;
     }));

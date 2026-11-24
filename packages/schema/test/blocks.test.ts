@@ -7,6 +7,7 @@ import {
   blocksAsText, deleteBlocks, deleteTableRow, findBlock, insertBlocks, insertTableRow, moveBlocks, outlineAsText, pageOutline,
   readBlocks, replaceBlocks, replaceText, setTableCell, tabToMarkdown, textAnchorForQuote, currentAnchorText,
 } from '../src/index.ts';
+import { pageToHtml } from '../src/html.ts';
 
 function sample() {
   const doc = new Y.Doc();
@@ -171,4 +172,20 @@ test('toggle lines: agents write and read them as "> [!toggle]" callouts, and th
   assert.equal(tabToMarkdown(doc), md);
   const [quote] = insertBlocks(doc, '> Just a quote', { at: 'end' }).ids;
   assert.equal((findBlock(doc, quote)!.node as Y.XmlElement).nodeName, 'blockquote');
+});
+
+test('dragged column widths survive agent table edits and reach the published page', () => {
+  const doc = new Y.Doc();
+  insertTable(doc, [['Name', 'Notes'], ['a', 'b']]);
+  const [table] = ids(doc);
+  const tableEl = fragment(doc).toArray()[0] as Y.XmlElement;
+  // What the editor writes when someone drags a column border: colwidth on every cell of that column.
+  for (const row of tableEl.toArray() as Y.XmlElement[]) (row.toArray()[0] as Y.XmlElement).setAttribute('colwidth', [180] as never);
+  setTableCell(doc, table, 2, 1, 'changed');
+  insertTableRow(doc, table, ['new', 'row']);
+  const rows = tableEl.toArray() as Y.XmlElement[];
+  assert.deepEqual(rows.map((r) => (r.toArray()[0] as Y.XmlElement).getAttribute('colwidth')), [[180], [180], [180]]);
+  assert.equal((rows[2].toArray()[1] as Y.XmlElement).getAttribute('colwidth'), undefined);
+  const html = pageToHtml(doc).tabs[0].html;
+  assert.match(html, /<table style="table-layout:fixed;min-width:240px"><colgroup><col style="width:180px"><col><\/colgroup>/);
 });

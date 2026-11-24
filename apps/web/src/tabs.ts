@@ -148,14 +148,45 @@ export function initTabs(userId: string) {
   show(false, true);
   if (!listening) { listening = true; addEventListener('popstate', onPop); }
   routerHooks.state = () => ({ wtab: focusedTab().id });
-  // A pinned tab stays where it is: following a link from it opens a new tab.
   routerHooks.beforePush = (to) => {
+    if (outside(to)) return false;
     const t = focusedTab();
-    if (!t.pinned || pathname(to) === pathname(t.path) || outside(to)) return false;
+    if (pathname(to) === pathname(t.path)) return false; // moving around inside the tab you are on
+    // Already open in another tab: go to that tab instead of opening the page a second time.
+    if (goToOpenTab(to)) return true;
+    // A pinned tab stays where it is: following a link from it opens a new tab.
+    if (!t.pinned) return false;
     openInTab(to);
     return true;
   };
-  routerHooks.openTab = (to, opts) => openInTab(to, opts);
+  routerHooks.openTab = (to, opts) => {
+    // "Open in new tab" on something already open goes to its tab too. Side by side still opens a copy.
+    if (!opts?.split && (opts?.background ? openTabFor(to) : goToOpenTab(to))) return;
+    openInTab(to, opts);
+  };
+}
+
+/** The tab that already shows this page or screen (the focused side first). Home is never matched: a new tab starts there. */
+function openTabFor(path: string) {
+  const p = pathname(path);
+  if (p === '/' || outside(p)) return null;
+  const order = [s.groups[s.focus], ...s.groups.filter((_, i) => i !== s.focus)];
+  for (const g of order) {
+    const t = g.tabs.find((x) => x.id === g.active && pathname(x.path) === p) ?? g.tabs.find((x) => pathname(x.path) === p);
+    if (t) return t;
+  }
+  return null;
+}
+
+/** Switch to the tab that already has this path open, taking it to the exact place asked for. False when there is none. */
+function goToOpenTab(path: string): boolean {
+  const t = openTabFor(path);
+  if (!t) return false;
+  // A link to a place inside the page (a page tab, a comment) takes the open tab there; a plain link leaves it where it was.
+  if (path !== pathname(path) && t.path !== path) setTabPath(t.id, path);
+  if (t.id === focusedTab().id) show(false);
+  else activateTab(t.id);
+  return true;
 }
 
 // ---------- actions ----------
