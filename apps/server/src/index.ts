@@ -16,6 +16,7 @@ import { sameOriginHeaders } from './origin.ts';
 import { bumpPageMembers } from './workspace-events.ts';
 import { CHATS_SQL } from './chats.ts';
 import { presenceUser } from './presence.ts';
+import { noteAgentEdit } from './tasks.ts';
 
 const db = await connect(process.env.DATABASE_URL);
 for (const stmt of VERSIONS_SQL.split(';').map((x) => x.trim()).filter(Boolean)) await db.query(stmt);
@@ -121,7 +122,11 @@ const server = new Server<Context>({
     if (isPageId(documentName)) await history.loaded(documentName, document as unknown as Y.Doc).catch((e) => console.warn('[history]', e.message));
   },
   async onChange({ documentName, update, context }) {
-    if (isPageId(documentName)) history.changed(documentName, update, (context as Context | undefined)?.user as Author | undefined);
+    if (isPageId(documentName)) {
+      const user = (context as Context | undefined)?.user as (Author & { tokenId?: string }) | undefined;
+      history.changed(documentName, update, user);
+      noteAgentEdit(db, documentName, user); // an agent working on a task: list this page on the task
+    }
   },
   async afterUnloadDocument({ documentName }) {
     if (isPageId(documentName)) history.unloaded(documentName);

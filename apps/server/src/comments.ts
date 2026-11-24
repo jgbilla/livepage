@@ -4,10 +4,10 @@
 // A thread is its first comment (id === thread_id) plus the replies after it.
 // When a comment @mentions an agent, that agent can find it three ways:
 //   1. poll or long-poll GET /api/mentions (MCP tool get_mentions does this),
-//   2. an optional webhook on its agent token (POSTed right away, signed with HMAC-SHA256),
+//   2. a push: its event stream and optional webhook (agent-push.ts, signed with HMAC-SHA256, retried),
 //   3. read the page's comments (list_comments).
 // Replying in the thread marks the agent's mention as handled.
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { Hocuspocus } from '@hocuspocus/server';
@@ -20,6 +20,7 @@ import { config } from './config.ts';
 import { aiAvailable } from './assistant/settings.ts';
 import { resolveAiRoute, routeDetail, type AiRoute } from './ai-route.ts';
 import { wakeAgent } from './agent-requests.ts';
+import { pushToAgent } from './agent-push.ts';
 
 export type CommentRow = {
   id: string; page_id: string; thread_id: string; tab: string; anchor: CommentAnchor | null; body: string;
@@ -342,52 +343,34 @@ export async function setWebhook(db: Db, userId: string, tokenId: string, rawUrl
   return { webhook_url: url, webhook_secret: secret };
 }
 
+/** Tell the mentioned agents: their event stream and webhook (agent-push.ts) get a comment.mention. */
 async function notifyAgents(db: Db, hp: Hocuspocus, pageId: string, comment: CommentRow, tokenIds: string[]) {
-  const hooks = await db.query('select id, name, webhook_url, webhook_secret from api_tokens where id = any($1) and webhook_url is not null', [tokenIds]);
-  if (!hooks.length) return;
+  const tokens = await db.query('select id, name from api_tokens where id = any($1)', [tokenIds]);
+  if (!tokens.length) return;
   const thread = await getThread(db, pageId, comment.thread_id);
   const [page] = await db.query('select title from pages where id = $1', [pageId]);
   const currentText = thread?.anchor?.kind === 'text'
     ? await withDoc(hp, pageId, null, (doc) => currentAnchorText(doc, thread.anchor!)).catch(() => null)
     : null;
-  for (const h of hooks) {
-    const payload = JSON.stringify({
-      type: 'comment.mention',
-      delivered_at: new Date().toISOString(),
-      agent: { token_id: h.id, name: h.name },
-      page: { id: pageId, title: page?.title || 'Untitled', url: `${config.publicUrl}/p/${pageId}` },
-      comment: { id: comment.id, thread_id: comment.thread_id, author_name: comment.author_name, author_kind: comment.author_kind, body: comment.body, text: plainBody(comment.body) },
-      thread: thread && {
-        id: thread.id, tab: thread.tab, anchor: thread.anchor?.kind ?? 'page', block_id: thread.anchor?.kind === 'block' ? thread.anchor.blockId : undefined,
-        quote: currentText ?? (thread.anchor && 'quote' in thread.anchor ? thread.anchor.quote : null),
-        comments: [thread, ...thread.replies].map((c) => ({ id: c.id, author_name: c.author_name, author_kind: c.author_kind, text: plainBody(c.body), created_at: c.created_at })),
-      },
-      reply_with: {
-        http: `POST ${config.publicUrl}/api/pages/${pageId}/comments/${comment.thread_id}  {"body": "..."}  (Authorization: Bearer <this agent's token>)`,
-        mcp: `reply_to_comment { page: "${pageId}", thread_id: "${comment.thread_id}", body: "..." }`,
-      },
-    });
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const sig = createHmac('sha256', h.webhook_secret).update(`${ts}.${payload}`).digest('hex');
-    try {
-      await checkWebhookUrl(h.webhook_url); // DNS can change after the URL was saved
-      const res = await fetch(h.webhook_url, {
-        method: 'POST',
-        redirect: 'manual',
-        signal: AbortSignal.timeout(8000),
-        headers: {
-          'content-type': 'application/json',
-          'user-agent': 'Livepage-Webhook/1',
-          'x-livepage-event': 'comment.mention',
-          'x-livepage-timestamp': ts,
-          'x-livepage-signature': `sha256=${sig}`,
+  const quote = currentText ?? (thread?.anchor && 'quote' in thread.anchor ? thread.anchor.quote : null);
+  const title = page?.title || 'Untitled';
+  for (const h of tokens) {
+    pushToAgent(db, h.id, 'comment.mention',
+      `${comment.author_name} mentioned you in a comment on page ${pageId} (${title})${quote ? `, on "${String(quote).slice(0, 200)}"` : ''}: ${plainBody(comment.body).slice(0, 500)}\n` +
+      `Read the thread with list_comments, do what it asks, and answer with reply_to_comment (page ${pageId}, thread_id ${comment.thread_id}).`,
+      {
+        page: { id: pageId, title, url: `${config.publicUrl}/p/${pageId}` },
+        comment: { id: comment.id, thread_id: comment.thread_id, author_name: comment.author_name, author_kind: comment.author_kind, body: comment.body, text: plainBody(comment.body) },
+        thread: thread && {
+          id: thread.id, tab: thread.tab, anchor: thread.anchor?.kind ?? 'page', block_id: thread.anchor?.kind === 'block' ? thread.anchor.blockId : undefined,
+          quote,
+          comments: [thread, ...thread.replies].map((c) => ({ id: c.id, author_name: c.author_name, author_kind: c.author_kind, text: plainBody(c.body), created_at: c.created_at })),
         },
-        body: payload,
+        reply_with: {
+          http: `POST ${config.publicUrl}/api/pages/${pageId}/comments/${comment.thread_id}  {"body": "..."}  (Authorization: Bearer <this agent's token>)`,
+          mcp: `reply_to_comment { page: "${pageId}", thread_id: "${comment.thread_id}", body: "..." }`,
+        },
       });
-      if (!res.ok) console.warn(`[comments] webhook for ${h.id} answered ${res.status}`);
-    } catch (e) {
-      console.warn(`[comments] webhook for ${h.id} failed: ${(e as Error).message}`);
-    }
   }
 }
 

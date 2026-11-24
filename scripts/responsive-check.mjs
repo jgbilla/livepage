@@ -156,6 +156,8 @@ const SCREENS = [
     }, ready: '.switcher',
   },
   { name: 'graph', go: (p) => p.goto(`${BASE}/graph`), ready: '.graph-canvas' },
+  { name: 'tasks', go: (p) => p.goto(`${BASE}/tasks`), ready: '.tasks-main' },
+  { name: 'new-task', go: (p) => p.goto(`${BASE}/tasks?new=1`), ready: '.tasks-main' },
   {
     name: 'page-tabs', go: async (p, s) => {
       // The docs page has many page tabs: pick the last one, which starts off screen on phones.

@@ -24,6 +24,8 @@ import { getLinks, saveLinks } from './workspace-links.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
 import { handleChat } from './chats.ts';
+import { handleAgentEvents } from './agent-push.ts';
+import { handleTasks } from './tasks.ts';
 import { bumpWorkspace, handleWorkspaceEvents, workspaceRev } from './workspace-events.ts';
 import {
   HttpError, createComment, deleteComment, isCommentId, listMentions, markMentionDone, mentionables, setWebhook, threadsWithText,
@@ -150,10 +152,13 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (!who) return send(res, 401, { error: 'Sign in first.' });
     touchAgent(who);
     // Any change you make (from any device, or through your agents) refreshes your page list everywhere.
-    if (method !== 'GET' && method !== 'HEAD' && !who.superAgent) {
+    // (The task board has its own counter, bumped by tasks.ts, so a task note doesn't reload the page list.)
+    if (method !== 'GET' && method !== 'HEAD' && !who.superAgent && !path.startsWith('/api/tasks')) {
       res.on('finish', () => { if (res.statusCode < 400) bumpWorkspace(who.id); });
     }
     if (path === '/api/workspace/events' && method === 'GET') return handleWorkspaceEvents(req, res, who.id, url);
+    if (path === '/api/agent-events' && method === 'GET') return handleAgentEvents(req, res, db, who);
+    if (path.startsWith('/api/tasks') && (await handleTasks(req, res, db, who, url, path))) return;
     if ((path === '/api/agents' || path === '/api/agents/target' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });

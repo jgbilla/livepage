@@ -111,7 +111,7 @@ function AgentTokens() {
   const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null);
   // Optional: Livepage POSTs to this URL whenever someone @mentions the agent in a comment.
   const webhook = async (t: Token) => {
-    const url = prompt(`Webhook URL for "${t.name}". Livepage POSTs here when someone @mentions this agent in a comment. Leave empty to turn it off.`, t.webhook_url ?? 'https://');
+    const url = prompt(`Webhook URL for "${t.name}". Livepage POSTs here whenever there is work for this agent: an Ask AI request, a task, or a comment that @mentions it. Leave empty to turn it off.`, t.webhook_url ?? 'https://');
     if (url === null) return;
     try {
       const r = await api<{ webhook_url: string | null; webhook_secret?: string }>(`/tokens/${t.id}`, { method: 'PATCH', body: { webhook_url: url.trim() === 'https://' ? '' : url.trim() } });
@@ -148,7 +148,7 @@ function AgentTokens() {
           <li key={t.id}>
             <span className="token-name"><span className="avatar avatar-agent" aria-hidden="true"><Icon name="sparkles" size={12} /></span>{t.name}</span>
             <span className="muted small">{t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleString()}` : 'never used'}</span>
-            <button type="button" className="ghost" title={t.webhook_url ?? 'Get a webhook call when this agent is @mentioned'} onClick={() => webhook(t)}>
+            <button type="button" className="ghost" title={t.webhook_url ?? 'Get a webhook call when there is work for this agent'} onClick={() => webhook(t)}>
               {t.webhook_url ? 'Webhook on' : 'Add webhook'}
             </button>
             <button type="button" className="ghost" onClick={() => rename(t)}>Rename</button>

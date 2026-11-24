@@ -13,7 +13,17 @@ export type LivepageMcpOptions = {
   agentName?: string;
   /** Stable id for this agent (its token id), so several agents on a page stay apart. */
   agentId?: string;
+  /** Run as a Claude Code channel: work is pushed into the session as <channel> messages (mcp.ts, LIVEPAGE_CHANNEL=1). */
+  channel?: boolean;
 };
+
+const CHANNEL_INSTRUCTIONS = `
+Livepage pushes work to you as <channel source="livepage"> messages the moment it arrives: Ask AI requests, tasks from
+the task board, and comments that mention you. You do not need to loop on wait_for_requests. When a request or task arrives,
+call wait_for_requests with wait_seconds 0 to take it (that confirms you have it), do it, and answer as usual
+(reply_to_request, update_task). A comment mention says which thread to read and answer with reply_to_comment. The attribute type says what it is: request.created, task.assigned,
+task.message (the person wrote on a task), task.cancelled (stop working on it), comment.mention, or ready (what was
+waiting when you connected).`;
 
 const GENERIC_NAME = /^\s*(agent)?\s*$/i; // empty, or the default a token gets when left unnamed
 const KNOWN_CLIENTS: [RegExp, string][] = [
@@ -98,11 +108,14 @@ People can also ask you from the Ask AI panel inside Livepage. When asked to lis
 wait_for_requests: for each request, work on its page (get_outline or read_page first; use its tab; edit what is there with the targeted edit tools), using your own context and tools
 as needed, then answer with reply_to_request, and go straight back to wait_for_requests: the person's follow-ups in the same chat
 arrive as new requests carrying the earlier turns. Send short progress with reply_to_request(done=false) on long tasks.
+People also hand you tasks on the task board. They arrive through wait_for_requests (or list_tasks). Work on them with your
+own context and the page tools, report with update_task as you go (a short note), ask with status needs_you when you are stuck,
+and finish with done or failed and a one-line summary.
 People comment on text, blocks or the whole page and can @mention you; @AI reaches you too when the person picked you in
 the Ask AI menu. While listening, these arrive through wait_for_requests as well. Once you have replied in a thread, the person's
 later replies there reach you too, without an @. Check get_mentions, read the thread (list_comments) and the page,
-then answer with reply_to_comment and make any edit they asked for.`,
-
+then answer with reply_to_comment and make any edit they asked for.${opts.channel ? CHANNEL_INSTRUCTIONS : ''}`,
+      ...(opts.channel ? { capabilities: { experimental: { 'claude/channel': {} } } } : {}),
     },
   );
 
@@ -211,18 +224,22 @@ then answer with reply_to_comment and make any edit they asked for.`,
   const pageLine = (p: PageRow) =>
     `${p.id}  ${p.path ? `${p.path}/` : ''}${p.title || 'Untitled'}${p.tags?.length ? `  ${p.tags.map((t) => `#${t}`).join(' ')}` : ''}${p.role && p.role !== 'owner' ? `  (${p.role})` : ''}`;
 
+  type AgentTask = { id: string; title: string; page_id: string | null; text: string };
   type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
   type ListenMention = { id: string; page_id: string; page_title: string; thread_id: string; tab: string; author_name: string; text: string; quote: string | null };
   server.tool('wait_for_requests',
-    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and take them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Comments that @mention you (or @AI, when the person picked you in Ask AI) arrive here too: answer those in the thread with reply_to_comment. Call it in a loop when asked to listen, including after each reply, so follow-ups reach you.',
+    'Wait for requests people send you from the Ask AI panel in Livepage, and tasks they hand you on the task board (up to wait_seconds), and take them. Each request has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Comments that @mention you (or @AI, when the person picked you in Ask AI) arrive here too: answer those in the thread with reply_to_comment. Tasks: report on them with update_task. Call it in a loop when asked to listen, including after each reply, so follow-ups reach you.',
     { wait_seconds: z.number().min(0).max(30).default(25) },
     async ({ wait_seconds }, extra) => tryText(async () => {
       // Pass the call's abort signal on, so a cancelled or timed-out call ends the long poll instead of
       // leaving it open to take a request nobody will see.
-      const { requests, mentions = [] } = await http<{ requests: AgentReq[]; mentions?: ListenMention[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
-      if (!requests.length && !mentions.length) return 'no requests yet; call wait_for_requests again to keep listening';
-      // Confirm we got them. Unconfirmed requests go back in the queue after a short while.
-      await Promise.all(requests.map((r) => http('POST', `/agent-requests/${r.id}/ack`).catch(() => {})));
+      const { requests, mentions = [], tasks = [] } = await http<{ requests: AgentReq[]; mentions?: ListenMention[]; tasks?: AgentTask[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
+      if (!requests.length && !mentions.length && !tasks.length) return 'no requests yet; call wait_for_requests again to keep listening';
+      // Confirm we got them. Unconfirmed requests and tasks go back in the queue after a short while.
+      await Promise.all([
+        ...requests.map((r) => http('POST', `/agent-requests/${r.id}/ack`).catch(() => {})),
+        ...tasks.map((t) => http('POST', `/tasks/${t.id}/ack`).catch(() => {})),
+      ]);
       return requests.map((r) => [
         `request ${r.id}${r.history?.length ? ' (follow-up in an ongoing chat)' : ''}`,
         `page: ${r.page_id} (${r.page_title || 'Untitled'})${r.tab && r.tab !== 'main' ? `, tab ${r.tab}` : ''}`,
@@ -234,13 +251,50 @@ then answer with reply_to_comment and make any edit they asked for.`,
         `comment ${m.id} on page ${m.page_id} (${m.page_title})${m.tab && m.tab !== 'main' ? `, tab ${m.tab}` : ''}, thread ${m.thread_id}${m.quote ? `, on "${m.quote}"` : ''}`,
         `${m.author_name}: ${m.text}`,
         `read the thread with list_comments and the page, do what it asks, answer with reply_to_comment (page ${m.page_id}, thread_id ${m.thread_id}), then call wait_for_requests again.`,
-      ].join('\n'))).join('\n\n---\n\n');
+      ].join('\n'))).concat(tasks.map((t) => `${t.text}\nthen call wait_for_requests again.`)).join('\n\n---\n\n');
     }));
 
   server.tool('reply_to_request',
     'Answer a request from the Ask AI panel. The text shows in the person\'s chat. Use done=false for a short progress note while you are still working; done=true (default) finishes it.',
     { request_id: z.string().regex(/^ar_[\w-]+$/), text: z.string(), done: z.boolean().default(true) },
     async ({ request_id, text: t, done }) => tryText(async () => { await http('POST', `/agent-requests/${request_id}/reply`, { text: t, done }); return 'ok'; }));
+
+  // ---- Task board
+  const taskId = z.string().regex(/^tk_[\w-]+$/).describe('Task id (tk_...)');
+  type TaskRow = { id: string; title: string; status: string; note: string; page_id: string | null; page_title: string | null; pages: { id: string; title: string }[]; updated_at: string };
+  server.tool('list_tasks',
+    'Tasks people handed you on the Livepage task board: open ones (queued, working, needs you), or all with include_finished. New ones also arrive through wait_for_requests.',
+    { include_finished: z.boolean().default(false) },
+    async ({ include_finished }) => tryText(async () => {
+      const { tasks } = await http<{ tasks: TaskRow[] }>('GET', `/tasks${include_finished ? '?all=1' : ''}`);
+      return tasks.map((t) => `${t.id}  [${t.status}]  ${t.title}${t.page_id ? `  (page ${t.page_id})` : ''}${t.note ? `\n  last note: ${t.note}` : ''}`).join('\n') || 'no tasks';
+    }));
+
+  server.tool('get_task', 'Read one task: its instructions, page, pages you have touched for it, and the whole conversation with the person.',
+    { task_id: taskId },
+    async ({ task_id }) => tryText(async () => {
+      const { task, events } = await http<{ task: TaskRow & { details: string }; events: { kind: string; author_kind: string; author_name: string; text: string; status: string | null; created_at: string }[] }>('GET', `/tasks/${task_id}`);
+      return [
+        `task ${task.id} [${task.status}]: ${task.title}`,
+        task.details ? `instructions:\n${task.details}` : '',
+        task.page_id ? `page: ${task.page_id} (${task.page_title})` : '',
+        task.pages.length ? `pages touched: ${task.pages.map((p) => `${p.id} (${p.title || 'Untitled'})`).join(', ')}` : '',
+        `timeline:\n${events.map((e) => `  ${e.created_at.slice(0, 16).replace('T', ' ')} ${e.author_kind === 'agent' ? 'you' : e.author_name} ${e.kind}${e.status ? ` -> ${e.status}` : ''}${e.text ? `: ${e.text}` : ''}`).join('\n')}`,
+      ].filter(Boolean).join('\n');
+    }));
+
+  server.tool('update_task',
+    'Report on a task from the task board. Send a short note as you go (it shows on the task card). status: working (default once you start), needs_you (stuck: put your question in note; the person\'s answer comes back through wait_for_requests), done or failed (put a summary in note). pages: ids of pages you made or changed, if not edited live. The answer includes anything the person wrote since you last looked.',
+    {
+      task_id: taskId,
+      status: z.enum(['working', 'needs_you', 'done', 'failed']).optional(),
+      note: z.string().max(2000).optional(),
+      pages: z.array(z.string().regex(/^p_[\w-]{8,40}$/)).max(20).optional(),
+    },
+    async ({ task_id, status, note, pages }) => tryText(async () => {
+      const r = await http<{ status: string; messages: { from: string; text: string }[] }>('POST', `/tasks/${task_id}/update`, { status, note, pages });
+      return `ok, task is ${r.status}${r.messages.length ? `\nnew from the person:\n${r.messages.map((m) => `  ${m.from}: ${m.text}`).join('\n')}` : ''}`;
+    }));
 
   server.tool('list_pages',
     'List the pages this agent token can open: id, folder path/title, tags, and your role if not owner. Optionally only one folder (path) or pages with some tags.',

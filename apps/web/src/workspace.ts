@@ -54,6 +54,12 @@ export function useWorkspace(): Workspace | null {
 // The server says when your page list changed (GET /api/workspace/events, a long poll), and
 // the list reloads. Coming back to the app (a phone waking, switching tabs) also reloads it,
 // since nothing is followed while the app is off screen.
+// The task board (tasks.ts) rides on the same long poll: the server also says when its tasks changed.
+let tasksFollower: { rev: () => number | null; changed: (rev: number) => Promise<void> } | null = null;
+export function setTasksFollower(rev: () => number | null, changed: (rev: number) => Promise<void>) { tasksFollower = { rev, changed }; }
+/** The board just loaded: ask again now, so the open long poll also watches its counter. */
+export function watchTasksNow() { if (wired && cacheUser && document.visibilityState === 'visible') startFollowing(); }
+
 let wired = false;
 let gen = 0;
 let hiddenAt = 0;
@@ -64,7 +70,7 @@ function followWorkspace() {
   wired = true;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') { hiddenAt = Date.now(); poll?.abort(); return; }
-    if (cacheUser && Date.now() - hiddenAt > 2000) void refreshWorkspace();
+    if (cacheUser && Date.now() - hiddenAt > 2000) { void refreshWorkspace(); void tasksFollower?.changed(-1); }
     startFollowing();
   });
   window.addEventListener('online', () => { if (cacheUser) void refreshWorkspace(); startFollowing(); });
@@ -89,10 +95,15 @@ function startFollowing() {
         // Ask about the list on screen: if the server has moved on since it was loaded, load it again.
         await (inflight ?? Promise.resolve()).catch(() => {});
         const shown = state?.rev;
-        const q = typeof shown === 'number' ? `&since=${shown}` : '';
+        const shownTasks = tasksFollower?.rev();
+        const q = (typeof shown === 'number' ? `&since=${shown}` : '') + (typeof shownTasks === 'number' ? `&tasks=${shownTasks}` : '');
         const res = await fetch(`/api/workspace/events?wait=25${q}`, { credentials: 'same-origin', signal: ctl.signal, cache: 'no-store' });
         if (!res.ok) throw new Error(String(res.status));
-        const { rev } = await res.json();
+        const { rev, tasks } = await res.json();
+        if (typeof tasks === 'number' && typeof shownTasks === 'number' && tasks !== shownTasks) {
+          await tasksFollower?.changed(tasks);
+          if (tasksFollower?.rev() === shownTasks) await new Promise((r) => setTimeout(r, 5000)); // couldn't reload: don't spin
+        }
         if (rev !== state?.rev && mine === gen) {
           await refreshWorkspace();
           // Still behind (an offline copy came back instead): don't spin, look again shortly.

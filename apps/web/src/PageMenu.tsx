@@ -95,6 +95,9 @@ export function PageMenu({ pageId, role, title, isTemplate, publishedSlug, onCha
             <a role="menuitem" href={`/graph?page=${pageId}`} onClick={(e) => { e.preventDefault(); setOpen(false); navigate(`/graph?page=${pageId}`); }}>
               <span className="check"><Icon name="graph" /></span>Graph around this page
             </a>
+            <a role="menuitem" href={`/tasks?new=1&page=${pageId}`} onClick={(e) => { e.preventDefault(); setOpen(false); navigate(`/tasks?new=1&page=${pageId}`); }}>
+              <span className="check"><Icon name="tasks" /></span>Hand to an agent…
+            </a>
             <div className="menu-sep" />
           </div>
           {canEdit && (

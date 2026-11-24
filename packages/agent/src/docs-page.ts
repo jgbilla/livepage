@@ -199,7 +199,7 @@ agent.useTab('main').addMindMap({
     { text: 'Build', children: [{ text: 'Custom UI blocks' }, { text: 'Streaming in order' }, { text: 'Host bridge (livepage.send)' }] },
     { text: 'Organize', children: [{ text: 'Folders and daily pages' }, { text: '[[Links]] and backlinks' }, { text: 'Graph view' }, { text: 'Tags and views' }, { text: 'Search' }, { text: 'Templates' }] },
     { text: 'Collaborate', children: [{ text: 'Live carets' }, { text: 'Comments and @mentions' }, { text: 'Version history' }, { text: 'Share links' }, { text: 'Roles' }] },
-    { text: 'Agents', children: [{ text: 'Ask AI (your own key)' }, { text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }, { text: 'Mention webhooks' }] },
+    { text: 'Agents', children: [{ text: 'Ask AI (your own key)' }, { text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }, { text: 'Task board' }, { text: 'Push: stream, webhooks, channel' }] },
     { text: 'Share', children: [{ text: 'Publish to the web' }, { text: 'Import Markdown / Obsidian' }, { text: 'Export Markdown, PDF, zip' }] },
     { text: 'Run it', children: [{ text: 'Render + Neon' }, { text: 'Docker' }, { text: 'Locally' }, { text: 'Install as an app' }] },
   ],
@@ -216,7 +216,7 @@ table('main', [
   ['Organize and publish', 'Folders, daily pages, links and backlinks, graph, search, tags, templates, import, export and publishing'],
   ['Collaboration and sharing', 'Live editing, comments, version history, roles, share links and how access is enforced'],
   ['Accounts and sign-in', 'Email and password, Google via Neon Auth, sessions, agent tokens, security'],
-  ['Connect agents', 'Ask AI, hosted MCP for any client, the local MCP server, @mentions, the HTTP API and the full tool list'],
+  ['Connect agents', 'Ask AI, the task board, hosted MCP for any client, the local MCP server, push instead of polling, @mentions, the HTTP API and the full tool list'],
   ['Architecture', 'Components, the document model, storage, the sandbox security model, repo layout'],
   ['Roadmap', 'What is built, what comes next, and open questions'],
 ]);
@@ -413,6 +413,9 @@ Each page keeps your chat (only you see it), and it follows you to your other de
 
 To connect your own agent, create an agent token on your home page and use one of the setups below.
 
+## Task board
+**Tasks** in the sidebar is a board for handing jobs to your agents: give a task a title, some details and optionally a page, and pick which agent does it. The board shows each task as **Queued**, **Working**, **Needs you** or **Done** (failed and cancelled tasks sit with the finished ones), with the agent's latest note on the card. The agent gets the task the moment you hand it out, writes short notes as it goes, asks you a question when it is stuck (the task moves to Needs you, and the sidebar shows a count), and finishes with a summary. Pages it edits while working are listed on the task by themselves. Answer a question or write on a finished task and it goes back to the agent with the whole conversation. From a page, **··· → Hand to an agent** starts a task about that page. The board updates live on all your devices.
+
 ## Hosted MCP (any client, nothing to install)
 Every Livepage app serves an MCP endpoint at \`https://<your app>/mcp\` (Streamable HTTP). Connect with that address and the header \`Authorization: Bearer lp_...\`.
 **Claude Code**
@@ -440,6 +443,17 @@ For clients that only run local servers, run the bundled stdio server from a che
 \`\`\`
 claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --silent --dir /path/to/livepage agent:mcp
 \`\`\`
+
+## Push instead of polling
+A listening agent doesn't have to keep checking. Livepage pushes each piece of work to the agent the moment it arrives: Ask AI requests, tasks, answers on a task, and comments that mention it. Three ways to receive it:
+- **Claude Code channel:** run the local MCP server with \`LIVEPAGE_CHANNEL=1\` and start Claude Code with the channel on. Work then appears in the session by itself, with no listening loop.
+- **Event stream:** \`GET /api/agent-events\` with the agent token is a Server-Sent Events stream, for any script or runner.
+- **Webhook:** **Add webhook** on an agent token, and Livepage POSTs each event there (see below).
+\`\`\`
+claude mcp add livepage -e LIVEPAGE_CHANNEL=1 -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --silent --dir /path/to/livepage agent:mcp
+claude --dangerously-load-development-channels server:livepage
+\`\`\`
+A push says what the work is; the agent still takes it with \`wait_for_requests\`, which confirms it has it. Work nobody confirms goes back in the queue, so a missed push loses nothing, and polling keeps working for clients without push.
 
 ## MCP tools
 `);
@@ -474,7 +488,8 @@ table(ag, [
   ['list_templates / set_template / get_template_fields / fill_template_fields', 'Templates and their {{Field}}s'],
   ['import_markdown / export_markdown', 'Markdown in and out'],
   ['publish_page / unpublish_page', 'A public read-only copy at /pub/<slug>'],
-  ['wait_for_requests / reply_to_request', 'Ask AI requests sent to this agent (plus comments that mention it, or @AI when it is your pick), and the answer shown in the panel'],
+  ['wait_for_requests / reply_to_request', 'Ask AI requests and board tasks sent to this agent (plus comments that mention it, or @AI when it is your pick), and the answer shown in the panel'],
+  ['list_tasks / get_task / update_task', 'Tasks from the board: read one with its conversation, post notes, ask (needs_you), finish (done or failed)'],
 ]);
 write(ag, `
 ### Small edits, not rewrites
@@ -508,7 +523,11 @@ table(ag, [
   ['GET /api/mentions?wait=30', 'Long-poll for comments that @mention this agent'],
   ['POST /api/pages/<id>/comments', 'Comment on the page ({ "body", "quote" })'],
   ['POST /api/pages/<id>/comments/<thread id>', 'Reply in a thread ({ "body" }); replying marks the mention handled'],
-  ['GET /api/agent-requests?wait=20', 'Ask AI requests and comment mentions for this agent'],
+  ['GET /api/agent-requests?wait=20', 'Ask AI requests, comment mentions and board tasks for this agent'],
+  ['GET /api/agent-events', 'Server-Sent Events: work pushed to this agent as it arrives'],
+  ['GET /api/tasks', 'Tasks assigned to this agent (?all=1 includes finished ones)'],
+  ['POST /api/tasks/<id>/ack', 'Confirm you took a task (it moves to Working)'],
+  ['POST /api/tasks/<id>/update', 'Report ({ "status": "working" | "needs_you" | "done" | "failed", "note", "pages" }); returns anything the person wrote since'],
   ['POST /api/agent-requests/<id>/reply', 'Answer in the Ask panel ({ "text", "done" }); done: false posts a progress note'],
   ['GET /api/pages/<id>/versions', 'Version history; add /<version id>?compare=previous|current for a diff'],
   ['POST /api/pages/<id>/versions/<version id>/restore', 'Restore a version live for everyone'],
@@ -521,7 +540,7 @@ curl -X POST -H "Authorization: Bearer lp_..." -H "content-type: application/jso
 \`\`\`
 
 ## @mentions and webhooks
-When someone mentions an agent in a comment, the agent finds out by MCP (\`get_mentions\`), HTTP (\`GET /api/mentions?wait=30\`) or a webhook. On the home page, **Add webhook** on an agent token: Livepage POSTs a \`comment.mention\` event (page, comment, the whole thread and how to reply) to that URL right away, signed with \`x-livepage-signature: sha256=HMAC_SHA256(secret, x-livepage-timestamp + "." + body)\`. Use it to start an agent run from a GitHub Action, a serverless function or an Agent SDK script. Agents write mentions as \`@[Name](user:<id>)\` or \`@[Name](agent:<id>)\`.
+When someone mentions an agent in a comment, the agent finds out by MCP (\`get_mentions\`), HTTP (\`GET /api/mentions?wait=30\`), its event stream or a webhook. On the home page, **Add webhook** on an agent token: Livepage POSTs each event for that agent to the URL right away (\`request.created\`, \`task.assigned\`, \`task.message\`, \`task.cancelled\` and \`comment.mention\`, named in \`x-livepage-event\`, with a \`text\` summary and the ids and links to act on), retrying a few times if it fails, signed with \`x-livepage-signature: sha256=HMAC_SHA256(secret, x-livepage-timestamp + "." + body)\`. Use it to start an agent run from a GitHub Action, a serverless function or an Agent SDK script. Agents write mentions as \`@[Name](user:<id>)\` or \`@[Name](agent:<id>)\`.
 `);
 
 // =====================================================================================
