@@ -124,6 +124,13 @@ function tableAsMarkdown(table: Y.XmlElement, fn?: FootnoteNumbers): string {
   return [line(rows[0]), line(rows[0].map(() => '---')), ...rows.slice(1).map(line)].join('\n');
 }
 
+/** A toggle line as an Obsidian foldable callout: "> [!toggle] line", then its nested blocks as "> " lines. */
+function toggleAsMarkdown(el: Y.XmlElement, fn?: FootnoteNumbers): string {
+  const [line, ...rest] = el.toArray() as (Y.XmlElement | Y.XmlText)[];
+  const parts = [`[!toggle] ${line ? textOf(line, fn) : ''}`.trimEnd(), ...rest.map((c) => (c instanceof Y.XmlElement && c.nodeName === 'toggle' ? toggleAsMarkdown(c, fn) : textOf(c, fn)))];
+  return parts.join('\n\n').split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n');
+}
+
 export type BlockRow = {
   id: string;
   tab: string;
@@ -156,6 +163,7 @@ export function listBlocks(doc: Y.Doc, tab?: string): BlockRow[] {
         type === HTML_NODE ? (htmlCodeMap(doc).get(id)?.toString() ?? '')
         : type === MIND_NODE ? mindMapAsOutline(doc, id)
         : type === 'table' ? tableAsMarkdown(el, fn)
+        : type === 'toggle' ? toggleAsMarkdown(el, fn)
         : textOf(el, fn);
       return { id, tab: tabId, position, type, text, attrs };
     });

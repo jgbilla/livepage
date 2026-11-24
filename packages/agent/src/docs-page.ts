@@ -295,6 +295,11 @@ write(ed, `
 ## Inserting and formatting
 Type \`/\` anywhere for the block menu: headings, lists, tables, mind maps, live HTML blocks, footnotes and page links. Select text for a small floating menu with bold, italic, link, comment, footnote and Ask AI. Footnotes are numbered in reading order and listed at the bottom of each tab.
 
+## Collapsing
+Any line can hide what is under it, like Notion. Type \`/toggle\` and pick **Toggle list**: the line gets an arrow, Enter at its end writes inside it, Tab moves the block below into it and Shift+Tab moves it back out. Any heading can fold too: hover it (on a phone, tap the small arrow beside it) and click the arrow to hide everything under it, up to the next heading of the same or a higher level. **Toggle heading** in the same menu is a heading whose arrow always shows. Ctrl/Cmd+Enter folds the line or heading you are in, and the "N blocks" tag beside a folded one opens it again.
+
+What you fold is your own view, kept in your browser, and everything starts open: collaborators and agents still see and edit the whole page, and moving the cursor into a folded part opens it. Agents write a toggle in Markdown as an Obsidian foldable callout, \`> [!toggle] The line\` followed by \`> \` lines.
+
 ## Native first, custom UI when it earns it
 Native blocks are editable, searchable and exportable like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers and one-off visualizations. Agents follow the same rule: plain text first, then a native table or mind map, and custom UI only for motion or interaction.
 

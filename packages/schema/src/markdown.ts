@@ -82,6 +82,12 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
     case 'paragraph': return inline(el, ctx);
     case 'heading': return `${'#'.repeat(Math.min(6, Math.max(1, Number(el.getAttribute('level') ?? 1))))} ${inline(el, ctx)}`;
     case 'blockquote': return blocks(kids(), ctx).split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n');
+    case 'toggle': {
+      // An Obsidian foldable callout: "> [!toggle] line", then the nested blocks as "> " lines.
+      const [line, ...rest] = kids();
+      const body = [`[!toggle] ${line ? block(line, ctx) : ''}`.trimEnd(), blocks(rest, ctx)].filter(Boolean).join('\n\n');
+      return body.split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n');
+    }
     case 'horizontalRule': return '---';
     case 'hardBreak': return '';
     case 'codeBlock': {
@@ -426,7 +432,19 @@ function blockNodes(tokens: Token[], b: Builder): Y.XmlElement[] {
       }
       case 'paragraph': out.push(paragraph((t as Tokens.Paragraph).tokens, b)); break;
       case 'text': out.push(paragraph((t as Tokens.Text).tokens ?? [{ type: 'text', raw: t.raw, text: (t as Tokens.Text).text } as Token], b)); break;
-      case 'blockquote': out.push(elementWith('blockquote', ensureBlocks(blockNodes((t as Tokens.Blockquote).tokens, b)))); break;
+      case 'blockquote': {
+        const q = t as Tokens.Blockquote;
+        // "> [!toggle] line" (an Obsidian foldable callout) is a toggle line: its first line, then what is nested under it.
+        const m = q.text.match(TOGGLE_CALLOUT);
+        if (m) {
+          const [line, ...rest] = q.text.slice(m[0].length).split('\n');
+          const head = blockNodes(md.lexer(line.trim()), b).find((e) => e.nodeName === 'paragraph') ?? new Y.XmlElement('paragraph');
+          out.push(elementWith('toggle', [head, ...blockNodes(md.lexer(rest.join('\n')), b)]));
+          break;
+        }
+        out.push(elementWith('blockquote', ensureBlocks(blockNodes(q.tokens, b))));
+        break;
+      }
       case 'hr': out.push(new Y.XmlElement('horizontalRule')); break;
       case 'code': {
         const c = t as Tokens.Code;
@@ -479,6 +497,7 @@ function blockNodes(tokens: Token[], b: Builder): Y.XmlElement[] {
   return out;
 }
 
+const TOGGLE_CALLOUT = /^\[!toggle\][+-]?[ \t]*/i;
 const ensureBlocks = (els: Y.XmlElement[]) => (els.length ? els : [new Y.XmlElement('paragraph')]);
 function titleArg(rest: string[]): string {
   const s = rest.join(' ').trim();

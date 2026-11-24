@@ -132,7 +132,7 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     after: blockId.optional().describe('Put it right after this block.'),
     at: z.enum(['start', 'end']).optional().describe('Without before/after: the start or the end (default) of the tab.'),
   };
-  const mdHelp = 'Markdown: headings, **bold**, lists, tables, code fences, [links](https://...), [[p_id]] page links.';
+  const mdHelp = 'Markdown: headings, **bold**, lists, tables, code fences, [links](https://...), [[p_id]] page links. A toggle (a line that hides what is nested under it) is "> [!toggle] The line" followed by "> " lines for its content.';
   const idList = (ids: string[]) => ids.join(', ');
 
   server.tool('get_outline',

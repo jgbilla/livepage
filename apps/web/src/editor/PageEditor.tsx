@@ -24,6 +24,8 @@ import { renderCaret } from './caret';
 import { Icon } from '../design/Icon';
 import { SlashCommands, SlashMenu, openSlashMenu, type SlashContext } from './SlashMenu';
 import { SelectionMenu } from './SelectionMenu';
+import { HeadingFold } from './HeadingFold';
+import { ToggleBlock } from './ToggleBlock';
 import { LpTableView, TABLE_CELL_MIN_WIDTH, TableTouchResize } from './TableResize';
 type User = { id: string; name: string; color: string };
 
@@ -59,6 +61,8 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         TaskList,
         TaskItem.configure({ nested: true }),
         SlashCommands,
+        ToggleBlock,
+        HeadingFold.configure({ storageKey: `lp-fold:${pageId}:${tab}` }), // folded headings and toggles: per person, this browser
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
         PageLink.configure({ doc, currentPage: pageId }),

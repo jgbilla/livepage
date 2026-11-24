@@ -1352,3 +1352,44 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .wake-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 var(--lp-space-3); }
 .wake-limits .field input { width: 100%; min-width: 0; box-sizing: border-box; }
 .wake-dialog > .row:first-child h2 { margin: 0; }
+
+/* ---------- Collapsible headings (HeadingFold.ts) ----------
+   Wide page column: the caret hangs in the left gutter and shows on hover (always for toggle headings
+   and folded ones). On touch screens it is always visible, a little dimmer. */
+.editor .ProseMirror .fold-heading { position: relative; }
+.fold-caret { position: absolute; left: -26px; top: 0; font-size: inherit; height: calc(var(--lp-leading-tight) * 1em); width: 22px; padding: 0; border: 0; background: transparent;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--lp-text-tertiary); border-radius: var(--lp-radius-sm); cursor: pointer;
+  opacity: 0; transition: opacity var(--lp-duration-fast) var(--lp-ease-out), background var(--lp-duration-fast) var(--lp-ease-out); user-select: none; -webkit-user-select: none; }
+.fold-caret svg { width: 16px; height: 16px; transform: rotate(90deg); transition: transform var(--lp-duration-base) var(--lp-ease-out); }
+.fold-caret.closed svg { transform: rotate(0deg); }
+.fold-caret.empty { color: var(--lp-text-placeholder); }
+.fold-caret:focus-visible { opacity: 1; box-shadow: var(--lp-focus-ring); }
+.fold-heading.is-toggle .fold-caret, .fold-heading.is-folded .fold-caret { opacity: 1; }
+@media (hover: hover) {
+  .fold-heading:hover .fold-caret { opacity: 1; }
+  .fold-caret:hover { background: var(--lp-hover); color: var(--lp-text); }
+}
+@media (hover: none) { .fold-caret { opacity: .6; } }
+.fold-more { display: inline-flex; align-items: center; vertical-align: .2em; margin-left: var(--lp-space-2); padding: 0 var(--lp-space-2); height: 20px;
+  border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-full); background: var(--lp-bg-subtle); color: var(--lp-text-tertiary);
+  font: var(--lp-weight-medium) var(--lp-text-xs)/1 var(--lp-font-sans); letter-spacing: normal; cursor: pointer; user-select: none; -webkit-user-select: none; white-space: nowrap; }
+@media (hover: hover) { .fold-more:hover { color: var(--lp-text); background: var(--lp-hover); } }
+.editor .ProseMirror .fold-hidden { display: none !important; }
+@container main (max-width: 860px) {
+  /* Narrow column: the page's side padding is the gutter, so the caret is slimmer and its tap target reaches into the line. */
+  .fold-caret { left: calc(-1 * var(--lp-space-4)); width: var(--lp-space-4); border-radius: var(--lp-radius-xs); }
+  .fold-caret svg { width: 14px; height: 14px; }
+  .fold-caret::after { content: ''; position: absolute; inset: -8px -10px -8px -2px; }
+}
+@container main (max-width: 360px) { .fold-caret { left: calc(-1 * var(--lp-space-3)); width: var(--lp-space-3); } .fold-caret svg { width: 12px; height: 12px; } }
+/* Toggle lines (ToggleBlock.ts): nested blocks sit indented under the line, and the caret always shows in that indent. */
+.editor .ProseMirror .toggle-block { padding-left: 26px; margin: 0.8em 0; }
+.editor .ProseMirror .toggle-block > :first-child { position: relative; margin-top: 0; }
+.editor .ProseMirror .toggle-block > * + * { margin-top: 0.35em; }
+.editor .ProseMirror .toggle-block > :last-child { margin-bottom: 0; }
+.fold-caret.line, .editor .ProseMirror .toggle-block > :first-child .fold-caret { left: -26px; width: 22px; height: calc(var(--lp-leading-prose) * 1em); opacity: 1; }
+.fold-caret.line svg { width: 16px; height: 16px; }
+.editor .ProseMirror .fold-line.is-empty::after { content: 'Empty toggle. Press Enter at the end of the line, or click the arrow, to add inside.';
+  display: block; margin-top: 0.2em; color: var(--lp-text-placeholder); font-size: var(--lp-text-sm); pointer-events: none; user-select: none; }
+@media (prefers-reduced-motion: reduce) { .fold-caret svg { transition: none; } }
+@media print { .fold-caret, .fold-more { display: none; } .editor .ProseMirror .fold-hidden { display: revert !important; } }

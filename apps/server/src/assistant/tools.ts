@@ -68,7 +68,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'replace_blocks',
-    description: 'Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown: headings, **bold**, lists, tables, code fences, links. Everything else on the page is untouched. For a change of a few words use replace_text. Returns the new block ids.',
+    description: 'Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown: headings, **bold**, lists, tables, code fences, links, and toggles ("> [!toggle] The line" then "> " lines for what it hides). Everything else on the page is untouched. For a change of a few words use replace_text. Returns the new block ids.',
     parameters: {
       type: 'object',
       properties: { block_id: { type: 'string' }, through_block_id: { type: 'string', description: 'Last block of the run to replace (same tab).' }, markdown: { type: 'string' } },

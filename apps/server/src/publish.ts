@@ -81,6 +81,7 @@ h1,h2,h3,h4{font-family:var(--sans);font-weight:600;line-height:1.25;letter-spac
 h2{font-size:1.4rem}h3{font-size:1.15rem}
 a{color:var(--accent);text-decoration-color:color-mix(in srgb,currentColor 35%,transparent);text-underline-offset:3px}a:hover{text-decoration-color:currentColor}
 p{margin:.75em 0}img{max-width:100%;border-radius:8px}li::marker{color:var(--faint)}
+details.toggle{margin:.8em 0}details.toggle>summary{cursor:pointer}details.toggle>:not(summary){margin-left:1.2em}
 blockquote{margin:1.2em 0;padding:0 0 0 1em;border-left:3px solid var(--line);color:var(--muted)}
 pre{background:var(--code);padding:14px 16px;border:1px solid var(--line);border-radius:12px;overflow:auto;font-size:14px;line-height:1.6}
 code{font:0.85em var(--mono);background:var(--code);padding:.12em .35em;border-radius:4px}pre code{background:none;padding:0;font-size:inherit}
