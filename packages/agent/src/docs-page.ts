@@ -283,7 +283,7 @@ A page is a stack of blocks, and every block type is first-class: any mix on the
 table(ed, [
   ['Block', 'Kind', 'How to edit', 'Status'],
   ['Paragraph, heading, list, quote, code', 'Native text', 'Type; agents write character by character', 'Built'],
-  ['Table', 'Native', '/ menu > Table; cells are normal text', 'Built'],
+  ['Table', 'Native', '/ menu > Table; cells are normal text; drag a column border to resize it', 'Built'],
   ['Mind map', 'Native', 'Click a node; Tab adds a child, Enter a sibling', 'Built'],
   ['Custom UI / HTML block', 'Sandboxed code', '"Edit code" to co-edit the source live', 'Built'],
   ['Page link', 'Inline', 'Type [[ and pick a page, add # for a tab', 'Built'],
