@@ -25,7 +25,7 @@ call wait_for_requests with wait_seconds 0 to take it (that confirms you have it
 task.message (the person wrote on a task), task.cancelled (stop working on it), comment.mention, or ready (what was
 waiting when you connected).`;
 
-const GENERIC_NAME = /^\s*(agent|ai|assistant|bot|mcp|token|default|livepage)?\s*$/i;
+const GENERIC_NAME = /^\s*(agent)?\s*$/i; // empty, or the default a token gets when left unnamed
 const KNOWN_CLIENTS: [RegExp, string][] = [
   [/^claude[-_ ]?code/i, 'Claude Code'], [/^claude[-_ ]?(ai|desktop)?$/i, 'Claude'], [/^cursor/i, 'Cursor'],
   [/^codex/i, 'Codex'], [/^gemini/i, 'Gemini CLI'], [/visual studio code|^vscode/i, 'VS Code'], [/^windsurf/i, 'Windsurf'],
@@ -111,7 +111,8 @@ arrive as new requests carrying the earlier turns. Send short progress with repl
 People also hand you tasks on the task board. They arrive through wait_for_requests (or list_tasks). Work on them with your
 own context and the page tools, report with update_task as you go (a short note), ask with status needs_you when you are stuck,
 and finish with done or failed and a one-line summary.
-People comment on text, blocks or the whole page and can @mention you. Once you have replied in a thread, the person's
+People comment on text, blocks or the whole page and can @mention you; @AI reaches you too when the person picked you in
+the Ask AI menu. While listening, these arrive through wait_for_requests as well. Once you have replied in a thread, the person's
 later replies there reach you too, without an @. Check get_mentions, read the thread (list_comments) and the page,
 then answer with reply_to_comment and make any edit they asked for.${opts.channel ? CHANNEL_INSTRUCTIONS : ''}`,
       ...(opts.channel ? { capabilities: { experimental: { 'claude/channel': {} } } } : {}),
@@ -225,14 +226,15 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
 
   type AgentTask = { id: string; title: string; page_id: string | null; text: string };
   type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
+  type ListenMention = { id: string; page_id: string; page_title: string; thread_id: string; tab: string; author_name: string; text: string; quote: string | null };
   server.tool('wait_for_requests',
-    'Wait for requests people send you from the Ask AI panel in Livepage, and tasks they hand you on the task board (up to wait_seconds), and take them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Call it in a loop when asked to listen, including after each reply_to_request, so follow-ups reach you.',
+    'Wait for requests people send you from the Ask AI panel in Livepage, and tasks they hand you on the task board (up to wait_seconds), and take them. Each request has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Comments that @mention you (or @AI, when the person picked you in Ask AI) arrive here too: answer those in the thread with reply_to_comment. Tasks: report on them with update_task. Call it in a loop when asked to listen, including after each reply, so follow-ups reach you.',
     { wait_seconds: z.number().min(0).max(30).default(25) },
     async ({ wait_seconds }, extra) => tryText(async () => {
       // Pass the call's abort signal on, so a cancelled or timed-out call ends the long poll instead of
       // leaving it open to take a request nobody will see.
-      const { requests, tasks = [] } = await http<{ requests: AgentReq[]; tasks?: AgentTask[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
-      if (!requests.length && !tasks.length) return 'no requests yet; call wait_for_requests again to keep listening';
+      const { requests, mentions = [], tasks = [] } = await http<{ requests: AgentReq[]; mentions?: ListenMention[]; tasks?: AgentTask[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
+      if (!requests.length && !mentions.length && !tasks.length) return 'no requests yet; call wait_for_requests again to keep listening';
       // Confirm we got them. Unconfirmed requests and tasks go back in the queue after a short while.
       await Promise.all([
         ...requests.map((r) => http('POST', `/agent-requests/${r.id}/ack`).catch(() => {})),
@@ -245,7 +247,11 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
         r.selection ? `selected text:\n${r.selection}` : '',
         `asks: ${r.prompt}`,
         `answer with reply_to_request (request_id ${r.id}), then call wait_for_requests again for the next message.`,
-      ].filter(Boolean).join('\n')).concat(tasks.map((t) => `${t.text}\nthen call wait_for_requests again.`)).join('\n\n---\n\n');
+      ].filter(Boolean).join('\n')).concat(mentions.map((m) => [
+        `comment ${m.id} on page ${m.page_id} (${m.page_title})${m.tab && m.tab !== 'main' ? `, tab ${m.tab}` : ''}, thread ${m.thread_id}${m.quote ? `, on "${m.quote}"` : ''}`,
+        `${m.author_name}: ${m.text}`,
+        `read the thread with list_comments and the page, do what it asks, answer with reply_to_comment (page ${m.page_id}, thread_id ${m.thread_id}), then call wait_for_requests again.`,
+      ].join('\n'))).concat(tasks.map((t) => `${t.text}\nthen call wait_for_requests again.`)).join('\n\n---\n\n');
     }));
 
   server.tool('reply_to_request',

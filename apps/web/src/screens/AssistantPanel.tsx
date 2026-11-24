@@ -11,6 +11,8 @@ type Turn = {
 type ChatState = { turns: Turn[]; rev: number; running: boolean };
 type Agent = { id: string; name: string; online: boolean };
 const BUILTIN = 'builtin';
+// Who answers, saved on the server so it follows you to your other devices and decides who answers
+// @AI in comments too. The local copy only makes the menu right before the server answers.
 const loadTarget = () => { try { return localStorage.getItem('livepage.askTarget') || BUILTIN; } catch { return BUILTIN; } };
 const saveTarget = (v: string) => { try { localStorage.setItem('livepage.askTarget', v); } catch { /* private mode */ } };
 
@@ -97,7 +99,10 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
   const endRef = useRef<HTMLDivElement>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [target, setTargetState] = useState(loadTarget);
-  const setTarget = (v: string) => { setTargetState(v); saveTarget(v); setSetup(false); };
+  const setTarget = (v: string) => {
+    setTargetState(v); saveTarget(v); setSetup(false);
+    void api('/agents/target', { method: 'PUT', body: { target: v } }).catch((e) => setSendError((e as Error).message));
+  };
   const agent = agents.find((a) => a.id === target);
   const builtin = target === BUILTIN || !agent;
 
@@ -106,7 +111,14 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
   }, []);
   // Your connected agents and whether they're online; refreshed while the panel is open.
   useEffect(() => {
-    const load = () => api<{ agents: Agent[] }>('/agents').then((r) => setAgents(r.agents)).catch(() => {});
+    const load = () => api<{ agents: Agent[]; target?: string; saved?: boolean }>('/agents').then((r) => {
+      setAgents(r.agents);
+      const local = loadTarget();
+      if (!r.saved && local !== BUILTIN && r.agents.some((a) => a.id === local)) {
+        // Picked in this browser before picks were saved to the account: keep it, and save it.
+        void api('/agents/target', { method: 'PUT', body: { target: local } }).catch(() => {});
+      } else if (r.target) { setTargetState(r.target); saveTarget(r.target); } // the account's pick, maybe made on another device
+    }).catch(() => {});
     void load();
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
@@ -154,8 +166,8 @@ export function AssistantPanel({ pageId, tab, onClose }: { pageId: string; tab: 
       </div>
 
       {agents.length > 0 && (
-        <label className="assistant-target">
-          <span className="muted small">Ask</span>
+        <label className="assistant-target" title="@AI in your comments goes to the same AI">
+          <span className="muted small assistant-target-label">Ask and @AI</span>
           <select value={agent ? agent.id : BUILTIN} onChange={(e) => setTarget(e.target.value)} disabled={busy}>
             <option value={BUILTIN}>Built-in assistant (your API key)</option>
             <optgroup label="Your connected agents">

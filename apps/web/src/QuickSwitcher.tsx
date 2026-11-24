@@ -9,6 +9,8 @@ import { api } from './api';
 import { navigate, openTab } from './router';
 import { reloadWorkspace, titleOf, useWorkspace, type TreePage } from './workspace';
 import { Icon } from './design/Icon';
+import { hostOf, switchTo, useWorkspaceLinks } from './workspaceLinks';
+import { WsTile } from './WorkspaceSwitcher';
 
 type Hit = { id: string; title: string; tags: string[]; tab: string | null; snippet: string; path?: string };
 
@@ -96,8 +98,12 @@ function Switcher({ onClose }: { onClose: () => void }) {
     return merged;
   }, [ws, words, server]);
 
+  // Your other workspaces, by name or address: "work" jumps to your work Livepage.
+  const { others } = useWorkspaceLinks();
+  const wsHits = useMemo(() => (words.length ? others.filter((l) => titleScore(`${l.name} ${hostOf(l.url)}`, words) > 0).slice(0, 3) : []), [others, words]);
   const createRow = words.length > 0; // last row: create a page with this title
-  const count = results.length + (createRow ? 1 : 0);
+  const createAt = results.length + wsHits.length;
+  const count = createAt + (createRow ? 1 : 0);
   useEffect(() => { setSel(0); }, [q]);
   useEffect(() => { listRef.current?.querySelector<HTMLElement>(`[data-i="${sel}"]`)?.scrollIntoView({ block: 'nearest' }); }, [sel]);
 
@@ -110,6 +116,7 @@ function Switcher({ onClose }: { onClose: () => void }) {
   };
   const choose = async (i: number, newTab = false) => {
     if (i < results.length) return open(results[i], newTab);
+    if (i < createAt) { onClose(); switchTo(wsHits[i - results.length].url); return; }
     if (createRow) {
       onClose();
       const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: q.trim() } });
@@ -155,11 +162,22 @@ function Switcher({ onClose }: { onClose: () => void }) {
             </li>
           ))}
           {words.length > 0 && !loading && !results.length && <li className="switcher-head muted small">No pages contain “{q.trim()}”.</li>}
+          {wsHits.map((l, j) => {
+            const i = results.length + j;
+            return (
+              <li key={l.url} id={`sw-${i}`} data-i={i} role="option" aria-selected={i === sel}
+                className={`switcher-item switcher-ws ${i === sel ? 'active' : ''}`} onMouseMove={() => setSel(i)} onClick={() => void choose(i)}>
+                <WsTile link={l} size={20} />
+                <span>Switch to <b>{highlight(l.name, words)}</b></span>
+                <span className="muted small switcher-path">{hostOf(l.url)}</span>
+              </li>
+            );
+          })}
           {createRow && (
             <li
-              id={`sw-${results.length}`} data-i={results.length} role="option" aria-selected={sel === results.length}
-              className={`switcher-item switcher-create ${sel === results.length ? 'active' : ''}`}
-              onMouseMove={() => setSel(results.length)} onClick={() => void choose(results.length)}
+              id={`sw-${createAt}`} data-i={createAt} role="option" aria-selected={sel === createAt}
+              className={`switcher-item switcher-create ${sel === createAt ? 'active' : ''}`}
+              onMouseMove={() => setSel(createAt)} onClick={() => void choose(createAt)}
             >
               ＋ New page “{q.trim()}”
             </li>

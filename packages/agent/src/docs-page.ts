@@ -407,6 +407,8 @@ Press **✦ Ask AI** on any page, or select text and pick Ask AI. Two ways to an
 - **Built-in assistant:** bring your own key for Claude, GPT, Gemini, OpenRouter or any OpenAI-compatible or local model. Keys are stored encrypted, and the assistant edits the page live with its own caret.
 - **Your own connected agent:** pick it in the panel's **Ask** menu, which shows whether it's online. The request goes to that agent (Claude Code, Cursor, Codex…), which works on the page with its own files, memory and tools and answers in the panel. Tell the agent *"Listen for Livepage requests and handle them"*.
 
+Your pick is saved to your account (the same on every device) and also decides who answers **@AI** in your comments. The @ menu shows who will answer. If the agent you picked isn't listening and the built-in assistant is set up, the built-in assistant answers and says so; otherwise the comment waits for your agent.
+
 Each page keeps your chat (only you see it), and it follows you to your other devices: ask on your laptop and watch the answer stream on your phone. An answer keeps going if you close the panel or your phone sleeps; **Stop** ends it.
 
 To connect your own agent, create an agent token on your home page and use one of the setups below.
@@ -486,7 +488,7 @@ table(ag, [
   ['list_templates / set_template / get_template_fields / fill_template_fields', 'Templates and their {{Field}}s'],
   ['import_markdown / export_markdown', 'Markdown in and out'],
   ['publish_page / unpublish_page', 'A public read-only copy at /pub/<slug>'],
-  ['wait_for_requests / reply_to_request', 'Ask AI requests and board tasks sent to this agent (waits up to 30s), and the answer shown in the panel'],
+  ['wait_for_requests / reply_to_request', 'Ask AI requests and board tasks sent to this agent (plus comments that mention it, or @AI when it is your pick), and the answer shown in the panel'],
   ['list_tasks / get_task / update_task', 'Tasks from the board: read one with its conversation, post notes, ask (needs_you), finish (done or failed)'],
 ]);
 write(ag, `
@@ -521,7 +523,7 @@ table(ag, [
   ['GET /api/mentions?wait=30', 'Long-poll for comments that @mention this agent'],
   ['POST /api/pages/<id>/comments', 'Comment on the page ({ "body", "quote" })'],
   ['POST /api/pages/<id>/comments/<thread id>', 'Reply in a thread ({ "body" }); replying marks the mention handled'],
-  ['GET /api/agent-requests?wait=20', 'Ask AI requests and board tasks sent to this agent'],
+  ['GET /api/agent-requests?wait=20', 'Ask AI requests, comment mentions and board tasks for this agent'],
   ['GET /api/agent-events', 'Server-Sent Events: work pushed to this agent as it arrives'],
   ['GET /api/tasks', 'Tasks assigned to this agent (?all=1 includes finished ones)'],
   ['POST /api/tasks/<id>/ack', 'Confirm you took a task (it moves to Working)'],

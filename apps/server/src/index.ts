@@ -15,6 +15,7 @@ import { config } from './config.ts';
 import { sameOriginHeaders } from './origin.ts';
 import { bumpPageMembers } from './workspace-events.ts';
 import { CHATS_SQL } from './chats.ts';
+import { presenceUser } from './presence.ts';
 import { noteAgentEdit } from './tasks.ts';
 
 const db = await connect(process.env.DATABASE_URL);
@@ -25,7 +26,7 @@ const serveStatic = config.webDist
   ? staticHandler(config.webDist, config.sandboxUrl, config.neonAuthUrl ? new URL(config.neonAuthUrl).origin : null)
   : null;
 
-export type Context = { user: { id: string; name: string; kind: 'human' | 'agent'; tokenId?: string }; role: Role };
+export type Context = { user: { id: string; name: string; kind: 'human' | 'agent'; tokenId?: string; superAgent?: boolean }; role: Role };
 
 const server = new Server<Context>({
   port: config.port,
@@ -102,7 +103,18 @@ const server = new Server<Context>({
     const role = await roleFor(db, who, documentName);
     if (!who || !role) throw new Error('forbidden');
     if (!canEdit(role)) connectionConfig.readOnly = true;
-    return { user: { id: who.id, name: who.name, kind: who.kind, tokenId: who.tokenId }, role };
+    return { user: { id: who.id, name: who.name, kind: who.kind, tokenId: who.tokenId, superAgent: who.superAgent }, role };
+  },
+
+  // Presence shows who a connection really is: the server, not the client, says the name. An agent
+  // shows the name you gave its token (unless you left the default "Agent" and it names itself);
+  // a person shows their account name. Nobody can appear as someone else.
+  async beforeHandleAwareness({ context, states }) {
+    const u = context?.user;
+    if (!u) return;
+    for (const s of states.values()) {
+      if (s?.user && typeof s.user === 'object') s.user = presenceUser(u, s.user);
+    }
   },
 
   // Version history: credit each change to the person or agent who made it, and cut versions.

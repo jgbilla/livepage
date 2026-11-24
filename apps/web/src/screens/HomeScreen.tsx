@@ -101,6 +101,12 @@ function AgentTokens() {
     setFresh(r.token);
     void load();
   };
+  const rename = async (t: Token) => {
+    const name = prompt('Name this agent. It shows on its avatar and cursor on your pages.', t.name);
+    if (name === null || !name.trim() || name.trim() === t.name) return;
+    try { await api(`/tokens/${t.id}`, { method: 'PATCH', body: { name: name.trim() } }); } catch (e) { alert((e as Error).message); }
+    void load();
+  };
   const revoke = async (id: string) => { await api(`/tokens/${id}`, { method: 'DELETE' }); void load(); };
   const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null);
   // Optional: Livepage POSTs to this URL whenever someone @mentions the agent in a comment.
@@ -145,6 +151,7 @@ function AgentTokens() {
             <button type="button" className="ghost" title={t.webhook_url ?? 'Get a webhook call when there is work for this agent'} onClick={() => webhook(t)}>
               {t.webhook_url ? 'Webhook on' : 'Add webhook'}
             </button>
+            <button type="button" className="ghost" onClick={() => rename(t)}>Rename</button>
             <button type="button" className="ghost" onClick={() => revoke(t.id)}>Revoke</button>
           </li>
         ))}
