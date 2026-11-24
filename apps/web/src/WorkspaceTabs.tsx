@@ -38,6 +38,7 @@ export function tabLabel(path: string, ws: Workspace | null): { title: string; g
   const view = p.match(/^\/view\/([\w-]+)/)?.[1];
   if (view) return { title: ws?.views.find((v) => v.id === view)?.name ?? 'View', glyph: 'view' };
   if (p === '/graph') return { title: 'Graph', glyph: 'graph' };
+  if (p === '/tasks') return { title: 'Tasks', glyph: 'tasks' };
   return { title: 'Home', glyph: 'home' };
 }
 

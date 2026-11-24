@@ -28,6 +28,7 @@
   },
   "exports": {
     "./tools": "./src/tools.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./events": "./src/events.ts"
   }
 }

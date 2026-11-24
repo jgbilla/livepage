@@ -312,3 +312,34 @@ test('page tabs and workspace tabs', async ({ page }) => {
   await strip.locator('.wt-title', { hasText: 'Tabs page' }).click();
   await expect(page.getByLabel('Page title')).toHaveValue('Tabs page');
 });
+
+test('task board: hand a task to an agent, answer its question, see it finish', async ({ page, playwright, baseURL }) => {
+  const name = `Board agent ${Math.random().toString(36).slice(2, 6)}`;
+  const token = await agentToken(page.request, name);
+  const pageId = await newPage(page.request, 'Task smoke page');
+  const agent = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] }, extraHTTPHeaders: { authorization: `Bearer ${token}` } });
+
+  await page.goto(`/tasks?new=1&page=${pageId}`);
+  await page.getByLabel('What should it do?').fill('Tighten the intro');
+  const agentSelect = page.locator('.task-dialog select').first();
+  await agentSelect.selectOption((await agentSelect.locator('option', { hasText: name }).getAttribute('value'))!);
+  await page.getByRole('button', { name: `Hand to ${name}` }).click();
+  await expect(page.locator('.task-sheet')).toBeVisible();
+
+  // The agent takes it with the same call as Ask AI requests, then reports.
+  const { tasks } = await (await agent.get('/api/agent-requests?wait=5')).json();
+  expect(tasks.map((t: { title: string }) => t.title)).toContain('Tighten the intro');
+  const id = tasks.find((t: { title: string }) => t.title === 'Tighten the intro').id;
+  expect((await agent.post(`/api/tasks/${id}/ack`)).ok()).toBeTruthy();
+  await agent.post(`/api/tasks/${id}/update`, { data: { status: 'needs_you', note: 'Keep the opening quote?' } });
+
+  // The board follows along without a reload, and the person's answer goes back to the agent.
+  await expect(page.locator('.task-question')).toContainText('Keep the opening quote?');
+  await page.getByLabel(`Answer ${name}`).fill('Yes, keep it');
+  await page.getByRole('button', { name: 'Send' }).click();
+  const again = await (await agent.get('/api/agent-requests?wait=5')).json();
+  expect(again.tasks[0].text).toContain('Yes, keep it');
+  await agent.post(`/api/tasks/${id}/update`, { data: { status: 'done', note: 'Cut it to two sentences.' } });
+  await expect(page.locator('.task-sheet .task-badge')).toHaveText('Done');
+  await agent.dispose();
+});

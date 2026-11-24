@@ -4,6 +4,7 @@
 import { Suspense, createContext, lazy, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Me } from './api';
 import { Link, navigate, useLocation } from './router';
+import { useTasks } from './tasks';
 import {
   deleteFolder, deleteView, moveFolder, movePage, newFolder, newPage, newPageFromTemplate, openToday, reloadWorkspace, renameFolder, renamePage,
   titleOf, useWorkspace, type Folder, type TreePage, type View,
@@ -73,6 +74,16 @@ export function Layout({ me, onLogout, children }: { me: Me; onLogout: () => voi
 }
 
 /** The sidebar button screens put at the start of their top bar. */
+/** How many tasks are waiting on you (an agent asked a question), and how many agents are at work. */
+function TasksBadge() {
+  const { tasks } = useTasks();
+  const needs = tasks.filter((t) => t.status === 'needs_you').length;
+  const working = tasks.filter((t) => t.status === 'working').length;
+  if (needs) return <span className="sb-badge sb-badge-alert" title={`${needs} need${needs === 1 ? 's' : ''} you`}>{needs}</span>;
+  if (working) return <span className="sb-badge sb-badge-agent" title={`${working} in progress`}><span className="task-live" aria-hidden="true" />{working}</span>;
+  return null;
+}
+
 export function SidebarToggle() {
   const { open, toggle } = useContext(SidebarCtx);
   return (
@@ -238,6 +249,10 @@ function Sidebar({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </button>
         <Link to="/" className={`sb-row ${path === '/' ? 'active' : ''}`}>
           <span className="sb-glyph"><Icon name="home" /></span><span className="sb-row-label">Home</span>
+        </Link>
+        <Link to="/tasks" className={`sb-row ${path === '/tasks' ? 'active' : ''}`}>
+          <span className="sb-glyph"><Icon name="tasks" /></span><span className="sb-row-label">Tasks</span>
+          <TasksBadge />
         </Link>
         <Link to="/graph" className={`sb-row ${path === '/graph' ? 'active' : ''}`}>
           <span className="sb-glyph"><Icon name="graph" /></span><span className="sb-row-label">Graph</span>

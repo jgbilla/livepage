@@ -174,6 +174,43 @@ alter table users add column if not exists daily_template_id text references pag
 -- Publishing: a published page is readable by anyone at /pub/<slug>, without an account.
 alter table pages add column if not exists published_slug text unique;
 alter table pages add column if not exists published_at timestamptz;
+-- Task board: jobs handed to one of your agents (tasks.ts). Events are the task's timeline.
+create table if not exists agent_tasks (
+  id              text primary key,
+  user_id         text not null references users(id) on delete cascade,
+  token_id        text references api_tokens(id) on delete set null,
+  title           text not null,
+  details         text not null default '',
+  page_id         text references pages(id) on delete set null,
+  status          text not null default 'queued' check (status in ('queued','working','needs_you','done','failed','cancelled')),
+  note            text not null default '',
+  delivered_at    timestamptz,
+  agent_seen_at   timestamptz,
+  last_message_at timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  done_at         timestamptz
+);
+create index if not exists agent_tasks_user_idx on agent_tasks (user_id, updated_at desc);
+create index if not exists agent_tasks_token_idx on agent_tasks (token_id, status);
+create table if not exists agent_task_events (
+  id          text primary key,
+  task_id     text not null references agent_tasks(id) on delete cascade,
+  kind        text not null,
+  author_kind text not null,
+  author_name text not null default '',
+  text        text not null default '',
+  status      text,
+  page_id     text references pages(id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists agent_task_events_task_idx on agent_task_events (task_id, created_at);
+create table if not exists agent_task_pages (
+  task_id  text not null references agent_tasks(id) on delete cascade,
+  page_id  text not null references pages(id) on delete cascade,
+  first_at timestamptz not null default now(),
+  primary key (task_id, page_id)
+);
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

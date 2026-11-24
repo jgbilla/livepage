@@ -14,7 +14,9 @@
 //     GET    /api/agent-requests/:id?wait=25            -> { request } (returns early when it changes)
 //     DELETE /api/agent-requests/:id                    -> cancel
 //   Agent (Bearer lp_ token)
-//     GET    /api/agent-requests?wait=20                -> { requests } pending for this token, now delivered
+//     GET    /api/agent-requests?wait=20                -> { requests, tasks } pending for this token, now delivered
+//                                                       (tasks: from the task board, tasks.ts; confirm with POST /api/tasks/:id/ack)
+//   New requests are also pushed to the agent's event stream and webhook (agent-push.ts).
 //     POST   /api/agent-requests/:id/ack                -> confirms the agent received it (status working)
 //     POST   /api/agent-requests/:id/reply              { text, done? }  (done=false: progress note)
 //
@@ -30,6 +32,9 @@ import { randomId, type Principal } from './auth.ts';
 import { readJson, send } from './agent-api.ts';
 import { canEdit, roleFor } from './pages.ts';
 import { changeChat, historyOf, readChat, startExchange } from './chats.ts';
+import { pushToAgent, streamCount } from './agent-push.ts';
+import { claimTasks } from './tasks.ts';
+import { config } from './config.ts';
 
 const ONLINE_MS = 2 * 60_000;
 const MAX_WAIT = 30_000;
@@ -48,7 +53,7 @@ const listening = new Map<string, number>(); // tokenId -> open long polls
 export function touchAgent(who: Principal | null | undefined) {
   if (who?.kind === 'agent' && who.tokenId) lastSeen.set(who.tokenId, Date.now());
 }
-const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
+export const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
 
 // ---- Long-poll wakeups, keyed by "token:<id>" (new work for an agent) or "req:<id>" (a request changed).
 const waiters = new Map<string, Set<() => void>>();
@@ -69,6 +74,8 @@ function wait(key: string, ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener('abort', done);
   });
 }
+/** New work for an agent outside this file (a comment mention): end its wait_for_requests long poll. */
+export const wakeAgent = (tokenId: string) => wake(`token:${tokenId}`);
 const waitMs = (url: URL) => Math.min(MAX_WAIT, Math.max(0, Number(url.searchParams.get('wait') ?? 0) * 1000 || 0));
 function closeSignal(req: IncomingMessage, res: ServerResponse): AbortSignal {
   const ac = new AbortController();
@@ -156,10 +163,14 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     listening.set(tokenId, (listening.get(tokenId) ?? 0) + 1);
     try {
       let ids = (await claim()).map((r) => r.id as string);
+      let tasks = await claimTasks(db, tokenId);
       const ms = waitMs(url);
-      if (!ids.length && ms) {
+      if (!ids.length && !tasks.length && ms) {
         await wait(`token:${tokenId}`, ms, closeSignal(req, res));
-        if (!res.writableEnded && !res.destroyed) ids = (await claim()).map((r) => r.id as string);
+        if (!res.writableEnded && !res.destroyed) {
+          ids = (await claim()).map((r) => r.id as string);
+          tasks = await claimTasks(db, tokenId);
+        }
       }
       lastSeen.set(tokenId, Date.now());
       for (const id of ids) {
@@ -168,7 +179,8 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
         setTimeout(() => { wake(`token:${tokenId}`); changed(db, id); }, LEASE_MS + 1000).unref?.();
       }
       const requests = ids.length ? await db.query(`select ${COLS} from ${FROM} where r.id = any($1) order by r.created_at`, [ids]) : [];
-      if (!res.writableEnded && !res.destroyed) send(res, 200, { requests });
+      if (!res.writableEnded && !res.destroyed) send(res, 200, { requests, tasks });
+      else if (tasks.length) await db.query('update agent_tasks set delivered_at = null where id = any($1)', [tasks.map((t) => t.id)]);
     } finally {
       listening.set(tokenId, (listening.get(tokenId) ?? 1) - 1);
     }
@@ -264,5 +276,12 @@ export async function createAgentRequest(req: IncomingMessage, res: ServerRespon
   await startExchange(db, who.id, pageId, { prompt, selection: String(b.selection ?? '').slice(0, LIMITS.selection) },
     { kind: 'agent', requestId: id, model: token.name, status: statusFor(r) });
   wake(`token:${token.id}`);
+  pushToAgent(db, token.id, 'request.created',
+    `${who.name} asked you in Ask AI on page ${pageId} (${r.page_title || 'Untitled'}): ${prompt.slice(0, 500)}\nTake it with wait_for_requests (wait_seconds 0), then answer with reply_to_request.`,
+    {
+      request: { id, prompt: prompt.slice(0, LIMITS.prompt), selection: r.selection, tab, follow_up: history.length > 0 },
+      page: { id: pageId, title: r.page_title || 'Untitled', url: `${config.publicUrl}/p/${pageId}` },
+      take_with: { mcp: 'wait_for_requests { wait_seconds: 0 }', http: `GET ${config.publicUrl}/api/agent-requests  (then POST /api/agent-requests/${id}/ack)` },
+    });
   send(res, 201, { request: forPerson(r) });
 }
