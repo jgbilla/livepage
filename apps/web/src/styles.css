@@ -1365,5 +1365,14 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
   .fold-caret::after { content: ''; position: absolute; inset: -8px -10px -8px -2px; }
 }
 @container main (max-width: 360px) { .fold-caret { left: calc(-1 * var(--lp-space-3)); width: var(--lp-space-3); } .fold-caret svg { width: 12px; height: 12px; } }
+/* Toggle lines (ToggleBlock.ts): nested blocks sit indented under the line, and the caret always shows in that indent. */
+.editor .ProseMirror .toggle-block { padding-left: 26px; margin: 0.8em 0; }
+.editor .ProseMirror .toggle-block > :first-child { position: relative; margin-top: 0; }
+.editor .ProseMirror .toggle-block > * + * { margin-top: 0.35em; }
+.editor .ProseMirror .toggle-block > :last-child { margin-bottom: 0; }
+.fold-caret.line, .editor .ProseMirror .toggle-block > :first-child .fold-caret { left: -26px; width: 22px; height: calc(var(--lp-leading-prose) * 1em); opacity: 1; }
+.fold-caret.line svg { width: 16px; height: 16px; }
+.editor .ProseMirror .fold-line.is-empty::after { content: 'Empty toggle. Press Enter at the end of the line, or click the arrow, to add inside.';
+  display: block; margin-top: 0.2em; color: var(--lp-text-placeholder); font-size: var(--lp-text-sm); pointer-events: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) { .fold-caret svg { transition: none; } }
 @media print { .fold-caret, .fold-more { display: none; } .editor .ProseMirror .fold-hidden { display: revert !important; } }

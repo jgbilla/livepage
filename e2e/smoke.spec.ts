@@ -297,7 +297,7 @@ test('headings fold: hide a section, keep it after a reload, agents still read i
   const k = page.keyboard;
   await k.type('## Plan'); await k.press('Enter'); await k.type('Hidden line one'); await k.press('Enter'); await k.type('Hidden line two'); await k.press('Enter');
   await k.type('## Next'); await k.press('Enter'); await k.type('Still visible'); await k.press('Enter');
-  await k.type('/toggle'); await expect(page.locator('.slash-menu')).toBeVisible(); await k.press('Enter'); await k.type('A toggle heading');
+  await k.type('/toggle'); await expect(page.locator('.slash-menu')).toBeVisible(); await page.getByRole('option', { name: /Toggle heading 1/ }).click(); await k.type('A toggle heading');
   await expect(page.locator('.ProseMirror h1[data-toggle="true"]')).toContainText('A toggle heading');
 
   const plan = page.locator('.ProseMirror h2', { hasText: 'Plan' });
@@ -317,6 +317,31 @@ test('headings fold: hide a section, keep it after a reload, agents still read i
   await expect(page.getByText('Hidden line one')).toBeHidden();
   await page.locator('.fold-more').click();
   await expect(page.getByText('Hidden line one')).toBeVisible();
+});
+
+test('toggle lines: any line hides what is nested under it', async ({ page }) => {
+  const pageId = await newPage(page.request, 'Toggles');
+  await openPage(page, pageId);
+  await caretAtEnd(page);
+  const k = page.keyboard;
+  await k.type('/toggle'); await expect(page.locator('.slash-menu')).toBeVisible(); await k.press('Enter');
+  await k.type('Why it matters'); await k.press('Enter'); // Enter at the end of an open toggle writes inside it
+  await k.type('Nested one'); await k.press('Enter'); await k.press('Enter'); // Enter on the empty last line leaves it
+  await k.type('Moves in'); await k.press('Tab'); // Tab right after a toggle moves the line inside
+  const toggle = page.locator('.ProseMirror .toggle-block');
+  await expect(toggle.locator('> p')).toHaveText(['Why it matters', 'Nested one', 'Moves in']);
+
+  await toggle.getByRole('button', { name: 'Close toggle' }).click();
+  await expect(page.getByText('Nested one')).toBeHidden();
+  await expect(toggle.locator('.fold-more')).toHaveText('2 blocks');
+  // Agents read it as an Obsidian foldable callout, folded or not.
+  await expect.poll(() => markdown(page.request, pageId)).toContain('> [!toggle] Why it matters\n>\n> Nested one\n>\n> Moves in');
+
+  await page.reload();
+  await expect(page.locator('.ProseMirror .toggle-block')).toBeVisible();
+  await expect(page.getByText('Nested one')).toBeHidden();
+  await page.locator('.fold-more').click();
+  await expect(page.getByText('Nested one')).toBeVisible();
 });
 
 test('page tabs and workspace tabs', async ({ page }) => {

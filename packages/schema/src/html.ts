@@ -45,6 +45,11 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
     case 'paragraph': return tag('p', inline(el, ctx) || '<br>');
     case 'heading': { const l = Math.min(6, Math.max(1, Number(el.getAttribute('level') ?? 1))); return tag(`h${l}`, inline(el, ctx)); }
     case 'blockquote': return tag('blockquote', kids());
+    case 'toggle': {
+      // Published pages: a native disclosure, closed until the reader opens it.
+      const [line, ...rest] = el.toArray() as Y.XmlElement[];
+      return tag('details', tag('summary', line ? inline(line, ctx) : '') + rest.map((c) => block(c, ctx)).join(''), ' class="toggle"');
+    }
     case 'horizontalRule': return '<hr>';
     case 'codeBlock': return tag('pre', tag('code', escapeHtml(plainText(el))));
     case 'bulletList': return tag('ul', kids());

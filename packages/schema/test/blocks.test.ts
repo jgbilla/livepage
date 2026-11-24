@@ -154,3 +154,21 @@ test('table cells and rows change without resending the table', () => {
   assert.throws(() => setTableCell(doc, html, 1, 1, 'x'), /not a table/);
   assert.throws(() => insertTableRow(doc, table, ['a', 'b', 'c']), /2 columns/);
 });
+
+test('toggle lines: agents write and read them as "> [!toggle]" callouts, and the round trip keeps them', () => {
+  const doc = sample();
+  const [id] = insertBlocks(doc, '> [!toggle] **Details** for later\n>\n> Hidden paragraph.\n>\n> - one\n> - two', { at: 'end' }).ids;
+  const el = findBlock(doc, id)!.node as Y.XmlElement;
+  assert.equal(el.nodeName, 'toggle');
+  const kids = el.toArray() as Y.XmlElement[];
+  assert.deepEqual(kids.map((k) => k.nodeName), ['paragraph', 'paragraph', 'bulletList']);
+  const md = tabToMarkdown(doc);
+  assert.match(md, /> \[!toggle\] \*\*Details\*\* for later\n>\n> Hidden paragraph\.\n>\n> - one\n> - two/);
+  // A plain quote stays a quote; reading the toggle back and writing it again changes nothing.
+  const block = readBlocks(doc, { from: id }).blocks.find((b) => b.id === id)!;
+  const [again] = replaceBlocks(doc, id, block.markdown).ids;
+  assert.equal((findBlock(doc, again)!.node as Y.XmlElement).nodeName, 'toggle');
+  assert.equal(tabToMarkdown(doc), md);
+  const [quote] = insertBlocks(doc, '> Just a quote', { at: 'end' }).ids;
+  assert.equal((findBlock(doc, quote)!.node as Y.XmlElement).nodeName, 'blockquote');
+});

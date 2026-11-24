@@ -25,6 +25,7 @@ import { Icon } from '../design/Icon';
 import { SlashCommands, SlashMenu, openSlashMenu, type SlashContext } from './SlashMenu';
 import { SelectionMenu } from './SelectionMenu';
 import { HeadingFold } from './HeadingFold';
+import { ToggleBlock } from './ToggleBlock';
 type User = { id: string; name: string; color: string };
 
 type Props = {
@@ -57,7 +58,8 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         TaskList,
         TaskItem.configure({ nested: true }),
         SlashCommands,
-        HeadingFold.configure({ storageKey: `lp-fold:${pageId}:${tab}` }), // folded headings: per person, this browser
+        ToggleBlock,
+        HeadingFold.configure({ storageKey: `lp-fold:${pageId}:${tab}` }), // folded headings and toggles: per person, this browser
         HtmlBlock.configure({ doc, getUserName: () => meRef.current.name, readOnly }),
         MindMap.configure({ doc, readOnly }),
         PageLink.configure({ doc, currentPage: pageId }),
