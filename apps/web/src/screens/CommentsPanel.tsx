@@ -104,10 +104,12 @@ export function CommentsPanel(p: Props) {
 
   useEffect(() => { store.onActivate = (id) => focusThread(id, true); }, [store, focusThread]);
   // Open the thread from a ?comment= link once threads load.
-  const linked = useRef(new URLSearchParams(search).get('comment'));
+  const linkedId = new URLSearchParams(search).get('comment');
+  const linked = useRef(linkedId);
+  useEffect(() => { if (linkedId) linked.current = linkedId; }, [linkedId]);
   useEffect(() => {
     if (linked.current && threads.some((t) => t.id === linked.current)) { focusThread(linked.current); linked.current = null; }
-  }, [threads, focusThread]);
+  }, [threads, focusThread, linkedId]);
 
   // Block toolbars ask for a comment through a window event.
   useEffect(() => {

@@ -101,7 +101,10 @@ function LivePage({ pageId, me, role, info, live }: { pageId: string; me: Me; ro
   const canComment = role !== 'viewer';
   const commentStore = useMemo(() => new CommentStore(), [pageId]);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [commentsOpen, setCommentsOpen] = useState(() => new URLSearchParams(search).has('comment') || pageColumnWidth() >= 1100);
+  // The comments panel stays closed until asked for: the toolbar button, a comment link (?comment=), or starting a comment.
+  const linkedComment = new URLSearchParams(search).get('comment');
+  const [commentsOpen, setCommentsOpen] = useState(() => linkedComment !== null);
+  useEffect(() => { if (linkedComment !== null) { setCommentsOpen(true); setAsking(false); } }, [linkedComment]);
   const [pendingComment, setPendingComment] = useState<CommentAnchor | null>(null);
   const [openComments, setOpenComments] = useState(0);
   const openAskAi = useCallback(() => { setAsking(true); setCommentsOpen(false); }, []);
@@ -234,7 +237,3 @@ function TitleInput({ value, readOnly, onChange }: { value: string; readOnly: bo
   );
 }
 
-/** Width of the page column (the window minus a docked sidebar). Comments open by default only when they fit beside the page. */
-function pageColumnWidth() {
-  return (document.querySelector('.wt-pane.wt-focused') ?? document.querySelector('.layout-main'))?.clientWidth ?? window.innerWidth;
-}
