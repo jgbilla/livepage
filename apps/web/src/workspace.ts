@@ -140,6 +140,9 @@ export function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// No folder: let the server file the page in today's daily folder, next to the daily page.
+const placed = (folderId: string | null) => (folderId ? { folder_id: folderId } : {});
+
 export async function openToday() {
   const d = new Date();
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -148,8 +151,9 @@ export async function openToday() {
   navigate(`/p/${page.id}`);
 }
 
+/** A new page: in folderId when given, otherwise in today's daily folder YYYY/MM/DD (this device's date). */
 export async function newPage(folderId: string | null = null) {
-  const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: '', folder_id: folderId } });
+  const { page } = await api<{ page: { id: string } }>('/pages', { body: { title: '', ...placed(folderId), date: localDate() } });
   await reloadWorkspace();
   navigate(`/p/${page.id}`);
 }
@@ -158,7 +162,7 @@ export async function newPage(folderId: string | null = null) {
 export async function newPageFromTemplate(templateId: string, folderId: string | null = null) {
   const d = new Date();
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const { page } = await api<{ page: { id: string } }>('/pages', { body: { template_id: templateId, folder_id: folderId, date: localDate(d), time } });
+  const { page } = await api<{ page: { id: string } }>('/pages', { body: { template_id: templateId, ...placed(folderId), date: localDate(d), time } });
   await reloadWorkspace();
   navigate(`/p/${page.id}`);
 }

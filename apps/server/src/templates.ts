@@ -61,12 +61,3 @@ export async function fillFromTemplate(
   const tags = (await pageTags(db, templateId)).filter((t) => t !== 'template' && t !== 'templates');
   if (tags.length) await setPageTags(db, pageId, tags);
 }
-
-/** "YYYY-MM-DD" and "HH:mm" for template variables, from what the browser sent or the server clock. */
-export function templateClock(b: { date?: unknown; time?: unknown }): { date: string; time: string } {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const date = typeof b.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const time = typeof b.time === 'string' && /^\d{2}:\d{2}$/.test(b.time) ? b.time : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  return { date, time };
-}

@@ -32,7 +32,8 @@ import {
   updateComment, waitForMention,
 } from './comments.ts';
 import { neonAuthEnabled, userForNeonIdentity, verifyNeonToken } from './neon-auth.ts';
-import { dailyTemplateFor, fillFromTemplate, listTemplates, setDailyTemplate, setTemplateFlag, templateClock, titleFromTemplate } from './templates.ts';
+import { dailyTemplateFor, fillFromTemplate, listTemplates, setDailyTemplate, setTemplateFlag, titleFromTemplate } from './templates.ts';
+import { noteTimeZone, personClock } from './clock.ts';
 import { exportPage, exportVault, IMPORT_LIMITS, importFiles } from './transfer.ts';
 import { publishPage, unpublishPage } from './publish.ts';
 import { readDoc, writeDoc } from './docs.ts';
@@ -151,6 +152,8 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/me' && method === 'GET' && !who) return send(res, 200, { user: null }); // signed out is a normal state
     if (!who) return send(res, 401, { error: 'Sign in first.' });
     touchAgent(who);
+    // The browser reports its time zone, so agents can file new pages by the person's own day.
+    if (who.kind === 'human') void noteTimeZone(db, who.id, req.headers['x-time-zone']);
     // Any change you make (from any device, or through your agents) refreshes your page list everywhere.
     // (The task board has its own counter, bumped by tasks.ts, so a task note doesn't reload the page list.)
     if (method !== 'GET' && method !== 'HEAD' && !who.superAgent && !path.startsWith('/api/tasks')) {
@@ -234,8 +237,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/pages' && method === 'POST') {
       if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token to create pages.' });
       const b = await readJson(req);
-      const where = await placement(b);
-      if ('error' in where) return send(res, 400, { error: where.error });
+      const placed = await placement(b);
+      if ('error' in placed) return send(res, 400, { error: placed.error });
+      const clock = await personClock(db, who.id, b);
+      // Not told where: today's daily folder YYYY/MM/DD (the person's local date), next to the daily page.
+      const where = 'path' in placed || 'folderId' in placed ? placed : { path: dailySegments(clock.date)! };
       // From a template: a copy of it, with {{date}}, {{title}}... filled in. Any template you can open works.
       let template: { id: string; title: string } | null = null;
       if (b.template_id) {
@@ -245,14 +251,14 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
         if (!t) return send(res, 404, { error: 'Template not found.' });
         template = t;
       }
-      const clock = templateClock(b);
       const title = b.title !== undefined && b.title !== null && String(b.title) !== ''
         ? String(b.title)
         : template ? titleFromTemplate(template.title, { ...clock, title: '' }) : '';
       const page = await createPage(db, who.id, title, where);
       if (template) await fillFromTemplate(hp, db, who, page.id, template.id, { ...clock, title });
       const tags = Array.isArray(b.tags) ? await setPageTags(db, page.id, b.tags) : await pageTags(db, page.id);
-      return send(res, 201, { page: { ...page, title, tags } });
+      const folderPath = page.folder_id ? (folderPaths(await listFolders(db.query, who.id)).get(page.folder_id) ?? '') : '';
+      return send(res, 201, { page: { ...page, title, tags, path: folderPath } });
     }
 
     // Full-text search over every page you can open: title, tags and block text (?q=words&limit=20).
@@ -264,16 +270,17 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     // Every page you can open and the links between them (for the graph view).
     if (path === '/api/graph' && method === 'GET') return send(res, 200, await linkGraph(db, who));
 
-    // Today's page: folder YYYY/MM/DD, page "daily". The browser sends its local date.
+    // Today's page: folder YYYY/MM/DD, page "daily". The browser sends its local date; without one, the person's own today.
     if (path === '/api/daily' && method === 'POST') {
       if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token for daily pages.' });
       const b = await readJson(req);
-      const segments = dailySegments(b.date);
-      if (!segments) return send(res, 400, { error: 'date must be YYYY-MM-DD' });
+      if (b.date !== undefined && b.date !== null && !dailySegments(b.date)) return send(res, 400, { error: 'date must be YYYY-MM-DD' });
+      const clock = await personClock(db, who.id, b);
+      const segments = dailySegments(clock.date)!;
       const r = await dailyPage(db, who.id, segments);
       if (r.created) {
         const tid = await dailyTemplateFor(db, who.id);
-        if (tid) await fillFromTemplate(hp, db, who, r.id, tid, { ...templateClock(b), date: String(b.date), title: 'daily' });
+        if (tid) await fillFromTemplate(hp, db, who, r.id, tid, { ...clock, title: 'daily' });
       }
       return send(res, r.created ? 201 : 200, { page: { id: r.id, title: 'daily', path: segments.join('/') }, created: r.created });
     }
@@ -308,7 +315,10 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       if (who.superAgent) return send(res, 400, { error: 'Use a personal agent token to import.' });
       const b = await readJson(req, IMPORT_LIMITS.bytes);
       if (!Array.isArray(b.files) || !b.files.length) return send(res, 400, { error: 'files must be a list of { path, content }' });
-      const into = b.into ? splitPath(b.into) : [];
+      // No `into`: today's daily folder, like any new page. "" = the top level.
+      const into = b.into === undefined || b.into === null
+        ? dailySegments((await personClock(db, who.id, b)).date)
+        : splitPath(b.into);
       if (!into) return send(res, 400, { error: 'into must look like "Imported/Vault"' });
       const report = await importFiles(hp, db, { id: who.id, name: who.name, kind: who.kind }, b.files, into);
       return send(res, 201, report);

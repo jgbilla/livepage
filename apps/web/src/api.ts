@@ -26,10 +26,13 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   return data as T;
 }
 
+const timeZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; } })();
+
 function fetchApi(path: string, opts: { method?: string; body?: unknown }) {
   return fetch(`/api${path}`, {
     method: opts.method ?? (opts.body === undefined ? 'GET' : 'POST'),
-    headers: opts.body === undefined ? {} : { 'Content-Type': 'application/json' },
+    // Your time zone, so agents file new pages in your own day's folder (YYYY/MM/DD).
+    headers: { ...(opts.body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(timeZone ? { 'X-Time-Zone': timeZone } : {}) },
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     credentials: 'same-origin',
   });
