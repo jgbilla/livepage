@@ -16,7 +16,8 @@ type Comment = {
   created_at: string; edited_at: string | null;
 };
 type Thread = Comment & { tab: string; anchor: CommentAnchor | null; resolved_at: string | null; resolved_by: string | null; replies: Comment[] };
-type Mentionable = MentionTarget & { detail: string };
+/** answers: on the AI entry, who answers your @AI (your pick in the Ask AI menu). */
+type Mentionable = MentionTarget & { detail: string; answers?: { kind: 'builtin' | 'agent'; name: string; online: boolean } };
 
 type Props = {
   pageId: string; tab: string; tabTitle: (id: string) => string; onSelectTab: (id: string) => void;
@@ -45,7 +46,14 @@ export function CommentsPanel(p: Props) {
   }, [pageId]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { api<{ mentionables: Mentionable[] }>(`/pages/${pageId}/mentionables`).then((r) => setPeople(r.mentionables)).catch(() => {}); }, [pageId]);
+  // Refreshed while the panel is open, so @AI shows who answers now (you may have switched agents, or it went offline).
+  useEffect(() => {
+    const load = () => api<{ mentionables: Mentionable[] }>(`/pages/${pageId}/mentionables`).then((r) => setPeople(r.mentionables)).catch(() => {});
+    void load();
+    if (!open) return;
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [pageId, open]);
 
   // The server pings every open browser when comments change.
   useEffect(() => {
@@ -296,6 +304,10 @@ function Composer({ people, initial = '', placeholder, submitLabel, autoFocus, o
     requestAnimationFrame(() => { const pos = query.at + insert.length; ref.current?.focus(); ref.current?.setSelectionRange(pos, pos); });
   };
 
+  // Who answers @AI, once you've picked it: your choice in the Ask AI menu.
+  const aiAnswers = chosen.some((m) => m.kind === 'agent' && m.id === 'assistant') && text.includes('@AI')
+    ? people.find((m) => m.kind === 'agent' && m.id === 'assistant')?.answers : undefined;
+
   const submit = async () => {
     let body = text.trim();
     if (!body || busy) return;
@@ -332,6 +344,13 @@ function Composer({ people, initial = '', placeholder, submitLabel, autoFocus, o
             </li>
           ))}
         </ul>
+      )}
+      {aiAnswers && !query && (
+        <div className="muted small composer-hint">
+          <Icon name="sparkles" style={{ color: 'var(--lp-agent)' }} />
+          {aiAnswers.kind === 'builtin' ? 'The built-in assistant answers @AI.'
+            : aiAnswers.online ? `${aiAnswers.name} answers @AI.` : `${aiAnswers.name} answers @AI when it's listening again.`}
+        </div>
       )}
       {query && matches.length === 0 && people.length > 0 && <div className="muted small">No one called “{query.q}” on this page.</div>}
       {err && <div className="error small">{err}</div>}

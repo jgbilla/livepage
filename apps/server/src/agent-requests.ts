@@ -8,13 +8,15 @@
 // with reply_to_request. The panel shows which agents are online and streams the status.
 //
 //   Person (session cookie)
-//     GET    /api/agents                                -> your agent tokens + online status
+//     GET    /api/agents                                -> { agents: your agent tokens + online status, target }
+//     PUT    /api/agents/target                         { target: 'builtin' | <token id> } -> who answers Ask AI and @AI
 //     POST   /api/pages/:page/agent-requests            { tokenId, prompt, tab?, selection? } -> { request }
 //                                                       (question and answer also go in the page's Ask AI chat, chats.ts)
 //     GET    /api/agent-requests/:id?wait=25            -> { request } (returns early when it changes)
 //     DELETE /api/agent-requests/:id                    -> cancel
 //   Agent (Bearer lp_ token)
-//     GET    /api/agent-requests?wait=20                -> { requests } pending for this token, now delivered
+//     GET    /api/agent-requests?wait=20                -> { requests, mentions } pending for this token, now delivered
+//                                                       (mentions: comments that @mention it, or @AI when the person picked it)
 //     POST   /api/agent-requests/:id/ack                -> confirms the agent received it (status working)
 //     POST   /api/agent-requests/:id/reply              { text, done? }  (done=false: progress note)
 //
@@ -30,6 +32,7 @@ import { randomId, type Principal } from './auth.ts';
 import { readJson, send } from './agent-api.ts';
 import { canEdit, roleFor } from './pages.ts';
 import { changeChat, historyOf, readChat, startExchange } from './chats.ts';
+import { plainBody } from '@livepage/schema';
 
 const ONLINE_MS = 2 * 60_000;
 const MAX_WAIT = 30_000;
@@ -48,7 +51,7 @@ const listening = new Map<string, number>(); // tokenId -> open long polls
 export function touchAgent(who: Principal | null | undefined) {
   if (who?.kind === 'agent' && who.tokenId) lastSeen.set(who.tokenId, Date.now());
 }
-const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
+export const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
 
 // ---- Long-poll wakeups, keyed by "token:<id>" (new work for an agent) or "req:<id>" (a request changed).
 const waiters = new Map<string, Set<() => void>>();
@@ -69,6 +72,8 @@ function wait(key: string, ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener('abort', done);
   });
 }
+/** New work for an agent outside this file (a comment mention): end its wait_for_requests long poll. */
+export const wakeAgent = (tokenId: string) => wake(`token:${tokenId}`);
 const waitMs = (url: URL) => Math.min(MAX_WAIT, Math.max(0, Number(url.searchParams.get('wait') ?? 0) * 1000 || 0));
 function closeSignal(req: IncomingMessage, res: ServerResponse): AbortSignal {
   const ac = new AbortController();
@@ -129,6 +134,34 @@ function changed(db: Db, id: string) {
   })().catch((e) => console.warn('[agent-requests] chat update failed:', (e as Error).message));
 }
 
+export const BUILTIN = 'builtin';
+
+/** Who this person picked in the Ask menu: 'builtin', or one of their own agent token ids. */
+export async function getAskTarget(db: Db, userId: string): Promise<string> {
+  const [row] = await db.query(
+    `select u.ask_target, t.id as token_id from users u left join api_tokens t on t.id = u.ask_target and t.user_id = u.id where u.id = $1`, [userId]);
+  return row?.token_id ?? BUILTIN; // a deleted token falls back to the built-in assistant
+}
+
+/** Comment mentions for this agent that its listen loop hasn't been handed yet. Marks them handed over. */
+async function claimMentions(db: Db, who: Principal) {
+  const ids = (await db.query(
+    `update comment_mentions set delivered_at = now()
+      where target_kind = 'agent' and target_id = $1 and handled_at is null and delivered_at is null returning id`, [who.tokenId])).map((r) => r.id as string);
+  if (!ids.length) return [];
+  return db.query(
+    `select mn.id, mn.page_id, p.title as page_title, mn.thread_id, r.tab, c.author_name, c.body, r.anchor
+       from comment_mentions mn
+       join comments c on c.id = mn.comment_id
+       join comments r on r.id = mn.thread_id
+       join pages p on p.id = mn.page_id
+       join page_members m on m.page_id = mn.page_id and m.user_id = $2
+      where mn.id = any($1) order by mn.created_at`, [ids, who.id]).then((rows) => rows.map((r) => ({
+    id: r.id, page_id: r.page_id, page_title: r.page_title || 'Untitled', thread_id: r.thread_id, tab: r.tab,
+    author_name: r.author_name, text: plainBody(r.body), quote: r.anchor?.quote ?? null,
+  })));
+}
+
 /** People: list your agents with online status. */
 export async function listAgents(db: Db, userId: string) {
   const rows = await db.query('select id, name, last_used_at from api_tokens where user_id = $1 order by created_at desc', [userId]);
@@ -140,7 +173,20 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
 
   if (path === '/api/agents' && method === 'GET') {
     if (who.kind !== 'human') { send(res, 403, { error: 'For people only.' }); return true; }
-    send(res, 200, { agents: await listAgents(db, who.id) });
+    const [agents, target] = await Promise.all([listAgents(db, who.id), getAskTarget(db, who.id)]);
+    send(res, 200, { agents, target });
+    return true;
+  }
+  if (path === '/api/agents/target' && method === 'PUT') {
+    if (who.kind !== 'human' || who.superAgent) { send(res, 403, { error: 'For people only.' }); return true; }
+    const b = await readJson(req);
+    const target = String(b.target ?? BUILTIN);
+    if (target !== BUILTIN) {
+      const [tok] = await db.query('select id from api_tokens where id = $1 and user_id = $2', [target, who.id]);
+      if (!tok) { send(res, 404, { error: 'That agent is not one of yours.' }); return true; }
+    }
+    await db.query('update users set ask_target = $2 where id = $1', [who.id, target === BUILTIN ? null : target]);
+    send(res, 200, { target });
     return true;
   }
 
@@ -156,10 +202,14 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
     listening.set(tokenId, (listening.get(tokenId) ?? 0) + 1);
     try {
       let ids = (await claim()).map((r) => r.id as string);
+      let mentions = await claimMentions(db, who);
       const ms = waitMs(url);
-      if (!ids.length && ms) {
+      if (!ids.length && !mentions.length && ms) {
         await wait(`token:${tokenId}`, ms, closeSignal(req, res));
-        if (!res.writableEnded && !res.destroyed) ids = (await claim()).map((r) => r.id as string);
+        if (!res.writableEnded && !res.destroyed) {
+          ids = (await claim()).map((r) => r.id as string);
+          mentions = await claimMentions(db, who);
+        }
       }
       lastSeen.set(tokenId, Date.now());
       for (const id of ids) {
@@ -168,7 +218,8 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
         setTimeout(() => { wake(`token:${tokenId}`); changed(db, id); }, LEASE_MS + 1000).unref?.();
       }
       const requests = ids.length ? await db.query(`select ${COLS} from ${FROM} where r.id = any($1) order by r.created_at`, [ids]) : [];
-      if (!res.writableEnded && !res.destroyed) send(res, 200, { requests });
+      if (!res.writableEnded && !res.destroyed) send(res, 200, { requests, mentions });
+      else if (mentions.length) await db.query('update comment_mentions set delivered_at = null where id = any($1)', [mentions.map((m) => m.id)]);
     } finally {
       listening.set(tokenId, (listening.get(tokenId) ?? 1) - 1);
     }
