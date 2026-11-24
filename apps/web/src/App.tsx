@@ -14,6 +14,7 @@ import { loadPageScreen } from './preload';
 import { clearLocalPages } from './offline';
 import { BootSkeleton, PageSkeleton } from './Skeleton';
 import { hydrateWorkspace, resetWorkspace } from './workspace';
+import { resetWorkspaceLinks } from './workspaceLinks';
 import { resetTasks } from './tasks';
 
 // The editor (and the graph) are big; they load on their own so the first screen is light.
@@ -60,7 +61,7 @@ export function App() {
     return <AuthScreen onSignedIn={async () => { await refreshMe(); if (path === '/login') navigate('/', true); }} />;
   }
 
-  const logout = async () => { await api('/auth/logout', { body: {} }); await neonSignOut(); await clearLocalPages(); resetWorkspace(); resetTasks(); setMe(null); navigate('/login', true); };
+  const logout = async () => { await api('/auth/logout', { body: {} }); await neonSignOut(); await clearLocalPages(); resetWorkspace(); resetWorkspaceLinks(); resetTasks(); setMe(null); navigate('/login', true); };
 
   const share = path.match(/^\/s\/([\w-]+)/);
   if (share) return <ShareScreen token={share[1]} />;

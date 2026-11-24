@@ -20,6 +20,7 @@ import { handleContent, readJson, send } from './agent-api.ts';
 import { linkGraph, searchPages } from './search.ts';
 import { config } from './config.ts';
 import { sameOrigin } from './origin.ts';
+import { getLinks, saveLinks } from './workspace-links.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
 import { handleChat } from './chats.ts';
@@ -158,9 +159,15 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/workspace/events' && method === 'GET') return handleWorkspaceEvents(req, res, who.id, url);
     if (path === '/api/agent-events' && method === 'GET') return handleAgentEvents(req, res, db, who);
     if (path.startsWith('/api/tasks') && (await handleTasks(req, res, db, who, url, path))) return;
-    if ((path === '/api/agents' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
+    if ((path === '/api/agents' || path === '/api/agents/target' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });
+    // The workspace switcher's list (your other Livepage copies). People only: agents never need it.
+    if (path === '/api/me/workspaces') {
+      if (who.kind !== 'human') return send(res, 403, { error: 'Only people have a workspace list.' });
+      if (method === 'GET') return send(res, 200, { links: await getLinks(db, who.id) });
+      if (method === 'PUT') return send(res, 200, { links: await saveLinks(db, who.id, (await readJson(req)).links) });
+    }
 
     // Agent tokens are managed by people only (an agent cannot mint more tokens).
     if (path === '/api/tokens') {
@@ -185,6 +192,18 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (tokenDel && method === 'PATCH') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       const b = await readJson(req);
+      // Rename: the name this agent shows on pages (avatar, caret, comments).
+      if (typeof b.name === 'string') {
+        const name = b.name.trim().slice(0, 80);
+        if (!name) return send(res, 400, { error: 'Give the agent a name.' });
+        const done = await db.query('update api_tokens set name = $3 where id = $1 and user_id = $2 returning id', [tokenDel[1], who.id, name]);
+        if (!done.length) return send(res, 404, { error: 'No such token.' });
+        // Agents already on a page switch to the new name with their next presence update (at most ~15s).
+        hp.documents.forEach((doc) => {
+          for (const conn of doc.getConnections()) if (conn.context?.user?.tokenId === tokenDel[1]) conn.context.user.name = name;
+        });
+        if (!('webhook_url' in b)) return send(res, 200, { ok: true, name });
+      }
       return send(res, 200, await setWebhook(db, who.id, tokenDel[1], b.webhook_url ?? null));
     }
 
@@ -530,7 +549,7 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   if (sub === 'agent-requests' && !id && method === 'POST') return createAgentRequest(req, res, db, who, pageId);
   if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
   if (sub === 'chat') return handleChat(req, res, db, who, pageId, url, id);
-  if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId) });
+  if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId, who) });
 
   if (sub === 'comments') {
     try {

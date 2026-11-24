@@ -69,6 +69,8 @@ create index if not exists blocks_type_idx on blocks (type);
 -- Neon Auth (Google and other social sign-in) links to the same users rows.
 alter table users add column if not exists neon_auth_id text unique;
 alter table users alter column password_hash drop not null;
+-- The other Livepage copies this person switches to from the sidebar (see workspace-links.ts).
+alter table users add column if not exists workspace_links jsonb not null default '[]';
 create index if not exists page_members_user_idx on page_members (user_id);
 -- Built-in AI assistant: each person's own provider, model and API key (key encrypted with AI_KEY_SECRET).
 create table if not exists ai_settings (
@@ -174,6 +176,10 @@ alter table users add column if not exists daily_template_id text references pag
 -- Publishing: a published page is readable by anyone at /pub/<slug>, without an account.
 alter table pages add column if not exists published_slug text unique;
 alter table pages add column if not exists published_at timestamptz;
+-- Who answers @AI and Ask AI for this person: 'builtin', one of their agent token ids, or null (never picked: built-in).
+alter table users add column if not exists ask_target text;
+-- When an agent listening with wait_for_requests was handed a comment mention (it can still find it with get_mentions).
+alter table comment_mentions add column if not exists delivered_at timestamptz;
 -- Task board: jobs handed to one of your agents (tasks.ts). Events are the task's timeline.
 create table if not exists agent_tasks (
   id              text primary key,

@@ -18,6 +18,8 @@ import { randomId, type Principal } from './auth.ts';
 import { atLeast, type Role } from './pages.ts';
 import { config } from './config.ts';
 import { aiAvailable } from './assistant/settings.ts';
+import { resolveAiRoute, routeDetail, type AiRoute } from './ai-route.ts';
+import { wakeAgent } from './agent-requests.ts';
 import { pushToAgent } from './agent-push.ts';
 
 export type CommentRow = {
@@ -26,7 +28,11 @@ export type CommentRow = {
   created_at: string; edited_at: string | null; resolved_at: string | null; resolved_by: string | null;
 };
 export type Thread = CommentRow & { replies: CommentRow[]; current_text?: string | null };
-export type Mentionable = { kind: 'user' | 'agent'; id: string; name: string; detail: string };
+export type Mentionable = {
+  kind: 'user' | 'agent'; id: string; name: string; detail: string;
+  /** On the AI entry, for the person asking: who answers their @AI (the agent they picked in Ask AI, or the built-in assistant). */
+  answers?: { kind: 'builtin' | 'agent'; name: string; online: boolean };
+};
 
 const COLS = 'id, page_id, thread_id, tab, anchor, body, author_id, author_name, author_kind, token_id, created_at, edited_at, resolved_at, resolved_by';
 export const isCommentId = (s: string | undefined) => !!s && /^c_[\w-]{8,40}$/.test(s);
@@ -36,23 +42,30 @@ function broadcast(hp: Hocuspocus, pageId: string) {
   hp.documents.get(pageId)?.broadcastStateless(JSON.stringify({ type: 'comments' }));
 }
 
-/** Who can be @mentioned on a page: its members, and the agents (tokens) of members who can comment. */
-export async function mentionables(db: Db, pageId: string): Promise<Mentionable[]> {
+/** Who can be @mentioned on a page: its members, and the agents (tokens) of members who can comment.
+ *  With a viewer, the AI entry says who answers that person's @AI (their pick in the Ask menu). */
+export async function mentionables(db: Db, pageId: string, viewer?: Principal | null): Promise<Mentionable[]> {
   const people = await db.query(
     `select u.id, u.name, m.role from page_members m join users u on u.id = m.user_id where m.page_id = $1 order by u.name`, [pageId]);
   const agents = await db.query(
     `select t.id, t.name, u.name as owner_name from api_tokens t
        join page_members m on m.user_id = t.user_id and m.page_id = $1 and m.role in ('owner','editor','commenter')
        join users u on u.id = t.user_id order by t.name`, [pageId]);
+  const route = viewer?.kind === 'human' && !viewer.superAgent ? await resolveAiRoute(db, viewer.id) : null;
+  const ai: Mentionable[] = route?.kind === 'agent' || aiAvailable() ? [{
+    kind: 'agent', id: ASSISTANT_ID, name: 'AI', detail: route ? routeDetail(route) : 'Built-in assistant · uses your own key',
+    ...(route && { answers: route.kind === 'agent' ? { kind: 'agent' as const, name: route.name, online: route.online } : { kind: 'builtin' as const, name: 'Built-in assistant', online: true } }),
+  }] : [];
   return [
-    // The built-in assistant: mentioning it runs it as whoever wrote the comment, with their own key.
-    ...(aiAvailable() ? [{ kind: 'agent' as const, id: ASSISTANT_ID, name: 'AI', detail: 'Built-in assistant · uses your own key' }] : []),
+    // AI: the agent this person picked in Ask AI, or the built-in assistant, run as whoever wrote the comment with their own key.
+    ...ai,
     ...agents.map((a) => ({ kind: 'agent' as const, id: a.id, name: a.name, detail: `Agent · ${a.owner_name}` })),
     ...people.map((p) => ({ kind: 'user' as const, id: p.id, name: p.name, detail: p.role })),
   ];
 }
 
 export const ASSISTANT_ID = 'assistant';
+const isAssistant = (m: MentionTarget) => m.kind === 'agent' && m.id === ASSISTANT_ID;
 
 export async function listThreads(db: Db, pageId: string, status: 'open' | 'resolved' | 'all' = 'all', doc?: Y.Doc): Promise<Thread[]> {
   const rows = await db.query<CommentRow>(`select ${COLS} from comments where page_id = $1 order by created_at, id`, [pageId]);
@@ -79,11 +92,11 @@ const isAuthor = (c: CommentRow, who: Principal) =>
   c.author_id === who.id && (who.kind === 'agent' ? c.token_id === (who.tokenId ?? null) : c.author_kind === 'human');
 
 /** Body as sent: trimmed, capped, and only mentions of people/agents who can be mentioned here. */
-async function checkBody(db: Db, pageId: string, raw: unknown) {
+async function checkBody(db: Db, pageId: string, raw: unknown, who?: Principal) {
   const body = String(raw ?? '').trim();
   if (!body) throw new HttpError(400, 'Write something first.');
   if (body.length > COMMENT_LIMITS.bodyMax) throw new HttpError(400, `Comments are limited to ${COMMENT_LIMITS.bodyMax} characters.`);
-  const allowed = new Map((await mentionables(db, pageId)).map((m) => [`${m.kind}:${m.id}`, m]));
+  const allowed = new Map((await mentionables(db, pageId, who)).map((m) => [`${m.kind}:${m.id}`, m]));
   const mentions = parseMentions(body).filter((m) => allowed.has(`${m.kind}:${m.id}`));
   return { body, mentions };
 }
@@ -106,9 +119,19 @@ export type NewComment = {
 
 export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, input: NewComment): Promise<CommentRow> {
   if (!atLeast(role, 'commenter')) throw new HttpError(403, 'You can view this page but not comment on it.');
-  const checked = await checkBody(db, pageId, input.body);
+  const checked = await checkBody(db, pageId, input.body, who);
   const body = checked.body;
   let mentions = checked.mentions;
+  // @AI goes to whoever this person picked in the Ask AI menu. A connected agent gets it as a mention.
+  let aiRoute: AiRoute | null = null;
+  if (who.kind === 'human' && !who.superAgent && mentions.some(isAssistant)) {
+    aiRoute = await resolveAiRoute(db, who.id);
+    if (aiRoute.kind === 'agent') {
+      const agentId = aiRoute.id;
+      mentions = mentions.filter((m) => !isAssistant(m));
+      if (!mentions.some((m) => m.kind === 'agent' && m.id === agentId)) mentions.push({ kind: 'agent', id: agentId, name: aiRoute.name });
+    }
+  }
   let threadId: string;
   let tab = MAIN_TAB;
   let anchor: CommentAnchor | null = null;
@@ -162,9 +185,11 @@ export async function createComment(db: Db, hp: Hocuspocus, who: Principal, role
   const targets = mentions.filter((m) => !(m.kind === 'agent' && m.id === who.tokenId) && !(m.kind === 'user' && who.kind === 'human' && m.id === who.id));
   for (const m of targets) wake(`${m.kind}:${m.id}`);
   if (who.kind === 'human' && targets.some((m) => m.kind === 'agent' && m.id === ASSISTANT_ID)) {
-    void answerWithAssistant(db, hp, who, role, pageId, threadId).catch((e) => console.warn('[comments] assistant:', e.message));
+    const note = aiRoute?.kind === 'builtin' ? aiRoute.note : undefined;
+    void answerWithAssistant(db, hp, who, role, pageId, threadId, note).catch((e) => console.warn('[comments] assistant:', e.message));
   }
   const agentIds = targets.filter((m) => m.kind === 'agent' && m.id !== ASSISTANT_ID).map((m) => m.id);
+  for (const t of agentIds) wakeAgent(t); // an agent listening with wait_for_requests gets it right away
   if (agentIds.length) void notifyAgents(db, hp, pageId, row, agentIds).catch((e) => console.warn('[comments] webhook:', e.message));
   return row;
 }
@@ -188,7 +213,7 @@ export async function updateComment(db: Db, hp: Hocuspocus, who: Principal, role
   if (!c) throw new HttpError(404, 'Comment not found.');
   if (patch.body !== undefined) {
     if (!isAuthor(c, who)) throw new HttpError(403, 'Only the author can edit a comment.');
-    const { body } = await checkBody(db, pageId, patch.body);
+    const { body } = await checkBody(db, pageId, patch.body, who);
     await db.query('update comments set body = $2, edited_at = now() where id = $1', [id, body]);
   }
   if (patch.resolved !== undefined) {
@@ -379,12 +404,13 @@ export async function threadsWithText(db: Db, hp: Hocuspocus, who: Principal, pa
 
 const ASSISTANT_TIMEOUT_MS = 5 * 60_000;
 
-async function answerWithAssistant(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, threadId: string) {
+async function answerWithAssistant(db: Db, hp: Hocuspocus, who: Principal, role: Role, pageId: string, threadId: string, note?: string) {
   const { runAssistant, assistantName } = await import('./assistant/run.ts');
   const { canEdit } = await import('./pages.ts');
   const bot: Principal = { id: who.id, email: who.email, name: assistantName(who), kind: 'agent' };
   const reply = await createComment(db, hp, bot, role, pageId, { body: 'Working on it…', threadId });
   const setBody = async (text: string) => {
+    if (note) text = `${text || 'Done.'}\n\n(${note})`;
     await db.query('update comments set body = $2, edited_at = now() where id = $1', [reply.id, text.slice(0, COMMENT_LIMITS.bodyMax) || 'Done.']);
     broadcast(hp, pageId);
   };
