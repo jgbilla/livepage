@@ -315,17 +315,93 @@ export function hitsToReplace(doc: Y.Doc, find: string, opts: ReplaceOptions = {
   return hits;
 }
 
-/** Find and replace in place. Returns the number of replacements and the blocks touched. */
+// Marks that Markdown can write, so a replacement's **bold**, `code`, ~~strike~~, *italic* and [links](url) apply.
+const MD_MARKS = ['bold', 'italic', 'strike', 'code', 'link'] as const;
+type Run = { text: string; marks: Record<string, unknown> | null /* null = keep the formatting already there */ };
+
+/**
+ * The replacement as runs of text. Markdown markers in it become formatting; anything that is not a single
+ * line of inline Markdown (a list, a heading, a page link...) is taken literally.
+ */
+function replacementRuns(replace: string): { runs: Run[]; formatted: boolean } {
+  const literal = { runs: [{ text: replace, marks: null }], formatted: false };
+  if (!/[*_`~[\\]/.test(replace)) return literal;
+  const lead = replace.match(/^\s*/)![0];
+  const core = replace.slice(lead.length).trimEnd();
+  const trail = replace.slice(lead.length + core.length);
+  if (!core) return literal;
+  const scratch = new Y.Doc();
+  const els = markdownToBlocks(scratch, core);
+  if (els.length !== 1 || els[0].nodeName !== 'paragraph') return literal;
+  fragment(scratch).insert(0, els);
+  const kids = els[0].toArray();
+  if (!kids.every((k) => k instanceof Y.XmlText)) return literal;
+  const parsed: Run[] = kids.flatMap((k) => ((k as Y.XmlText).toDelta() as Op[])
+    .map((op) => ({ text: typeof op.insert === 'string' ? op.insert : '', marks: { ...(op.attributes ?? {}) } })));
+  // Only escapes ("read\_page"): plain text, keeping the formatting already there.
+  if (parsed.every((r) => !Object.keys(r.marks!).length)) return { runs: [{ text: lead + parsed.map((r) => r.text).join('') + trail, marks: null }], formatted: false };
+  return { runs: [{ text: lead, marks: null }, ...parsed, { text: trail, marks: null }].filter((r) => r.text), formatted: true };
+}
+
+const sameMark = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * Change one match with as small an edit as possible: the words that stay the same are left alone, so
+ * their formatting, links, footnotes and comment anchors survive. Only the part that differs is rewritten.
+ */
+function replaceHit(h: TextHit, replace: string) {
+  const old = runText(h.text).slice(h.offset, h.offset + h.length);
+  const { runs, formatted } = replacementRuns(replace);
+  const chars = runs.flatMap((r) => [...r.text].map((ch) => ({ ch, marks: r.marks })));
+  const neu = chars.map((c) => c.ch).join('');
+  // Compare by UTF-16 units, as Yjs offsets are.
+  const units: { ch: string; marks: Run['marks'] }[] = chars.flatMap((c) => c.ch.split('').map((u) => ({ ch: u, marks: c.marks })));
+  let pre = 0;
+  while (pre < old.length && pre < neu.length && old[pre] === neu[pre]) pre++;
+  let suf = 0;
+  while (suf < old.length - pre && suf < neu.length - pre && old[old.length - 1 - suf] === neu[neu.length - 1 - suf]) suf++;
+
+  // Formatting for new text with none of its own: like typing, it takes the marks of the text before it.
+  const at = h.offset + pre;
+  const inherited = pre > 0 ? marksAt(h.text, at - 1) : marksAt(h.text, at);
+  const midOld = old.length - pre - suf;
+  if (midOld > 0) h.text.delete(at, midOld);
+  let pos = at;
+  const mid = units.slice(pre, units.length - suf);
+  for (let i = 0; i < mid.length;) {
+    const marks = mid[i].marks;
+    let j = i;
+    while (j < mid.length && mid[j].marks === marks) j++;
+    const text = mid.slice(i, j).map((u) => u.ch).join('');
+    const attrs = marks ? { ...Object.fromEntries(Object.entries(inherited).filter(([k]) => !(MD_MARKS as readonly string[]).includes(k))), ...marks } : inherited;
+    h.text.insert(pos, text, attrs);
+    pos += text.length;
+    i = j;
+  }
+
+  // Kept words whose Markdown formatting changed ("word" -> "**word**"): reformat them in place.
+  if (!formatted) return;
+  const kept = [...units.slice(0, pre).map((u, i) => ({ u, idx: h.offset + i })),
+    ...units.slice(units.length - suf).map((u, i) => ({ u, idx: pos + i }))];
+  for (const { u, idx } of kept) {
+    if (!u.marks) continue;
+    const now = marksAt(h.text, idx);
+    const change: Record<string, unknown> = {};
+    for (const m of MD_MARKS) if (!sameMark(now[m], u.marks[m])) change[m] = u.marks[m] ?? null;
+    if (Object.keys(change).length) h.text.format(idx, 1, change);
+  }
+}
+
+/**
+ * Find and replace in place. Returns the number of replacements and the blocks touched. Only the
+ * characters that change are rewritten, and Markdown in the replacement (**bold**, `code`, [link](url)) applies.
+ */
 export function replaceText(doc: Y.Doc, find: string, replace: string, opts: ReplaceOptions = {}): { replaced: number; blocks: string[] } {
   let out = { replaced: 0, blocks: [] as string[] };
   doc.transact(() => {
     const hits = hitsToReplace(doc, find, opts);
     // Last match first, so earlier offsets in the same text stay valid.
-    for (const h of [...hits].reverse()) {
-      const marks = marksAt(h.text, h.offset);
-      h.text.delete(h.offset, h.length);
-      if (replace) h.text.insert(h.offset, replace, marks);
-    }
+    for (const h of [...hits].reverse()) replaceHit(h, replace);
     out = { replaced: hits.length, blocks: [...new Set(hits.map((h) => h.blockId))] };
   });
   return out;

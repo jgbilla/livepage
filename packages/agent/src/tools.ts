@@ -159,7 +159,7 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     {
       page,
       find: z.string().min(1).max(4000).describe('Exact text now on the page.'),
-      replace: z.string().max(20000).describe('Plain text to put in its place.'),
+      replace: z.string().max(20000).describe('Text to put in its place. Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url)) sets formatting.'),
       block_id: blockId.optional().describe('Only look inside this block.'),
       tab: z.string().optional().describe('Only look in this tab (id or title). Omit for every tab.'),
       occurrence: z.number().int().min(1).optional().describe('Which match to replace (1 = first) when there are several.'),

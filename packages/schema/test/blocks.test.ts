@@ -5,7 +5,7 @@ import * as Y from 'yjs';
 import {
   addTab, appendHeading, appendParagraph, fragment, insertHtmlBlock, insertTable, insertFootnote, listBlocks, listFootnotes,
   blocksAsText, deleteBlocks, deleteTableRow, findBlock, insertBlocks, insertTableRow, moveBlocks, outlineAsText, pageOutline,
-  readBlocks, replaceBlocks, replaceText, setTableCell, tabToMarkdown,
+  readBlocks, replaceBlocks, replaceText, setTableCell, tabToMarkdown, textAnchorForQuote, currentAnchorText,
 } from '../src/index.ts';
 
 function sample() {
@@ -105,6 +105,36 @@ test('find and replace edits text in place and keeps formatting, footnotes and n
   assert.equal(replaceText(doc, 'the', 'A', { all: true, matchCase: false }).replaced, 2);
   replaceText(doc, ' sleeps', '');
   assert.equal(texts(doc)[1], 'A cat.');
+});
+
+test('find and replace keeps bold, code, links and comment anchors in the words it does not change', () => {
+  const doc = new Y.Doc();
+  insertBlocks(doc, '**Today** opens `YYYY/MM/DD/daily` for your [local date](https://example.com), creating it if missing.');
+  const [id] = ids(doc);
+  const note = textAnchorForQuote(doc, 'opens')!;
+  const link = textAnchorForQuote(doc, 'local date')!;
+
+  // Appending a sentence by quoting the whole paragraph, as agents do: nothing already there changes.
+  replaceText(doc, 'creating it if missing.', 'creating it if missing. New pages go there too.');
+  assert.equal(tabToMarkdown(doc).trim(),
+    '**Today** opens `YYYY/MM/DD/daily` for your [local date](https://example.com), creating it if missing. New pages go there too.');
+  assert.equal(currentAnchorText(doc, note), 'opens');
+  assert.equal(currentAnchorText(doc, link), 'local date');
+
+  // A replacement spanning formatted words, written with Markdown, keeps (or sets) that formatting.
+  replaceText(doc, 'Today opens YYYY/MM/DD/daily for', '**Today** opens `YYYY/MM/DD/daily` (the daily page) for');
+  assert.match(tabToMarkdown(doc), /^\*\*Today\*\* opens `YYYY\/MM\/DD\/daily` \(the daily page\) for your \[local date\]/);
+  assert.equal(currentAnchorText(doc, note), 'opens');
+
+  // Markdown can add formatting to kept words, and a plain replacement still inherits it.
+  replaceText(doc, 'New pages go there too.', 'New pages go **there** too.');
+  assert.match(tabToMarkdown(doc), /New pages go \*\*there\*\* too\.$/m);
+  replaceText(doc, 'Today', 'Now');
+  assert.match(tabToMarkdown(doc), /^\*\*Now\*\* opens/);
+  // Escapes and lists are text, not formatting.
+  replaceText(doc, 'the daily page', 'the daily\\_page');
+  assert.match(tabToMarkdown(doc), /\(the daily\\_page\)/);
+  assert.deepEqual(ids(doc), [id]);
 });
 
 test('table cells and rows change without resending the table', () => {
