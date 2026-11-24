@@ -20,6 +20,7 @@ import { handleContent, readJson, send } from './agent-api.ts';
 import { linkGraph, searchPages } from './search.ts';
 import { config } from './config.ts';
 import { sameOrigin } from './origin.ts';
+import { getLinks, saveLinks } from './workspace-links.ts';
 import { handleAiApi, handleAssistantRun } from './assistant/http.ts';
 import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-requests.ts';
 import { handleChat } from './chats.ts';
@@ -156,6 +157,12 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if ((path === '/api/agents' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });
+    // The workspace switcher's list (your other Livepage copies). People only: agents never need it.
+    if (path === '/api/me/workspaces') {
+      if (who.kind !== 'human') return send(res, 403, { error: 'Only people have a workspace list.' });
+      if (method === 'GET') return send(res, 200, { links: await getLinks(db, who.id) });
+      if (method === 'PUT') return send(res, 200, { links: await saveLinks(db, who.id, (await readJson(req)).links) });
+    }
 
     // Agent tokens are managed by people only (an agent cannot mint more tokens).
     if (path === '/api/tokens') {
