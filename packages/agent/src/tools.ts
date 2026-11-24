@@ -98,7 +98,8 @@ People can also ask you from the Ask AI panel inside Livepage. When asked to lis
 wait_for_requests: for each request, work on its page (get_outline or read_page first; use its tab; edit what is there with the targeted edit tools), using your own context and tools
 as needed, then answer with reply_to_request, and go straight back to wait_for_requests: the person's follow-ups in the same chat
 arrive as new requests carrying the earlier turns. Send short progress with reply_to_request(done=false) on long tasks.
-People comment on text, blocks or the whole page and can @mention you. Once you have replied in a thread, the person's
+People comment on text, blocks or the whole page and can @mention you; @AI reaches you too when the person picked you in
+the Ask AI menu. While listening, these arrive through wait_for_requests as well. Once you have replied in a thread, the person's
 later replies there reach you too, without an @. Check get_mentions, read the thread (list_comments) and the page,
 then answer with reply_to_comment and make any edit they asked for.`,
 
@@ -211,14 +212,15 @@ then answer with reply_to_comment and make any edit they asked for.`,
     `${p.id}  ${p.path ? `${p.path}/` : ''}${p.title || 'Untitled'}${p.tags?.length ? `  ${p.tags.map((t) => `#${t}`).join(' ')}` : ''}${p.role && p.role !== 'owner' ? `  (${p.role})` : ''}`;
 
   type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
+  type ListenMention = { id: string; page_id: string; page_title: string; thread_id: string; tab: string; author_name: string; text: string; quote: string | null };
   server.tool('wait_for_requests',
-    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and take them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Call it in a loop when asked to listen, including after each reply_to_request, so follow-ups reach you.',
+    'Wait for requests people send you from the Ask AI panel in Livepage (up to wait_seconds), and take them. Each has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Comments that @mention you (or @AI, when the person picked you in Ask AI) arrive here too: answer those in the thread with reply_to_comment. Call it in a loop when asked to listen, including after each reply, so follow-ups reach you.',
     { wait_seconds: z.number().min(0).max(30).default(25) },
     async ({ wait_seconds }, extra) => tryText(async () => {
       // Pass the call's abort signal on, so a cancelled or timed-out call ends the long poll instead of
       // leaving it open to take a request nobody will see.
-      const { requests } = await http<{ requests: AgentReq[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
-      if (!requests.length) return 'no requests yet; call wait_for_requests again to keep listening';
+      const { requests, mentions = [] } = await http<{ requests: AgentReq[]; mentions?: ListenMention[] }>('GET', `/agent-requests?wait=${wait_seconds}`, undefined, extra?.signal);
+      if (!requests.length && !mentions.length) return 'no requests yet; call wait_for_requests again to keep listening';
       // Confirm we got them. Unconfirmed requests go back in the queue after a short while.
       await Promise.all(requests.map((r) => http('POST', `/agent-requests/${r.id}/ack`).catch(() => {})));
       return requests.map((r) => [
@@ -228,7 +230,11 @@ then answer with reply_to_comment and make any edit they asked for.`,
         r.selection ? `selected text:\n${r.selection}` : '',
         `asks: ${r.prompt}`,
         `answer with reply_to_request (request_id ${r.id}), then call wait_for_requests again for the next message.`,
-      ].filter(Boolean).join('\n')).join('\n\n---\n\n');
+      ].filter(Boolean).join('\n')).concat(mentions.map((m) => [
+        `comment ${m.id} on page ${m.page_id} (${m.page_title})${m.tab && m.tab !== 'main' ? `, tab ${m.tab}` : ''}, thread ${m.thread_id}${m.quote ? `, on "${m.quote}"` : ''}`,
+        `${m.author_name}: ${m.text}`,
+        `read the thread with list_comments and the page, do what it asks, answer with reply_to_comment (page ${m.page_id}, thread_id ${m.thread_id}), then call wait_for_requests again.`,
+      ].join('\n'))).join('\n\n---\n\n');
     }));
 
   server.tool('reply_to_request',

@@ -154,7 +154,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       res.on('finish', () => { if (res.statusCode < 400) bumpWorkspace(who.id); });
     }
     if (path === '/api/workspace/events' && method === 'GET') return handleWorkspaceEvents(req, res, who.id, url);
-    if ((path === '/api/agents' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
+    if ((path === '/api/agents' || path === '/api/agents/target' || path.startsWith('/api/agent-requests')) && (await handleAgentRequests(req, res, db, who, url, path))) return;
 
     if (path === '/api/me' && method === 'GET') return send(res, 200, { user: { id: who.id, name: who.name, email: who.email }, kind: who.kind });
     // The workspace switcher's list (your other Livepage copies). People only: agents never need it.
@@ -532,7 +532,7 @@ async function pageRoutes(c: PageCtx): Promise<void> {
   if (sub === 'agent-requests' && !id && method === 'POST') return createAgentRequest(req, res, db, who, pageId);
   if (sub === 'assistant' && !id) return handleAssistantRun(req, res, db, who, pageId, canEdit(role));
   if (sub === 'chat') return handleChat(req, res, db, who, pageId, url, id);
-  if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId) });
+  if (sub === 'mentionables' && method === 'GET') return send(res, 200, { mentionables: await mentionables(db, pageId, who) });
 
   if (sub === 'comments') {
     try {

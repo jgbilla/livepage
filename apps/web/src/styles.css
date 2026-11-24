@@ -505,6 +505,7 @@ code.copy, .share-url { display: block; font: var(--lp-text-xs)/1.5 var(--lp-fon
 .sel-chip button.ghost { color: inherit; min-height: 24px; }
 .assistant-target { display: flex; align-items: center; gap: var(--lp-space-2); padding: var(--lp-space-2) var(--lp-space-4); border-bottom: var(--lp-border-width) solid var(--lp-border); }
 .assistant-target select { flex: 1; min-height: 30px; padding: 0 var(--lp-space-2); }
+.assistant-target-label { white-space: nowrap; }
 .agent-hint { margin: 0; border-bottom: var(--lp-border-width) solid var(--lp-border); }
 .agent-hint code.copy { margin: var(--lp-space-1-5) 0; }
 
@@ -896,6 +897,7 @@ body:has(.slash-menu) .insert-fab, body:has(.selection-menu) .insert-fab { displ
 .composer { position: relative; display: flex; flex-direction: column; gap: var(--lp-space-1-5); width: 100%; }
 .composer textarea { width: 100%; resize: vertical; min-height: 60px; background: var(--lp-bg); }
 .composer-actions { display: flex; justify-content: flex-end; gap: var(--lp-space-2); }
+.composer-hint { display: flex; align-items: center; gap: var(--lp-space-1-5); }
 .composer .primary { min-height: var(--lp-control-sm); }
 
 /* Templates, export and publishing */
