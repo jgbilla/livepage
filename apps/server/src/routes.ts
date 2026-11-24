@@ -187,6 +187,18 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (tokenDel && method === 'PATCH') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       const b = await readJson(req);
+      // Rename: the name this agent shows on pages (avatar, caret, comments).
+      if (typeof b.name === 'string') {
+        const name = b.name.trim().slice(0, 80);
+        if (!name) return send(res, 400, { error: 'Give the agent a name.' });
+        const done = await db.query('update api_tokens set name = $3 where id = $1 and user_id = $2 returning id', [tokenDel[1], who.id, name]);
+        if (!done.length) return send(res, 404, { error: 'No such token.' });
+        // Agents already on a page switch to the new name with their next presence update (at most ~15s).
+        hp.documents.forEach((doc) => {
+          for (const conn of doc.getConnections()) if (conn.context?.user?.tokenId === tokenDel[1]) conn.context.user.name = name;
+        });
+        if (!('webhook_url' in b)) return send(res, 200, { ok: true, name });
+      }
       return send(res, 200, await setWebhook(db, who.id, tokenDel[1], b.webhook_url ?? null));
     }
 

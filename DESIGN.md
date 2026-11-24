@@ -155,8 +155,9 @@ This is the part of Livepage no other editor has, so it gets its own grammar.
 `--lp-agent-gradient-n`) and its own initials ("Claude Code" CC, "Cursor" C, someone's built-in AI is AI).
 `agents.ts` hands the shades out so two agents on a page never share one, and the same agent wears
 the same shade on its avatar, caret, tab dot and *Agent* tag. In the top bar agents sit side by side
-(people overlap), and tapping the avatars lists everyone on the page by name. An agent's name is its
-token's name, or, when that is generic ("Agent"), the name its MCP client reports.
+(people overlap), and tapping the avatars lists everyone on the page by name. An agent's name is the
+name you gave its token (renamable on Home), set by the server so an agent can't show as anything
+else. Only a token left at the default "Agent" falls back to the name the agent gives itself.
 
 The *Ask AI* button, the assistant panel and agent-written HTML blocks all use the agent palette,
 so "violet = AI" holds across the app.

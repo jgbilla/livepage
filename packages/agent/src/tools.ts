@@ -15,7 +15,7 @@ export type LivepageMcpOptions = {
   agentId?: string;
 };
 
-const GENERIC_NAME = /^\s*(agent|ai|assistant|bot|mcp|token|default|livepage)?\s*$/i;
+const GENERIC_NAME = /^\s*(agent)?\s*$/i; // empty, or the default a token gets when left unnamed
 const KNOWN_CLIENTS: [RegExp, string][] = [
   [/^claude[-_ ]?code/i, 'Claude Code'], [/^claude[-_ ]?(ai|desktop)?$/i, 'Claude'], [/^cursor/i, 'Cursor'],
   [/^codex/i, 'Codex'], [/^gemini/i, 'Gemini CLI'], [/visual studio code|^vscode/i, 'VS Code'], [/^windsurf/i, 'Windsurf'],
