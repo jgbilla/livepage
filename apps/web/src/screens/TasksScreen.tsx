@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from '../router';
 import { SidebarToggle } from '../Sidebar';
 import { titleOf, useWorkspace } from '../workspace';
 import {
-  ANY_AGENT, COLUMNS, STATUS_LABEL, columnOf, createTask, deleteTask, loadTask, messageTask, patchTask, presence, presenceText, timeAgo, useTasks,
+  ANY_AGENT, COLUMNS, STATUS_LABEL, canTake, columnOf, createTask, setTaskTarget, deleteTask, loadTask, messageTask, patchTask, presence, presenceText, timeAgo, useTasks,
   type AgentChoice, type Column, type Task, type TaskEvent,
 } from '../tasks';
 import { ConnectAgentDialog, LISTEN_COMMAND } from './ConnectAgent';
@@ -17,7 +17,7 @@ export function TasksScreen() {
   const go = useNavigate();
   const params = new URLSearchParams(search);
   const openId = params.get('task');
-  const { tasks, agents, loaded } = useTasks();
+  const { tasks, agents, taskTarget, loaded } = useTasks();
   const [creating, setCreating] = useState<{ page: string | null } | null>(
     params.get('new') ? { page: params.get('page') } : null);
   const [tab, setTab] = useState<Column>(() => (tasks.some((t) => t.status === 'needs_you') ? 'needs_you' : 'queued'));
@@ -86,7 +86,7 @@ export function TasksScreen() {
         ? <TaskSheet key={current.id} task={current} agents={agents} onClose={() => open(null)} onConnect={connectFor} />
         : loaded && <MissingTask onClose={() => open(null)} />)}
       {creating && (
-        <NewTaskDialog agents={agents} pageId={creating.page} onConnect={connectFor}
+        <NewTaskDialog agents={agents} defaultAgent={taskTarget} pageId={creating.page} onConnect={connectFor}
           onClose={(t) => { setCreating(null); if (t) { setTab('queued'); open(t.id); } else if (params.get('new')) go('/tasks', true); }} />
       )}
       {connect && <ConnectAgentDialog agent={connect} onClose={() => setConnect(null)} />}
@@ -96,7 +96,7 @@ export function TasksScreen() {
 
 /** The agent to suggest when none is named: one that is listening, else the one seen last. */
 function bestAgent(agents: AgentChoice[]): AgentChoice | undefined {
-  return agents.find((a) => a.listening)
+  return agents.find((a) => a.listening) ?? agents.find((a) => a.wakes)
     ?? [...agents].sort((a, b) => +new Date(b.last_seen_at ?? 0) - +new Date(a.last_seen_at ?? 0))[0];
 }
 
@@ -379,13 +379,14 @@ function EventRow({ e, agentName, tokenId }: { e: TaskEvent; agentName: string; 
 // ---- New and edit
 
 /** Who gets the task: any available agent, or one of yours, each with whether it is listening now. */
-function AgentPicker({ agents, value, onChange }: { agents: AgentChoice[]; value: string; onChange: (id: string) => void }) {
-  const anyListening = agents.some((a) => a.listening);
+function AgentPicker({ agents, value, onChange, defaultId }: { agents: AgentChoice[]; value: string; onChange: (id: string) => void; defaultId?: string | null }) {
+  const anyListening = agents.some(canTake);
   const option = (id: string, avatar: React.ReactNode, name: string, status: string, on: boolean) => (
     <label key={id} className={`agent-option ${value === id ? 'on' : ''}`}>
       <input type="radio" name="task-agent" value={id} checked={value === id} onChange={() => onChange(id)} />
       {avatar}
       <span className="agent-option-name">{name}</span>
+      {defaultId === id && <span className="agent-option-default">Default</span>}
       <span className={`agent-option-status ${on ? 'on' : ''}`}>{status}</span>
     </label>
   );
@@ -393,7 +394,7 @@ function AgentPicker({ agents, value, onChange }: { agents: AgentChoice[]; value
     <div className="agent-picker" role="radiogroup" aria-label="Agent">
       {agents.length > 1 && option(ANY_AGENT, <AnyAvatar />, 'Any available agent', anyListening ? 'First one listening' : 'None listening', anyListening)}
       {agents.map((a) => option(a.id, <AgentAvatar peer={{ id: `agent:${a.id}`, name: a.name, color: '', kind: 'agent' }} size="sm" />, a.name,
-        presenceText(a), a.listening))}
+        presenceText(a), canTake(a)))}
     </div>
   );
 }
@@ -402,7 +403,7 @@ function AgentPicker({ agents, value, onChange }: { agents: AgentChoice[]; value
 function ListenWarning({ agents, value, onConnect }: { agents: AgentChoice[]; value: string; onConnect: (tokenId: string | null) => void }) {
   const any = value === ANY_AGENT;
   const chosen = agents.find((a) => a.id === value);
-  if (any ? agents.some((a) => a.listening) : !chosen || chosen.listening) return null;
+  if (any ? agents.some(canTake) : !chosen || canTake(chosen)) return null;
   return (
     <div className="task-warn" role="status">
       <Icon name="alert" size={14} />
@@ -415,20 +416,18 @@ function ListenWarning({ agents, value, onConnect }: { agents: AgentChoice[]; va
   );
 }
 
-const LAST_AGENT = 'lp.tasks.agent';
-
-function NewTaskDialog({ agents, pageId, onClose, onConnect }: { agents: AgentChoice[]; pageId: string | null; onClose: (t?: Task) => void; onConnect: (tokenId: string | null) => void }) {
+function NewTaskDialog({ agents, defaultAgent, pageId, onClose, onConnect }: {
+  agents: AgentChoice[]; defaultAgent: string | null; pageId: string | null; onClose: (t?: Task) => void; onConnect: (tokenId: string | null) => void;
+}) {
   const ws = useWorkspace();
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
+  // Your default (saved on the server, the same on every device), else one that can take it now, else the first.
   const [agent, setAgent] = useState(() => {
-    let last: string | null = null;
-    try { last = localStorage.getItem(LAST_AGENT); } catch { /* storage blocked */ }
-    // The last pick if it can take the task now, else an agent that is listening, else the last pick.
-    const lastPick = last === ANY_AGENT && agents.length > 1 ? ANY_AGENT : agents.find((a) => a.id === last)?.id;
-    const ready = lastPick === ANY_AGENT ? agents.some((a) => a.listening) : agents.find((a) => a.id === lastPick)?.listening;
-    return (ready && lastPick) || agents.find((a) => a.listening)?.id || lastPick || agents[0]?.id || '';
+    const valid = defaultAgent === ANY_AGENT ? agents.length > 1 : agents.some((a) => a.id === defaultAgent);
+    return (valid && defaultAgent) || agents.find((a) => a.listening)?.id || agents.find((a) => a.wakes)?.id || agents[0]?.id || '';
   });
+  const [makeDefault, setMakeDefault] = useState(false);
   const [page, setPage] = useState(pageId ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -440,7 +439,7 @@ function NewTaskDialog({ agents, pageId, onClose, onConnect }: { agents: AgentCh
     setBusy(true); setError(null);
     try {
       const t = await createTask({ title: title.trim(), details: details.trim(), token_id: agent, page_id: page || null });
-      try { localStorage.setItem(LAST_AGENT, agent); } catch { /* storage blocked */ }
+      if (makeDefault || !defaultAgent) void setTaskTarget(agent).catch(() => {}); // the first pick becomes the default
       onClose(t);
     } catch (err) { setError((err as Error).message); setBusy(false); }
   };
@@ -464,8 +463,14 @@ function NewTaskDialog({ agents, pageId, onClose, onConnect }: { agents: AgentCh
             </select>
           </label>
           <div className="field"><span>Agent</span>
-            <AgentPicker agents={agents} value={agent} onChange={setAgent} />
+            <AgentPicker agents={agents} value={agent} onChange={(id) => { setAgent(id); setMakeDefault(false); }} defaultId={defaultAgent} />
           </div>
+          {defaultAgent && agent && agent !== defaultAgent && (
+            <label className="task-default-check">
+              <input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} />
+              Use {agent === ANY_AGENT ? 'any available agent' : chosen?.name ?? 'this agent'} for new tasks from now on
+            </label>
+          )}
           <ListenWarning agents={agents} value={agent} onConnect={onConnect} />
         </>}
         {error && <p className="form-error">{error}</p>}

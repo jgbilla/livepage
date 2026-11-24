@@ -125,3 +125,16 @@ test('only the owner can see or change it', async () => {
   app.close();
   devin.close();
 });
+
+test('new tasks default to the agent that wakes, until a default is picked', async () => {
+  const { listAgents, getTaskTarget } = await import('../src/agent-requests.ts');
+  const claude = await createApiToken(db, 'u_1', 'Claude');
+  const agents = await listAgents(db, 'u_1');
+  assert.equal(agents.find((a) => a.id === tok.id)!.wakes, 'Devin');
+  assert.equal(agents.find((a) => a.id === claude.id)!.wakes, null);
+  assert.deepEqual(await getTaskTarget(db, 'u_1', agents), { target: tok.id, saved: false });
+  await db.query('update users set task_target = $2 where id = $1', ['u_1', claude.id]);
+  assert.deepEqual(await getTaskTarget(db, 'u_1', agents), { target: claude.id, saved: true });
+  await db.query(`update users set task_target = 'tok_gone' where id = 'u_1'`);
+  assert.equal((await getTaskTarget(db, 'u_1', agents)).target, tok.id, 'a deleted agent falls back');
+});

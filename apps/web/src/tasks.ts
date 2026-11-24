@@ -22,7 +22,9 @@ export type TaskEvent = {
   author_kind: 'human' | 'agent' | 'system'; author_name: string; text: string; status: TaskStatus | null;
   page_id: string | null; page_title: string | null; created_at: string;
 };
-export type AgentChoice = { id: string; name: string; online: boolean; listening: boolean; last_seen_at: string | null; last_listen_at: string | null; unconfirmed?: boolean };
+export type AgentChoice = { id: string; name: string; online: boolean; listening: boolean; last_seen_at: string | null; last_listen_at: string | null; unconfirmed?: boolean;
+  /** A cloud agent that starts a session when it gets a task ("Devin"): it takes work even when not listening. */
+  wakes?: string | null };
 /** token_id for "any available agent": the first of your agents that is listening takes the task. */
 export const ANY_AGENT = 'any';
 
@@ -37,7 +39,9 @@ export function timeAgo(iso: string): string {
 
 /** Where an agent is: listening (it will pick work up now), taking work it never confirms, connected but not listening, or away. */
 export type Presence = 'listening' | 'unconfirmed' | 'idle' | 'away' | 'never';
-type PresenceIn = { listening: boolean; last_seen_at: string | null; unconfirmed?: boolean };
+type PresenceIn = { listening: boolean; last_seen_at: string | null; unconfirmed?: boolean; wakes?: string | null };
+/** Will it take a task handed to it now: listening, or a cloud agent that wakes for it. */
+export const canTake = (a: { listening: boolean; wakes?: string | null }) => a.listening || !!a.wakes;
 export function presence(a: PresenceIn): Presence {
   if (a.unconfirmed) return 'unconfirmed';
   if (a.listening) return 'listening';
@@ -48,14 +52,15 @@ export function presenceText(a: PresenceIn): string {
   switch (presence(a)) {
     case 'listening': return 'Listening now';
     case 'unconfirmed': return 'Takes tasks but never confirms them';
-    case 'idle': return 'Connected, not listening';
-    case 'away': return `Not listening · seen ${timeAgo(a.last_seen_at!)}`;
-    default: return 'Never connected';
+    case 'idle': return a.wakes ? "Wakes for tasks" : 'Connected, not listening';
+    case 'away': return a.wakes ? "Wakes for tasks" : `Not listening · seen ${timeAgo(a.last_seen_at!)}`;
+    default: return a.wakes ? "Wakes for tasks" : 'Never connected';
   }
 }
 
-type State = { tasks: Task[]; agents: AgentChoice[]; rev: number | null; loaded: boolean };
-let state: State = { tasks: [], agents: [], rev: null, loaded: false };
+/** taskTarget: who new tasks go to by default (an agent id or ANY_AGENT), saved per person on the server. */
+type State = { tasks: Task[]; agents: AgentChoice[]; taskTarget: string | null; rev: number | null; loaded: boolean };
+let state: State = { tasks: [], agents: [], taskTarget: null, rev: null, loaded: false };
 const listeners = new Set<() => void>();
 const set = (s: Partial<State>) => { state = { ...state, ...s }; listeners.forEach((l) => l()); };
 
@@ -63,10 +68,10 @@ let inflight: Promise<void> | null = null;
 export function reloadTasks(): Promise<void> {
   inflight ??= Promise.all([
     api<{ tasks: Task[]; rev: number }>('/tasks'),
-    api<{ agents: AgentChoice[] }>('/agents').catch(() => ({ agents: state.agents })),
+    api<{ agents: AgentChoice[]; task_target?: string | null }>('/agents').catch(() => ({ agents: state.agents, task_target: state.taskTarget })),
   ]).then(([t, a]) => {
     const first = !state.loaded;
-    set({ tasks: t.tasks, rev: t.rev, agents: a.agents, loaded: true });
+    set({ tasks: t.tasks, rev: t.rev, agents: a.agents, taskTarget: a.task_target ?? null, loaded: true });
     if (first) watchTasksNow();
   })
     .catch(() => {})
@@ -82,7 +87,13 @@ export function useTasks(): State {
   return s;
 }
 
-export function resetTasks() { state = { tasks: [], agents: [], rev: null, loaded: false }; listeners.forEach((l) => l()); }
+export function resetTasks() { state = { tasks: [], agents: [], taskTarget: null, rev: null, loaded: false }; listeners.forEach((l) => l()); }
+
+/** Make an agent (or ANY_AGENT) the default for new tasks, on every device. */
+export async function setTaskTarget(target: string) {
+  const r = await api<{ task_target: string | null }>('/agents/task-target', { method: 'PUT', body: { target } });
+  set({ taskTarget: r.task_target });
+}
 
 /** Put a changed task in the list right away (the server's change counter catches the rest up). */
 export function upsertTask(t: Task) {
