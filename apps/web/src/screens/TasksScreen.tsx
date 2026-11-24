@@ -313,6 +313,12 @@ function TaskSheet({ task: t, agents, onClose, onConnect }: { task: Task; agents
   );
 }
 
+/** Web links in a timeline note (for example the Devin session that took the task) open in a new tab. */
+function linkify(text: string): React.ReactNode {
+  return text.split(/(https:\/\/[^\s<>"]+)/g).map((part, i) =>
+    i % 2 ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a> : part);
+}
+
 /** A queued task nobody is listening for: get the agent listening, or give it to one that is. */
 function StuckBanner({ task: t, agents, busy, onConnect, onReassign }: {
   task: Task; agents: AgentChoice[]; busy: boolean; onConnect: (tokenId: string | null) => void; onReassign: (tokenId: string) => void;
@@ -365,7 +371,7 @@ function EventRow({ e, agentName, tokenId }: { e: TaskEvent; agentName: string; 
         <b>{agent ? e.author_name || agentName : e.author_name}</b>{what && <span className="muted"> {what}</span>}
         <span className="task-ev-time">{when}</span>
       </span>
-      {e.text && e.kind !== 'assigned' && <p className="task-ev-text">{e.text}</p>}
+      {e.text && e.kind !== 'assigned' && <p className="task-ev-text">{linkify(e.text)}</p>}
     </li>
   );
 }

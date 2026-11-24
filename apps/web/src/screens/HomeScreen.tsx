@@ -6,6 +6,7 @@ import { SidebarToggle } from '../Sidebar';
 import { newPage, openToday, titleOf, useWorkspace } from '../workspace';
 import { ConnectAgentDialog, ConnectSteps } from './ConnectAgent';
 import { Icon } from '../design/Icon';
+import { WakeDialog, type Wake } from './WakeDialog';
 
 export function HomeScreen({ me }: { me: Me }) {
   const ws = useWorkspace();
@@ -85,7 +86,7 @@ function Mentions() {
   );
 }
 
-type Token = { id: string; name: string; created_at: string; last_used_at: string | null; webhook_url: string | null };
+type Token = { id: string; name: string; created_at: string; last_used_at: string | null; webhook_url: string | null; wake: Wake | null };
 
 // Agent tokens let any AI act on your pages with your access (MCP or HTTP).
 function AgentTokens() {
@@ -109,6 +110,13 @@ function AgentTokens() {
     void load();
   };
   const revoke = async (id: string) => { await api(`/tokens/${id}`, { method: 'DELETE' }); void load(); };
+  const [waking, setWaking] = useState<Token | null>(null);
+  // A cloud agent: a new agent named Devin, then straight to setting up its wake.
+  const connectDevin = async () => {
+    const r = await api<{ id: string }>('/tokens', { body: { name: 'Devin' } });
+    await load();
+    setWaking({ id: r.id, name: 'Devin', created_at: new Date().toISOString(), last_used_at: null, webhook_url: null, wake: null });
+  };
   const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null);
   // Optional: Livepage POSTs to this URL whenever someone @mentions the agent in a comment.
   const webhook = async (t: Token) => {
@@ -125,7 +133,10 @@ function AgentTokens() {
     <section className="tokens">
       <div className="home-head">
         <h2>Agents</h2>
-        <button type="button" onClick={create}><Icon name="key" />Agent token</button>
+        <span className="row home-head-actions">
+          <button type="button" className="ghost" onClick={connectDevin} title="Start a Devin session whenever this agent gets work">Connect Devin</button>
+          <button type="button" onClick={create}><Icon name="key" />Agent token</button>
+        </span>
       </div>
       <p className="muted small">An agent token lets an AI join your pages with your access, with its own name and cursor. People can @mention it in comments.</p>
       {fresh && (
@@ -154,11 +165,18 @@ function AgentTokens() {
               {t.webhook_url ? 'Webhook on' : 'Add webhook'}
             </button>
             <button type="button" className="ghost" onClick={() => setConnect(t)}>Connect</button>
+            <button type="button" className="ghost" title={t.wake ? `Starts a ${t.wake.provider_label} session when it gets work` : 'Start a cloud agent session (Devin) when this agent gets work'} onClick={() => {
+              if (!t.wake && !confirm(`Waking ${t.name} with Devin gives it a new token, so Devin's sessions can use it. Anything else using its current token will need the new one. Continue? (Or use Connect Devin to make a separate agent.)`)) return;
+              setWaking(t);
+            }}>
+              {t.wake ? `Wakes ${t.wake.provider_label}` : 'Wake…'}
+            </button>
             <button type="button" className="ghost" onClick={() => rename(t)}>Rename</button>
             <button type="button" className="ghost" onClick={() => revoke(t.id)}>Revoke</button>
           </li>
         ))}
       </ul>
+      {waking && <WakeDialog token={waking} onClose={() => { setWaking(null); void load(); }} />}
     </section>
   );
 }

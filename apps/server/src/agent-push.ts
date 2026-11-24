@@ -5,7 +5,8 @@
 //      server listens on it and hands each event to Claude Code as a channel message (mcp.ts), and any
 //      script can follow it with curl or EventSource.
 //   2. The token's webhook, if it has one: a signed POST per event, retried a few times if it fails.
-//   3. The long polls that were already there (wait_for_requests, get_mentions) end early.
+//   3. A cloud agent with wake set up (agent-wake.ts): a session is started for it (Devin).
+//   4. The long polls that were already there (wait_for_requests, get_mentions) end early.
 //
 // A push says *that* there is work and what it is; taking the work is unchanged. Ask requests and tasks
 // are still delivered on a lease by wait_for_requests and confirmed by the agent (ack, reply, update_task),
@@ -20,6 +21,7 @@ import type { Db } from './db.ts';
 import type { Principal } from './auth.ts';
 import { send } from './agent-api.ts';
 import { checkWebhookUrl } from './comments.ts';
+import { wakeForEvent } from './agent-wake.ts';
 import { isListening, listeningChanged } from './agent-requests.ts';
 
 export type AgentEventType = 'request.created' | 'comment.mention' | 'task.assigned' | 'task.message' | 'task.cancelled';
@@ -39,6 +41,8 @@ export function pushToAgent(db: Db, tokenId: string, type: AgentEventType, text:
     try { fn(event); } catch { /* a broken stream is dropped by its own close handler */ }
   }
   void sendWebhook(db, tokenId, event).catch((e) => console.warn(`[push] webhook for ${tokenId}: ${(e as Error).message}`));
+  // A cloud agent with wake set up (Devin) gets a session started for it when it isn't listening.
+  void wakeForEvent(db, tokenId, event).catch((e) => console.warn(`[wake] ${tokenId}: ${(e as Error).message}`));
 }
 
 // ---- Webhooks

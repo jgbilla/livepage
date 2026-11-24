@@ -180,6 +180,7 @@ Work is also **pushed** to the agent as it arrives, so it doesn't have to keep c
 - **Claude Code channel:** add `-e LIVEPAGE_CHANNEL=1` to the local MCP server (`agent:mcp`) and start Claude Code with `claude --dangerously-load-development-channels server:livepage`. Work shows up in the session by itself, with no listening loop.
 - **Event stream:** `GET /api/agent-events` with the agent token is a Server-Sent Events stream (`@livepage/agent/events` has a small client).
 - **Webhook:** see below.
+- **Wake a cloud agent (Devin):** **Connect Devin** on the home page (or **Wake…** on any agent), then paste a Devin API key (a service user `cog_` key with your org id, or a legacy `apk_` key). When the agent gets work and nothing is listening for it, Livepage starts a Devin session with the work and the agent's Livepage token as the `LIVEPAGE_TOKEN` session secret. One session per task, Ask chat or comment thread; follow-ups and cancels are sent to that session, and the task links to it. **Send to Devin** copies a page about you into Devin's Knowledge, one note per `##` section, plus a note on working with Livepage. Keys are encrypted with `AI_KEY_SECRET` (`apps/server/src/agent-wake.ts`).
 
 A push only says what the work is. Taking it still goes through `wait_for_requests`, so nothing is lost if a push is missed, and polling keeps working for clients without push.
 

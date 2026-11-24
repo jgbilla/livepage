@@ -92,6 +92,8 @@ export function listeningChanged(tokenId: string, userId: string, was: boolean) 
   if (now && !was) unconfirming.delete(tokenId);
   if (now !== was) bumpTasks(userId);
 }
+/** Waiting for work this moment (an open long poll or event stream), without the grace gap: whether to wake a cloud agent. */
+export const isWaitingNow = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0;
 export const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
 
 // ---- Long-poll wakeups, keyed by "token:<id>" (new work for an agent) or "req:<id>" (a request changed).

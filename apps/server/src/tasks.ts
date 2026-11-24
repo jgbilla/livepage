@@ -30,6 +30,7 @@ import { readJson, send } from './agent-api.ts';
 import { config } from './config.ts';
 import { roleFor, isPageId } from './pages.ts';
 import { pushToAgent } from './agent-push.ts';
+import { wakeableForTasks } from './agent-wake.ts';
 import { bumpTasks, tasksRev } from './workspace-events.ts';
 import { isListening, isOnline, isReady, isUnconfirming, presenceOf, setUnconfirming, wakeAgent } from './agent-requests.ts';
 
@@ -144,10 +145,16 @@ function taskText(t: TaskRow, evs: TaskEvent[], from: string): string {
 function pushTask(db: Db, t: TaskRow, type: 'task.assigned' | 'task.message' | 'task.cancelled', personName: string, message?: string) {
   if (unclaimed(t)) {
     // Any available agent: offer it to every one of this person's agents that is listening; the first to confirm takes it.
-    void db.query<{ id: string }>('select id from api_tokens where user_id = $1', [t.user_id]).then((rows) => {
+    void db.query<{ id: string }>('select id from api_tokens where user_id = $1', [t.user_id]).then(async (rows) => {
+      let offered = false;
       for (const { id } of rows) {
         wakeAgent(id);
-        if (isListening(id)) pushTaskTo(db, id, t, type, personName, message);
+        if (isListening(id)) { pushTaskTo(db, id, t, type, personName, message); offered = true; }
+      }
+      // Nobody listening: an agent with a cloud wake (Devin) gets it, and its session takes the task.
+      if (!offered && type === 'task.assigned') {
+        const id = await wakeableForTasks(db, t.user_id);
+        if (id) pushTaskTo(db, id, t, type, personName, message);
       }
     }).catch(() => {});
     return;

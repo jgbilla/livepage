@@ -223,6 +223,39 @@ create table if not exists agent_task_pages (
 alter table agent_tasks add column if not exists any_agent boolean not null default false;
 alter table agent_tasks add column if not exists delivered_to text;
 alter table agent_tasks add column if not exists delivery_count int not null default 0;
+-- Wake a cloud agent (agent-wake.ts): when one of your agents gets work and isn't listening, Livepage starts
+-- a session for it with its provider (Devin). Keys are encrypted with AI_KEY_SECRET, bound to the person.
+create table if not exists agent_wake_configs (
+  token_id        text primary key references api_tokens(id) on delete cascade,
+  user_id         text not null references users(id) on delete cascade,
+  provider        text not null,
+  api_key_enc     text not null,
+  key_hint        text not null default '',
+  org_id          text,
+  agent_token_enc text not null,
+  events          text not null default 'tasks,asks,mentions',
+  playbook_id     text,
+  max_acu         integer,
+  max_per_hour    integer not null default 10,
+  knowledge       jsonb not null default '{}'::jsonb,
+  recent_starts   jsonb not null default '[]'::jsonb,
+  last_error      text,
+  last_error_at   timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+-- One session per piece of work (a task, an Ask chat on a page, a comment thread): follow-ups go to it.
+create table if not exists agent_wake_sessions (
+  token_id        text not null references api_tokens(id) on delete cascade,
+  work_key        text not null,
+  title           text not null default '',
+  session_id      text,
+  session_url     text,
+  claimed_at      timestamptz not null default now(),
+  started_at      timestamptz,
+  last_message_at timestamptz,
+  primary key (token_id, work_key)
+);
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {

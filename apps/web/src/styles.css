@@ -1316,3 +1316,22 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 }
 @media (prefers-reduced-motion: reduce) { .task-live { animation: none; } }
 .field-hint { font-weight: var(--lp-weight-regular); color: var(--lp-text-tertiary); font-size: var(--lp-text-sm); margin-left: var(--lp-space-1); }
+
+/* Wake a cloud agent (WakeDialog.tsx) */
+.home-head-actions { gap: var(--lp-space-2); flex-wrap: wrap; }
+.wake-dialog { max-width: 520px; }
+.wake-events { border: 0; padding: 0; margin: var(--lp-space-4) 0 0; display: flex; flex-direction: column; gap: var(--lp-space-2); }
+.wake-events legend { font-size: var(--lp-text-md); font-weight: var(--lp-weight-medium); margin-bottom: var(--lp-space-1); padding: 0; }
+.wake-events label { display: flex; align-items: center; gap: var(--lp-space-2); font-size: var(--lp-text-md); }
+.wake-mcp { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--lp-space-1) var(--lp-space-3); margin: var(--lp-space-2) 0; }
+.wake-mcp dt { color: var(--lp-text-secondary); }
+.wake-mcp dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.wake-knowledge { gap: var(--lp-space-2); flex-wrap: wrap; align-items: center; }
+.wake-knowledge select { flex: 1; min-width: 0; }
+.wake-sessions { list-style: none; padding: 0; margin: var(--lp-space-2) 0; }
+.wake-sessions li { display: flex; justify-content: space-between; gap: var(--lp-space-3); padding: var(--lp-space-2) 0; border-bottom: var(--lp-border-width) solid var(--lp-border); }
+.wake-sessions li:last-child { border-bottom: 0; }
+.wake-sessions a { display: inline-flex; align-items: center; gap: var(--lp-space-1); min-width: 0; overflow-wrap: anywhere; }
+.wake-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 var(--lp-space-3); }
+.wake-limits .field input { width: 100%; min-width: 0; box-sizing: border-box; }
+.wake-dialog > .row:first-child h2 { margin: 0; }
