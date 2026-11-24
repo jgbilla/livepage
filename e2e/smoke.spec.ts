@@ -313,7 +313,9 @@ test('page tabs and workspace tabs', async ({ page }) => {
   await expect(page.getByLabel('Page title')).toHaveValue('Tabs page');
 });
 
-test('task board: hand a task to an agent, answer its question, see it finish', async ({ page, playwright, baseURL }) => {
+// Serial: an "any available agent" task goes to whichever agent of the account polls first.
+test.describe.serial('task board', () => {
+test('hand a task to an agent, answer its question, see it finish', async ({ page, playwright, baseURL }) => {
   const name = `Board agent ${Math.random().toString(36).slice(2, 6)}`;
   const token = await agentToken(page.request, name);
   const pageId = await newPage(page.request, 'Task smoke page');
@@ -321,8 +323,7 @@ test('task board: hand a task to an agent, answer its question, see it finish', 
 
   await page.goto(`/tasks?new=1&page=${pageId}`);
   await page.getByLabel('What should it do?').fill('Tighten the intro');
-  const agentSelect = page.locator('.task-dialog select').first();
-  await agentSelect.selectOption((await agentSelect.locator('option', { hasText: name }).getAttribute('value'))!);
+  await page.locator('.agent-option', { hasText: name }).click();
   await page.getByRole('button', { name: `Hand to ${name}` }).click();
   await expect(page.locator('.task-sheet')).toBeVisible();
 
@@ -338,8 +339,39 @@ test('task board: hand a task to an agent, answer its question, see it finish', 
   await page.getByLabel(`Answer ${name}`).fill('Yes, keep it');
   await page.getByRole('button', { name: 'Send' }).click();
   const again = await (await agent.get('/api/agent-requests?wait=5')).json();
-  expect(again.tasks[0].text).toContain('Yes, keep it');
+  expect(again.tasks.find((t: { id: string }) => t.id === id).text).toContain('Yes, keep it');
   await agent.post(`/api/tasks/${id}/update`, { data: { status: 'done', note: 'Cut it to two sentences.' } });
   await expect(page.locator('.task-sheet .task-badge')).toHaveText('Done');
   await agent.dispose();
+});
+
+test('a task nobody is listening for says so, and any agent that listens takes it', async ({ page, playwright, baseURL }) => {
+  const name = `Idle agent ${Math.random().toString(36).slice(2, 6)}`;
+  const token = await agentToken(page.request, name);
+  const agent = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] }, extraHTTPHeaders: { authorization: `Bearer ${token}` } });
+  const title = `Any agent ${Math.random().toString(36).slice(2, 6)}`;
+
+  // Not listening yet: the picker says so and warns before handing it out.
+  await page.goto('/tasks?new=1');
+  await page.getByLabel('What should it do?').fill(title);
+  await expect(page.locator('.agent-option', { hasText: name })).toContainText('Never connected');
+  await page.locator('.agent-option', { hasText: name }).click();
+  await expect(page.locator('.task-warn')).toContainText(`${name} isn't listening`);
+
+  // It starts listening: its chip and the picker turn green, and the task goes to it the moment it's handed out.
+  const poll = agent.get('/api/agent-requests?wait=20');
+  await expect(page.locator('.agent-chip.on', { hasText: name })).toBeVisible();
+  await expect(page.locator('.agent-option', { hasText: name })).toContainText('Listening now');
+  await expect(page.locator('.task-warn')).toHaveCount(0);
+  await page.locator('.agent-option', { hasText: 'Any available agent' }).click();
+  await page.getByRole('button', { name: 'Hand to any agent' }).click();
+  await expect(page.locator('.task-sheet')).toBeVisible();
+  const { tasks } = await (await poll).json();
+  const t = tasks.find((x: { title: string }) => x.title === title);
+  expect(t).toBeTruthy();
+  expect((await agent.post(`/api/tasks/${t.id}/ack`)).ok()).toBeTruthy();
+  await agent.post(`/api/tasks/${t.id}/update`, { data: { status: 'working', note: 'On it' } });
+  await expect(page.locator('.task-sheet .task-meta-agent')).toContainText(name);
+  await agent.dispose();
+});
 });

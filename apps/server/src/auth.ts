@@ -119,6 +119,13 @@ export async function createApiToken(db: Db, userId: string, name: string): Prom
   return { id, token };
 }
 
+/** A new secret for an existing agent token: same agent (name, tasks, history), the old key stops working. */
+export async function rotateApiToken(db: Db, userId: string, tokenId: string): Promise<string | null> {
+  const token = `lp_${randomBytes(24).toString('base64url')}`;
+  const done = await db.query('update api_tokens set token_hash = $3 where id = $1 and user_id = $2 returning id', [tokenId, userId, sha256(token)]);
+  return done.length ? token : null;
+}
+
 export async function userFromApiToken(db: Db, token: string | null): Promise<(User & { tokenName: string; tokenId: string }) | null> {
   if (!token || !token.startsWith('lp_')) return null;
   const [row] = await db.query(

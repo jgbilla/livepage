@@ -37,6 +37,7 @@ import { changeChat, historyOf, readChat, startExchange } from './chats.ts';
 import { plainBody } from '@livepage/schema';
 import { pushToAgent, streamCount } from './agent-push.ts';
 import { claimTasks } from './tasks.ts';
+import { bumpTasks } from './workspace-events.ts';
 import { config } from './config.ts';
 
 const ONLINE_MS = 2 * 60_000;
@@ -55,6 +56,41 @@ const lastSeen = new Map<string, number>();
 const listening = new Map<string, number>(); // tokenId -> open long polls
 export function touchAgent(who: Principal | null | undefined) {
   if (who?.kind === 'agent' && who.tokenId) lastSeen.set(who.tokenId, Date.now());
+}
+// "Listening" is stricter than online: the agent is waiting for work right now (a wait_for_requests long poll or
+// an event stream is open), or its last poll ended a moment ago and its loop is about to call again. An agent that
+// made one call and stopped is online for a while but will never pick a task up; the board says so.
+const LISTEN_GAP_MS = 60_000;
+const lastListen = new Map<string, number>(); // tokenId -> when its last long poll ended
+/** Agents whose loop takes tasks but never confirms them (each lease runs out), so they aren't really picking work up. */
+const unconfirming = new Set<string>();
+export const isUnconfirming = (tokenId: string) => unconfirming.has(tokenId);
+export function setUnconfirming(tokenId: string, userId: string, on: boolean) {
+  if (unconfirming.has(tokenId) === on) return;
+  if (on) unconfirming.add(tokenId); else unconfirming.delete(tokenId);
+  bumpTasks(userId);
+}
+/** Will it pick work up now: listening, and confirming what it takes. */
+export const isReady = (tokenId: string) => isListening(tokenId) && !unconfirming.has(tokenId);
+export const isListening = (tokenId: string) =>
+  (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 || Date.now() - (lastListen.get(tokenId) ?? 0) < LISTEN_GAP_MS;
+/** Where an agent is, for the people who hand it work. */
+export function presenceOf(tokenId: string, lastUsedAt?: string | Date | null) {
+  const seen = Math.max(lastSeen.get(tokenId) ?? 0, lastUsedAt ? new Date(lastUsedAt).getTime() : 0);
+  const listen = lastListen.get(tokenId);
+  return {
+    listening: isReady(tokenId),
+    unconfirmed: unconfirming.has(tokenId),
+    last_seen_at: seen ? new Date(seen).toISOString() : null,
+    last_listen_at: (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 ? new Date().toISOString() : listen ? new Date(listen).toISOString() : null,
+  };
+}
+/** An agent started or stopped listening: its person's open boards show it (the tasks counter). */
+export function listeningChanged(tokenId: string, userId: string, was: boolean) {
+  const now = isListening(tokenId);
+  // A fresh start (after a pause of a minute or more) gets a clean slate: it may be a fixed loop.
+  if (now && !was) unconfirming.delete(tokenId);
+  if (now !== was) bumpTasks(userId);
 }
 export const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
 
@@ -170,7 +206,7 @@ async function claimMentions(db: Db, who: Principal) {
 /** People: list your agents with online status. */
 export async function listAgents(db: Db, userId: string) {
   const rows = await db.query('select id, name, last_used_at from api_tokens where user_id = $1 order by created_at desc', [userId]);
-  return rows.map((t) => ({ id: t.id, name: t.name, online: isOnline(t.id), last_used_at: t.last_used_at }));
+  return rows.map((t) => ({ id: t.id, name: t.name, online: isOnline(t.id), last_used_at: t.last_used_at, ...presenceOf(t.id, t.last_used_at) }));
 }
 
 export async function handleAgentRequests(req: IncomingMessage, res: ServerResponse, db: Db, who: Principal, url: URL, path: string): Promise<boolean> {
@@ -206,18 +242,20 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
         where token_id = $1 and status = 'pending'
           and (claimed_at is null or claimed_at < now() - ($2::int * interval '1 millisecond'))
         returning id`, [tokenId, LEASE_MS]);
+    const was = isListening(tokenId);
     listening.set(tokenId, (listening.get(tokenId) ?? 0) + 1);
+    listeningChanged(tokenId, who.id, was);
     try {
       let ids = (await claim()).map((r) => r.id as string);
       let mentions = await claimMentions(db, who);
-      let tasks = await claimTasks(db, tokenId);
+      let tasks = await claimTasks(db, tokenId, who.id);
       const ms = waitMs(url);
       if (!ids.length && !mentions.length && !tasks.length && ms) {
         await wait(`token:${tokenId}`, ms, closeSignal(req, res));
         if (!res.writableEnded && !res.destroyed) {
           ids = (await claim()).map((r) => r.id as string);
           mentions = await claimMentions(db, who);
-          tasks = await claimTasks(db, tokenId);
+          tasks = await claimTasks(db, tokenId, who.id);
         }
       }
       lastSeen.set(tokenId, Date.now());
@@ -234,6 +272,9 @@ export async function handleAgentRequests(req: IncomingMessage, res: ServerRespo
       }
     } finally {
       listening.set(tokenId, (listening.get(tokenId) ?? 1) - 1);
+      lastListen.set(tokenId, Date.now());
+      // If the loop doesn't call again, the agent has stopped listening: tell the board once the gap has passed.
+      setTimeout(() => listeningChanged(tokenId, who.id, true), LISTEN_GAP_MS + 500).unref?.();
     }
     return true;
   }

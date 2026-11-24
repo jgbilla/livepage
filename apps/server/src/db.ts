@@ -219,6 +219,10 @@ create table if not exists agent_task_pages (
   first_at timestamptz not null default now(),
   primary key (task_id, page_id)
 );
+-- "Any available agent": the first of your agents that is listening takes the task (token_id is set when it confirms).
+alter table agent_tasks add column if not exists any_agent boolean not null default false;
+alter table agent_tasks add column if not exists delivered_to text;
+alter table agent_tasks add column if not exists delivery_count int not null default 0;
 `;
 
 export async function connect(url: string | undefined): Promise<Db> {
