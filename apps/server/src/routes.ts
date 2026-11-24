@@ -26,6 +26,7 @@ import { createAgentRequest, handleAgentRequests, touchAgent } from './agent-req
 import { handleChat } from './chats.ts';
 import { handleAgentEvents } from './agent-push.ts';
 import { handleTasks } from './tasks.ts';
+import { handleWake, wakeSummaries } from './agent-wake.ts';
 import { bumpWorkspace, handleWorkspaceEvents, workspaceRev } from './workspace-events.ts';
 import {
   HttpError, createComment, deleteComment, isCommentId, listMentions, markMentionDone, mentionables, setWebhook, threadsWithText,
@@ -176,7 +177,9 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
     if (path === '/api/tokens') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       if (method === 'GET') {
-        return send(res, 200, { tokens: await db.query('select id, name, created_at, last_used_at, webhook_url from api_tokens where user_id = $1 order by created_at desc', [who.id]) });
+        const tokens = await db.query('select id, name, created_at, last_used_at, webhook_url from api_tokens where user_id = $1 order by created_at desc', [who.id]);
+        const wakes = await wakeSummaries(db, who.id);
+        return send(res, 200, { tokens: tokens.map((t) => ({ ...t, wake: wakes.get(t.id) ?? null })) });
       }
       if (method === 'POST') {
         const b = await readJson(req);
@@ -184,6 +187,7 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
         return send(res, 201, t);
       }
     }
+    if (path.startsWith('/api/tokens/') && (await handleWake(req, res, db, hp, who, path, (id) => dropConnections(hp, (c) => c?.user?.tokenId === id)))) return;
     const tokenDel = path.match(/^\/api\/tokens\/(tok_[\w-]+)$/);
     if (tokenDel && method === 'DELETE') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });

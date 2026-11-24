@@ -254,6 +254,12 @@ function TaskSheet({ task: t, agents, onClose }: { task: Task; agents: AgentChoi
   );
 }
 
+/** Web links in a timeline note (for example the Devin session that took the task) open in a new tab. */
+function linkify(text: string): React.ReactNode {
+  return text.split(/(https:\/\/[^\s<>"]+)/g).map((part, i) =>
+    i % 2 ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a> : part);
+}
+
 function EventRow({ e, agentName, tokenId }: { e: TaskEvent; agentName: string; tokenId: string | null }) {
   const when = <time dateTime={e.created_at} title={new Date(e.created_at).toLocaleString()}>{timeAgo(e.created_at)}</time>;
   const agent = e.author_kind === 'agent';
@@ -273,7 +279,7 @@ function EventRow({ e, agentName, tokenId }: { e: TaskEvent; agentName: string; 
         <b>{agent ? e.author_name || agentName : e.author_name}</b>{what && <span className="muted"> {what}</span>}
         <span className="task-ev-time">{when}</span>
       </span>
-      {e.text && e.kind !== 'assigned' && <p className="task-ev-text">{e.text}</p>}
+      {e.text && e.kind !== 'assigned' && <p className="task-ev-text">{linkify(e.text)}</p>}
     </li>
   );
 }

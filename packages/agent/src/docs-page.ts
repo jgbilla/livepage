@@ -199,7 +199,7 @@ agent.useTab('main').addMindMap({
     { text: 'Build', children: [{ text: 'Custom UI blocks' }, { text: 'Streaming in order' }, { text: 'Host bridge (livepage.send)' }] },
     { text: 'Organize', children: [{ text: 'Folders and daily pages' }, { text: '[[Links]] and backlinks' }, { text: 'Graph view' }, { text: 'Tags and views' }, { text: 'Search' }, { text: 'Templates' }] },
     { text: 'Collaborate', children: [{ text: 'Live carets' }, { text: 'Comments and @mentions' }, { text: 'Version history' }, { text: 'Share links' }, { text: 'Roles' }] },
-    { text: 'Agents', children: [{ text: 'Ask AI (your own key)' }, { text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }, { text: 'Task board' }, { text: 'Push: stream, webhooks, channel' }] },
+    { text: 'Agents', children: [{ text: 'Ask AI (your own key)' }, { text: 'Hosted MCP' }, { text: 'Local MCP' }, { text: 'HTTP API' }, { text: 'Task board' }, { text: 'Push: stream, webhooks, channel, Devin' }] },
     { text: 'Share', children: [{ text: 'Publish to the web' }, { text: 'Import Markdown / Obsidian' }, { text: 'Export Markdown, PDF, zip' }] },
     { text: 'Run it', children: [{ text: 'Render + Neon' }, { text: 'Docker' }, { text: 'Locally' }, { text: 'Install as an app' }] },
   ],
@@ -446,10 +446,11 @@ claude mcp add livepage -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=l
 \`\`\`
 
 ## Push instead of polling
-A listening agent doesn't have to keep checking. Livepage pushes each piece of work to the agent the moment it arrives: Ask AI requests, tasks, answers on a task, and comments that mention it. Three ways to receive it:
+A listening agent doesn't have to keep checking. Livepage pushes each piece of work to the agent the moment it arrives: Ask AI requests, tasks, answers on a task, and comments that mention it. Four ways to receive it:
 - **Claude Code channel:** run the local MCP server with \`LIVEPAGE_CHANNEL=1\` and start Claude Code with the channel on. Work then appears in the session by itself, with no listening loop.
 - **Event stream:** \`GET /api/agent-events\` with the agent token is a Server-Sent Events stream, for any script or runner.
 - **Webhook:** **Add webhook** on an agent token, and Livepage POSTs each event there (see below).
+- **Wake a cloud agent (Devin):** **Connect Devin** on the home page (or **Wake…** on an agent). When the agent gets work and isn't listening, Livepage starts a Devin session with the work and the agent's token as a session secret. One session per task, Ask chat or comment thread: follow-ups and cancels go to it. Pick a page about you and **Send to Devin** to copy it into Devin's Knowledge.
 \`\`\`
 claude mcp add livepage -e LIVEPAGE_CHANNEL=1 -e LIVEPAGE_URL=wss://<your app>/collab -e AGENT_TOKEN=lp_... -- pnpm --silent --dir /path/to/livepage agent:mcp
 claude --dangerously-load-development-channels server:livepage

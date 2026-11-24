@@ -56,6 +56,8 @@ const listening = new Map<string, number>(); // tokenId -> open long polls
 export function touchAgent(who: Principal | null | undefined) {
   if (who?.kind === 'agent' && who.tokenId) lastSeen.set(who.tokenId, Date.now());
 }
+/** Waiting for work right now: an open wait_for_requests long poll or event stream. */
+export const isListening = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0;
 export const isOnline = (tokenId: string) => (listening.get(tokenId) ?? 0) > 0 || streamCount(tokenId) > 0 || Date.now() - (lastSeen.get(tokenId) ?? 0) < ONLINE_MS;
 
 // ---- Long-poll wakeups, keyed by "token:<id>" (new work for an agent) or "req:<id>" (a request changed).
