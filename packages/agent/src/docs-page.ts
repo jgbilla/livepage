@@ -475,7 +475,7 @@ table(ag, [
   ['read_page', 'The whole page as markdown, every tab, with node and footnote ids'],
   ['get_outline', 'Just the structure: tabs and headings with block ids and section sizes'],
   ['read_blocks', 'Blocks with their ids: the whole page, one tab, one section or a window from a block'],
-  ['replace_text', 'Find and replace words in place; formatting, links and footnotes stay'],
+  ['replace_text', 'Find and replace words in place; unchanged words keep formatting, links, footnotes and comments, and inline Markdown in the replacement applies'],
   ['replace_blocks', 'Rewrite one block or a run of blocks (a section) with Markdown'],
   ['insert_blocks', 'New Markdown before or after a block, or at the start or end of a tab'],
   ['delete_blocks / move_blocks', 'Remove or reorder a block or a run of blocks, also across tabs'],

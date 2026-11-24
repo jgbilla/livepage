@@ -58,7 +58,7 @@ export const TOOLS: ToolDef[] = [
       type: 'object',
       properties: {
         find: { type: 'string', description: 'Exact text currently on the page.' },
-        replace: { type: 'string' },
+        replace: { type: 'string', description: 'Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url)) sets formatting.' },
         block_id: { type: 'string', description: 'Only look inside this block.' },
         occurrence: { type: 'integer', minimum: 1, description: 'Which match to replace (1 = first) when there are several.' },
         all: { type: 'boolean', description: 'Replace every match.' },
