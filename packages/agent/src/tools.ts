@@ -227,6 +227,25 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
   type AgentTask = { id: string; title: string; page_id: string | null; text: string };
   type AgentReq = { id: string; page_id: string; page_title: string; tab: string; prompt: string; selection: string; history?: { role: string; text: string }[] };
   type ListenMention = { id: string; page_id: string; page_title: string; thread_id: string; tab: string; author_name: string; text: string; quote: string | null };
+  // A one-step way to start listening. In Claude Code this is the /mcp__livepage__listen command.
+  server.prompt('listen', 'Listen for Livepage work: Ask AI requests, tasks from the task board and comments that mention you, and handle each one as it arrives.',
+    () => ({
+      messages: [{
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `Listen for Livepage work and handle it as it arrives, until I tell you to stop.
+Loop: call wait_for_requests (wait_seconds 25). When it returns nothing, call it again right away.
+- An Ask AI request: work on its page with the targeted edit tools, answer with reply_to_request, then listen again.
+- A task from the task board: do it with your own context and the page tools. Send a short update_task note as you go,
+  use status needs_you with a question if you are stuck (the answer comes back through wait_for_requests), and finish
+  with update_task done (or failed) and a one-line summary. Then listen again.
+- A comment that mentions you: read the thread with list_comments, do what it asks, answer with reply_to_comment, then listen again.
+Keep each reply to me short; the person follows along in Livepage.`,
+        },
+      }],
+    }));
+
   server.tool('wait_for_requests',
     'Wait for requests people send you from the Ask AI panel in Livepage, and tasks they hand you on the task board (up to wait_seconds), and take them. Each request has a page, tab, the person\'s prompt, any text they had selected, and earlier chat turns. A follow-up the person types in the same chat (like "apply" or "yes") arrives as a new request with the earlier turns; act on it in that context. Comments that @mention you (or @AI, when the person picked you in Ask AI) arrive here too: answer those in the thread with reply_to_comment. Tasks: report on them with update_task. Call it in a loop when asked to listen, including after each reply, so follow-ups reach you.',
     { wait_seconds: z.number().min(0).max(30).default(25) },

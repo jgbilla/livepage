@@ -8,7 +8,11 @@ import { setTasksFollower, watchTasksNow } from './workspace';
 export type TaskStatus = 'queued' | 'working' | 'needs_you' | 'done' | 'failed' | 'cancelled';
 export type Task = {
   id: string; title: string; details: string; status: TaskStatus; note: string;
-  token_id: string | null; agent_name: string; agent_online: boolean;
+  token_id: string | null; any_agent: boolean; agent_name: string; agent_online: boolean;
+  /** Will it be picked up now: the agent is listening (or, for any agent, one of yours is). */
+  agent_listening: boolean; agent_last_seen_at: string | null;
+  /** Its agent took it again and again without confirming (a broken listening loop). */
+  unconfirmed: { agent_name: string; times: number } | null;
   page_id: string | null; page_title: string | null; pages: { id: string; title: string }[];
   delivery: 'queued' | 'delivered' | null; last_message_at: string | null;
   created_at: string; updated_at: string; done_at: string | null;
@@ -18,7 +22,37 @@ export type TaskEvent = {
   author_kind: 'human' | 'agent' | 'system'; author_name: string; text: string; status: TaskStatus | null;
   page_id: string | null; page_title: string | null; created_at: string;
 };
-export type AgentChoice = { id: string; name: string; online: boolean };
+export type AgentChoice = { id: string; name: string; online: boolean; listening: boolean; last_seen_at: string | null; last_listen_at: string | null; unconfirmed?: boolean };
+/** token_id for "any available agent": the first of your agents that is listening takes the task. */
+export const ANY_AGENT = 'any';
+
+export function timeAgo(iso: string): string {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  if (s < 7 * 86400) return `${Math.floor(s / 86400)} d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/** Where an agent is: listening (it will pick work up now), taking work it never confirms, connected but not listening, or away. */
+export type Presence = 'listening' | 'unconfirmed' | 'idle' | 'away' | 'never';
+type PresenceIn = { listening: boolean; last_seen_at: string | null; unconfirmed?: boolean };
+export function presence(a: PresenceIn): Presence {
+  if (a.unconfirmed) return 'unconfirmed';
+  if (a.listening) return 'listening';
+  if (!a.last_seen_at) return 'never';
+  return Date.now() - new Date(a.last_seen_at).getTime() < 10 * 60_000 ? 'idle' : 'away';
+}
+export function presenceText(a: PresenceIn): string {
+  switch (presence(a)) {
+    case 'listening': return 'Listening now';
+    case 'unconfirmed': return 'Takes tasks but never confirms them';
+    case 'idle': return 'Connected, not listening';
+    case 'away': return `Not listening · seen ${timeAgo(a.last_seen_at!)}`;
+    default: return 'Never connected';
+  }
+}
 
 type State = { tasks: Task[]; agents: AgentChoice[]; rev: number | null; loaded: boolean };
 let state: State = { tasks: [], agents: [], rev: null, loaded: false };

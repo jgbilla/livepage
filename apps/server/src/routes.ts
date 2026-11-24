@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Hocuspocus } from '@hocuspocus/server';
 import type { Db } from './db.ts';
 import {
-  bearer, clearCookie, createApiToken, createSession, createUser, destroySession, login, readCookie, resolvePrincipal,
+  bearer, clearCookie, createApiToken, rotateApiToken, createSession, createUser, destroySession, login, readCookie, resolvePrincipal,
   randomId, sessionCookie, SignupClosedError, validateSignup, type Principal,
 } from './auth.ts';
 import {
@@ -189,6 +189,15 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse, db: D
       return send(res, 200, { ok: true });
     }
     // Optional webhook, called when someone @mentions this agent in a comment.
+    // A new key for the same agent (to paste into a connect command; the old key stops working).
+    const rotate = path.match(/^\/api\/tokens\/(tok_[\w-]+)\/rotate$/);
+    if (rotate && method === 'POST') {
+      if (who.kind !== 'human' || who.superAgent) return send(res, 403, { error: 'Only people can manage agent tokens.' });
+      const token = await rotateApiToken(db, who.id, rotate[1]);
+      if (!token) return send(res, 404, { error: 'No such token.' });
+      dropConnections(hp, (c) => c?.user?.tokenId === rotate[1]);
+      return send(res, 200, { id: rotate[1], token });
+    }
     if (tokenDel && method === 'PATCH') {
       if (who.kind !== 'human') return send(res, 403, { error: 'Only people can manage agent tokens.' });
       const b = await readJson(req);
