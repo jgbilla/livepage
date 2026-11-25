@@ -27,6 +27,7 @@ export function plainText(node: Y.XmlElement | Y.XmlText | Y.XmlFragment): strin
   if (node instanceof Y.XmlText) {
     return (node.toDelta() as { insert: unknown }[]).map((op) => (typeof op.insert === 'string' ? op.insert : '')).join('');
   }
+  if (node instanceof Y.XmlElement && isMath(node)) return mathLatex(node);
   return node.toArray().map((c) => plainText(c as Y.XmlElement)).join(
     node instanceof Y.XmlElement && /^(paragraph|heading)$/.test(node.nodeName) ? '' : ' ',
   ).trim();
@@ -71,3 +72,40 @@ export function textNodes(node: Y.XmlFragment | Y.XmlElement): Y.XmlText[] {
   walk(node);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Math (LaTeX, rendered with KaTeX in the editor and on published pages). Two atom nodes whose one
+// attribute is the LaTeX source:
+//   inlineMath { latex }  inside text, like $E = mc^2$
+//   blockMath  { latex }  a display equation on its own line, like $$\int_0^1 x\,dx$$
+// In Markdown they are $...$ and $$...$$ (\(...\), \[...\] and ```math fences are read too).
+
+export const INLINE_MATH = 'inlineMath';
+export const BLOCK_MATH = 'blockMath';
+/** Longest LaTeX source kept for one equation. */
+export const MATH_MAX = 8000;
+
+export const isMath = (el: Y.XmlElement) => el.nodeName === INLINE_MATH || el.nodeName === BLOCK_MATH;
+export const mathLatex = (el: Y.XmlElement) => String(el.getAttribute('latex') ?? '');
+export const cleanLatex = (latex: unknown) => (typeof latex === 'string' ? latex.trim().slice(0, MATH_MAX) : '');
+
+export function makeMath(latex: string, display = false): Y.XmlElement {
+  const el = new Y.XmlElement(display ? BLOCK_MATH : INLINE_MATH);
+  el.setAttribute('latex', cleanLatex(latex));
+  return el;
+}
+
+/** An inline equation as Markdown: $latex$ (on one line). */
+export const inlineMathMarkdown = (latex: string) => `$${latex.trim().replace(/\s*\n\s*/g, ' ')}$`;
+/** A display equation as Markdown: $$ on their own lines around it. */
+export const blockMathMarkdown = (latex: string) => `$$\n${latex.trim()}\n$$`;
+
+/**
+ * Inline math in Markdown, with Pandoc's rules so prices stay text: the opening $ is followed by a
+ * non-space, the closing $ follows a non-space and is not followed by a digit ("$5 and $10" is text).
+ */
+export const INLINE_MATH_RE = /^\$(?![\s$])((?:\\[\s\S]|[^\\$\n])+?)(?<!\s)\$(?!\d)/;
+/** \( ... \) inline math, as many AI models write it. */
+export const PAREN_MATH_RE = /^\\\(((?:\\(?!\))|[^\\\n])+?)\\\)/;
+/** A display equation as a block: $$ ... $$ or \[ ... \], on one line or several. */
+export const BLOCK_MATH_RE = /^ {0,3}(?:\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\])[ \t]*(?:\n|$)/;

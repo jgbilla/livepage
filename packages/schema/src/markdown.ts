@@ -2,6 +2,7 @@
 //   - frontmatter (title, tags, aliases)
 //   - [[Page]] / [[Page#Heading|alias]] wiki links (Livepage links point at ids; export writes titles)
 //   - #tags in text, [^1] footnotes, GFM tables, task lists, fenced code
+//   - $inline$ and $$display$$ LaTeX math (\(...\), \[...\] and ```math fences are read too)
 //   - Livepage-only blocks round-trip through fenced code: ```livepage-html and ```livepage-mindmap
 //   - extra tabs round-trip as sections that start with <!-- livepage-tab: Title -->
 import * as Y from 'yjs';
@@ -10,7 +11,10 @@ import {
   addTab, fragment, htmlCodeText, HTML_NODE, LINK_NODE, linkToken, listTabs, MAIN_TAB, makeLink, META, MIND_NODE,
   mindChildren, mindMapNodes, newId, addMindNode, type LinkTarget, type MindTree,
 } from './index.ts';
-import { citationLine, footnoteParts, inlineOf, isFootnote, makeFootnoteElement, plainText, type Run } from './walk.ts';
+import {
+  BLOCK_MATH, BLOCK_MATH_RE, blockMathMarkdown, citationLine, footnoteParts, INLINE_MATH_RE, inlineMathMarkdown, inlineOf, isFootnote, isMath,
+  makeFootnoteElement, makeMath, mathLatex, PAREN_MATH_RE, plainText, type Run,
+} from './walk.ts';
 
 // ===========================================================================
 // Export
@@ -119,6 +123,10 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
       const fence = code.includes('```') ? '~~~~' : '```';
       return `${fence}livepage-html${title ? ` ${JSON.stringify(title)}` : ''}\n${code.replace(/\n$/, '')}\n${fence}`;
     }
+    case BLOCK_MATH: {
+      const latex = mathLatex(el).trim();
+      return latex ? blockMathMarkdown(latex) : '';
+    }
     case MIND_NODE: {
       const id = String(el.getAttribute('blockId') ?? '');
       const nodes = [...mindMapNodes(ctx.doc, id).values()];
@@ -141,7 +149,29 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
 
 /** Markdown special characters in plain text. Kept minimal so exported files stay readable. */
 function escapeText(s: string): string {
-  return s.replace(/([\\`*_[\]<])/g, '\\$1').replace(/^(\s*)([#>+-]|\d+\.)(?=\s)/, '$1\\$2');
+  const out = s.replace(/([\\`*_[\]<])/g, '\\$1').replace(/^(\s*)([#>+-]|\d+\.)(?=\s)/, '$1\\$2');
+  return out.includes('$') ? escapeDollars(out) : out;
+}
+
+/**
+ * A $ that could open math on import gets a backslash: one followed by a non-space, with a later $ on the
+ * same line that could close it. Prices like "$5 and $10" have no possible closer, so they stay as they are.
+ */
+function escapeDollars(s: string): string {
+  const closers: number[] = [];
+  for (let j = 0; j < s.length; j++) if (s[j] === '$' && j > 0 && !/\s/.test(s[j - 1]) && !/\d/.test(s[j + 1] ?? '')) closers.push(j);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '$') {
+      let slashes = 0;
+      for (let k = i - 1; k >= 0 && s[k] === '\\'; k--) slashes++;
+      const opener = slashes % 2 === 0 && /\S/.test(s[i + 1] ?? ' ');
+      const nl = s.indexOf('\n', i);
+      if (opener && closers.some((j) => j > i && (nl < 0 || j < nl))) { out += '\\$'; continue; }
+    }
+    out += s[i];
+  }
+  return out;
 }
 
 const MARK_ORDER = ['link', 'bold', 'italic', 'strike', 'underline', 'code'] as const;
@@ -193,6 +223,9 @@ function inline(el: Y.XmlElement, ctx: Ctx): string {
     } else if (isFootnote(child)) {
       ctx.notes.push(citationLine(footnoteParts(child), { title: (t) => `*${t}*`, url: (u) => `<${u}>` }).replace(/\n+/g, ' '));
       out += `[^${ctx.notes.length}]`;
+    } else if (isMath(child)) {
+      const latex = mathLatex(child).trim();
+      if (latex) out += inlineMathMarkdown(latex);
     } else if (child.nodeName === 'hardBreak') {
       out += '\\\n';
     } else if (child.nodeName === 'image') {
@@ -308,7 +341,28 @@ const footnoteRefExtension = {
     return m ? { type: 'footnoteRef', raw: m[0], id: m[1] } : undefined;
   },
 };
-const md = new Marked({ gfm: true, extensions: [wikiExtension, footnoteRefExtension] });
+const firstIndex = (src: string, re: RegExp) => { const m = src.match(re); return m ? m.index : undefined; };
+const mathInlineExtension = {
+  name: 'inlineMath',
+  level: 'inline' as const,
+  start: (src: string) => firstIndex(src, /\$|\\\(/),
+  tokenizer(src: string) {
+    // $$...$$ in the middle of text is an inline equation too.
+    const m = src.match(/^\$\$((?:\\[\s\S]|[^\\$])+?)\$\$/) ?? src.match(INLINE_MATH_RE) ?? src.match(PAREN_MATH_RE);
+    return m ? { type: 'inlineMath', raw: m[0], latex: m[1].trim() } : undefined;
+  },
+};
+const mathBlockExtension = {
+  name: 'blockMath',
+  level: 'block' as const,
+  start: (src: string) => firstIndex(src, /^ {0,3}(?:\$\$|\\\[)/m),
+  tokenizer(src: string) {
+    const m = src.match(BLOCK_MATH_RE);
+    const latex = m && (m[1] ?? m[2]).trim();
+    return m && latex ? { type: 'blockMath', raw: m[0], latex } : undefined;
+  },
+};
+const md = new Marked({ gfm: true, extensions: [wikiExtension, footnoteRefExtension, mathInlineExtension, mathBlockExtension] });
 
 type Marks = Record<string, any>;
 type Builder = { doc: Y.Doc; opts: ImportOptions; defs: Map<string, Def>; tags: Set<string>; linked: number; unresolved: Set<string> };
@@ -369,6 +423,7 @@ function inlineNodes(tokens: Token[] | undefined, b: Builder): (Y.XmlText | Y.Xm
           else text(t.raw, marks);
           break;
         }
+        case 'inlineMath': flush(); out.push(makeMath((t as unknown as { latex: string }).latex)); break;
         case 'escape': text((t as Tokens.Escape).text, marks); break;
         case 'html': {
           const raw = (t as Tokens.HTML).raw;
@@ -428,11 +483,13 @@ function blockNodes(tokens: Token[], b: Builder): Y.XmlElement[] {
       case 'text': out.push(paragraph((t as Tokens.Text).tokens ?? [{ type: 'text', raw: t.raw, text: (t as Tokens.Text).text } as Token], b)); break;
       case 'blockquote': out.push(elementWith('blockquote', ensureBlocks(blockNodes((t as Tokens.Blockquote).tokens, b)))); break;
       case 'hr': out.push(new Y.XmlElement('horizontalRule')); break;
+      case 'blockMath': out.push(makeMath((t as unknown as { latex: string }).latex, true)); break;
       case 'code': {
         const c = t as Tokens.Code;
         const [lang, ...rest] = (c.lang ?? '').split(/\s+/);
         if (lang === 'livepage-html') { out.push(htmlBlock(b.doc, c.text, titleArg(rest))); break; }
         if (lang === 'livepage-mindmap') { out.push(mindMapBlock(b.doc, c.text, titleArg(rest))); break; }
+        if (lang === 'math' && c.text.trim()) { out.push(makeMath(c.text, true)); break; }
         const t2 = new Y.XmlText();
         if (c.text) t2.insert(0, c.text);
         out.push(elementWith('codeBlock', [t2], { language: lang || null }));

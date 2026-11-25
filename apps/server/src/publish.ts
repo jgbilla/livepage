@@ -5,6 +5,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Hocuspocus } from '@hocuspocus/server';
 import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import katex from 'katex';
 import { escapeHtml, pageToHtml, MAIN_TAB, type LinkTarget } from '@livepage/schema';
 import type { Db } from './db.ts';
 import { readDoc } from './docs.ts';
@@ -27,6 +31,20 @@ export async function unpublishPage(db: Db, pageId: string): Promise<void> {
 }
 
 export const isPubPath = (url: string | undefined) => /^\/pub\//.test(url ?? '');
+
+// Equations are rendered here with KaTeX (the same as the editor), so a published page shows math
+// without any script. Its stylesheet and fonts are served from /pub/_/ only on pages that have math.
+const KATEX_DIST = join(dirname(createRequire(import.meta.url).resolve('katex/package.json')), 'dist');
+const renderMath = (latex: string, display: boolean) => katex.renderToString(latex, {
+  displayMode: display, throwOnError: false, strict: 'ignore', trust: false, maxSize: 40, maxExpand: 1000, output: 'htmlAndMathml',
+});
+const katexFiles = new Map<string, Promise<Buffer | null>>();
+const katexFile = (name: string) => {
+  let hit = katexFiles.get(name);
+  if (!hit) { hit = readFile(join(KATEX_DIST, name)).catch(() => null); katexFiles.set(name, hit); }
+  return hit;
+};
+const FONT_TYPES: Record<string, string> = { woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf' };
 
 const PUB_JS = `// Starts each HTML block of a published page in the sandbox (see apps/server/src/publish.ts).
 (function () {
@@ -92,6 +110,7 @@ hr{border:0;border-top:1px solid var(--line);margin:2.4em 0}
 .page-link{color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:0 4px;text-decoration:none;font:.9em var(--sans);font-weight:500}.page-link.off{color:var(--muted);background:none;border-bottom:1px dotted var(--faint);border-radius:0}
 sup.fnref a{text-decoration:none;font:600 .7em var(--sans);padding:0 1px}
 .footnotes{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);font:15px/1.6 var(--sans);color:var(--muted)}.footnotes a.back{text-decoration:none}
+.math-display{margin:1.2em 0;overflow-x:auto;overflow-y:hidden;text-align:center}.math-display .katex-display{margin:0}.math-inline .katex{font-size:1.05em}.math-inline{white-space:nowrap}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:0 0 28px;font:500 14px var(--sans)}
 .tabs a{padding:8px 12px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}.tabs a:hover{color:var(--fg)}.tabs a.on{color:var(--fg);border-color:var(--fg);font-weight:600}
 .tab>h2.tab-title{display:none}
@@ -114,6 +133,16 @@ export async function handlePub(req: IncomingMessage, res: ServerResponse, db: D
     res.end(PUB_JS);
     return;
   }
+  const font = path.match(/^\/pub\/_\/fonts\/(KaTeX_[\w-]+\.(woff2|woff|ttf))$/);
+  const asset = path === '/pub/_/katex.css' ? { file: 'katex.min.css', type: 'text/css; charset=utf-8' }
+    : font ? { file: `fonts/${font[1]}`, type: FONT_TYPES[font[2]] } : null;
+  if (asset) {
+    const body = await katexFile(asset.file);
+    if (!body) return notFound(res);
+    res.writeHead(200, { 'Content-Type': asset.type, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff' });
+    res.end(req.method === 'HEAD' ? undefined : body);
+    return;
+  }
   const m = path.match(/^\/pub\/([a-z0-9-]{4,80})\/?$/);
   if (!m) return notFound(res);
   const [page] = await db.query(
@@ -131,7 +160,8 @@ export async function handlePub(req: IncomingMessage, res: ServerResponse, db: D
     const rows = await db.query('select id, published_slug from pages where id = any($1) and published_slug is not null', [[...ids]]);
     rows.forEach((r) => targets.set(r.id, r.published_slug));
   }
-  const { tabs, blocks } = pageToHtml(doc, {
+  const { tabs, blocks, math } = pageToHtml(doc, {
+    math: renderMath,
     link: (t) => {
       const label = String(t.label || 'a page');
       const slug = targets.get(t.page);
@@ -155,7 +185,7 @@ export async function handlePub(req: IncomingMessage, res: ServerResponse, db: D
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}">
 <meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}">
-<style>${CSS}</style></head>
+${math ? '<link rel="stylesheet" href="/pub/_/katex.css">' : ''}<style>${CSS}</style></head>
 <body><main><article>
 <h1 class="title">${escapeHtml(title)}</h1>
 <div class="byline">${escapeHtml(String(page.owner_name ?? ''))} · Updated ${escapeHtml(updated)}</div>
@@ -169,7 +199,7 @@ ${body}
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-cache',
     'Content-Security-Policy': [
-      "default-src 'none'", "script-src 'self'", "style-src 'unsafe-inline'", 'img-src https: data:',
+      "default-src 'none'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "font-src 'self'", 'img-src https: data:',
       `frame-src ${config.sandboxUrl}`, "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
     ].join('; '),
     'X-Content-Type-Options': 'nosniff',

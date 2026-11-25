@@ -9,7 +9,7 @@
 import * as Y from 'yjs';
 import { fragment, HTML_NODE, listTabs, MAIN_TAB, makeParagraph, MIND_NODE, mindMapAsOutline, htmlCodeMap } from './index.ts';
 import { blockToMarkdown, markdownToBlocks } from './markdown.ts';
-import { plainText } from './walk.ts';
+import { cleanLatex, isMath, mathLatex, plainText } from './walk.ts';
 
 type Node = Y.XmlElement | Y.XmlText;
 
@@ -233,13 +233,22 @@ export function moveBlocks(doc: Y.Doc, id: string, where: Where, through?: strin
 // ---------------------------------------------------------------------------
 // Find and replace inside text, in place (formatting, links, footnotes and comments around it are untouched)
 
-export type TextHit = { blockId: string; tab: string; text: Y.XmlText; offset: number; length: number };
+/**
+ * A match in a run of text, or (with `math`) inside an equation's LaTeX source, where `text` is the
+ * equation's parent and offsets count in the LaTeX.
+ */
+export type TextHit = { blockId: string; tab: string; text: Y.XmlText; offset: number; length: number; math?: Y.XmlElement };
 
-function textsIn(node: Node): Y.XmlText[] {
+/** Runs of text and equations, in reading order. */
+function textsIn(node: Node): (Y.XmlText | Y.XmlElement)[] {
   if (node instanceof Y.XmlText) return [node];
+  if (isMath(node)) return [node];
   if (node.nodeName === HTML_NODE || node.nodeName === MIND_NODE) return [];
   return node.toArray().flatMap((c) => (c instanceof Y.XmlText || c instanceof Y.XmlElement ? textsIn(c) : []));
 }
+
+/** "$x^2$" or "$$x^2$$" quoted from Markdown: the LaTeX inside. */
+const unwrapMath = (s: string) => s.match(/^\$\$([\s\S]+)\$\$$/)?.[1] ?? s.match(/^\$([^$]+)\$$/)?.[1] ?? null;
 
 type Op = { insert: unknown; attributes?: Record<string, unknown> };
 const runText = (t: Y.XmlText) => (t.toDelta() as Op[]).map((op) => (typeof op.insert === 'string' ? op.insert : '￼')).join('');
@@ -255,14 +264,21 @@ export type FindOptions = {
 /** Every place `find` appears in the page's text, in reading order. A match never spans two blocks, list items or cells. */
 export function findText(doc: Y.Doc, find: string, opts: FindOptions = {}): TextHit[] {
   if (!find) return [];
-  const needle = opts.matchCase === false ? find.toLowerCase() : find;
+  const fold = (s: string) => (opts.matchCase === false ? s.toLowerCase() : s);
+  // Quoted with its $ signs, the text is looked for in equations only.
+  const inMath = unwrapMath(find.trim());
+  const needle = fold(inMath ? inMath.trim() : find);
   const hits: TextHit[] = [];
   const scan = (node: Node, tab: string) => {
     const blockId = blockIdOf(node);
-    for (const text of textsIn(node)) {
-      const s = opts.matchCase === false ? runText(text).toLowerCase() : runText(text);
+    for (const part of textsIn(node)) {
+      const isEq = part instanceof Y.XmlElement;
+      if (inMath && !isEq) continue;
+      const s = fold(isEq ? mathLatex(part) : runText(part));
       for (let at = s.indexOf(needle); at >= 0; at = s.indexOf(needle, at + needle.length)) {
-        hits.push({ blockId, tab, text, offset: at, length: find.length });
+        hits.push(isEq
+          ? { blockId, tab, text: part.parent as unknown as Y.XmlText, math: part, offset: at, length: needle.length }
+          : { blockId, tab, text: part, offset: at, length: needle.length });
       }
     }
   };
@@ -318,14 +334,16 @@ export function hitsToReplace(doc: Y.Doc, find: string, opts: ReplaceOptions = {
 // Marks that Markdown can write, so a replacement's **bold**, `code`, ~~strike~~, *italic* and [links](url) apply.
 const MD_MARKS = ['bold', 'italic', 'strike', 'code', 'link'] as const;
 type Run = { text: string; marks: Record<string, unknown> | null /* null = keep the formatting already there */ };
+/** Text runs and inline equations, for a replacement that has $math$ in it. */
+type Piece = { text: string; marks: Record<string, unknown> } | { latex: string };
 
 /**
  * The replacement as runs of text. Markdown markers in it become formatting; anything that is not a single
  * line of inline Markdown (a list, a heading, a page link...) is taken literally.
  */
-function replacementRuns(replace: string): { runs: Run[]; formatted: boolean } {
+function replacementRuns(replace: string): { runs: Run[]; formatted: boolean; pieces?: Piece[] } {
   const literal = { runs: [{ text: replace, marks: null }], formatted: false };
-  if (!/[*_`~[\\]/.test(replace)) return literal;
+  if (!/[*_`~[\\$]/.test(replace)) return literal;
   const lead = replace.match(/^\s*/)![0];
   const core = replace.slice(lead.length).trimEnd();
   const trail = replace.slice(lead.length + core.length);
@@ -335,6 +353,16 @@ function replacementRuns(replace: string): { runs: Run[]; formatted: boolean } {
   if (els.length !== 1 || els[0].nodeName !== 'paragraph') return literal;
   fragment(scratch).insert(0, els);
   const kids = els[0].toArray();
+  if (kids.some((k) => k instanceof Y.XmlElement && k.nodeName === 'inlineMath') && kids.every((k) => k instanceof Y.XmlText || (k instanceof Y.XmlElement && k.nodeName === 'inlineMath'))) {
+    const pieces: Piece[] = [];
+    if (lead) pieces.push({ text: lead, marks: {} });
+    for (const k of kids) {
+      if (k instanceof Y.XmlElement) pieces.push({ latex: mathLatex(k) });
+      else for (const op of (k as Y.XmlText).toDelta() as Op[]) if (typeof op.insert === 'string') pieces.push({ text: op.insert, marks: { ...(op.attributes ?? {}) } });
+    }
+    if (trail) pieces.push({ text: trail, marks: {} });
+    return { ...literal, pieces };
+  }
   if (!kids.every((k) => k instanceof Y.XmlText)) return literal;
   const parsed: Run[] = kids.flatMap((k) => ((k as Y.XmlText).toDelta() as Op[])
     .map((op) => ({ text: typeof op.insert === 'string' ? op.insert : '', marks: { ...(op.attributes ?? {}) } })));
@@ -350,8 +378,16 @@ const sameMark = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.
  * their formatting, links, footnotes and comment anchors survive. Only the part that differs is rewritten.
  */
 function replaceHit(h: TextHit, replace: string) {
+  if (h.math) {
+    // Inside an equation: edit its LaTeX. "$...$" around the replacement is the equation's own markers.
+    const latex = mathLatex(h.math);
+    const neu = unwrapMath(replace.trim()) ?? replace;
+    h.math.setAttribute('latex', cleanLatex(latex.slice(0, h.offset) + neu + latex.slice(h.offset + h.length)));
+    return;
+  }
   const old = runText(h.text).slice(h.offset, h.offset + h.length);
-  const { runs, formatted } = replacementRuns(replace);
+  const { runs, formatted, pieces } = replacementRuns(replace);
+  if (pieces) return replaceWithMath(h, pieces);
   const chars = runs.flatMap((r) => [...r.text].map((ch) => ({ ch, marks: r.marks })));
   const neu = chars.map((c) => c.ch).join('');
   // Compare by UTF-16 units, as Yjs offsets are.
@@ -390,6 +426,52 @@ function replaceHit(h: TextHit, replace: string) {
     for (const m of MD_MARKS) if (!sameMark(now[m], u.marks[m])) change[m] = u.marks[m] ?? null;
     if (Object.keys(change).length) h.text.format(idx, 1, change);
   }
+}
+
+/** True when a replace_text replacement holds an inline equation ($...$), which needs replaceText rather than typing. */
+export const replacementHasMath = (replace: string) => !!replacementRuns(replace).pieces;
+
+/**
+ * Replace a match with text and inline equations ("E=mc^2" -> "$E=mc^2$"). The run of text is split
+ * around the new equations; the text before and after the match is not touched.
+ */
+function replaceWithMath(h: TextHit, pieces: Piece[]) {
+  const parent = h.text.parent as Y.XmlElement;
+  const index = parent.toArray().indexOf(h.text);
+  const base = Object.fromEntries(Object.entries(marksAt(h.text, h.offset)).filter(([k]) => !(MD_MARKS as readonly string[]).includes(k)));
+  const ops = h.text.toDelta() as Op[];
+  // The text after the match moves into a new run that follows the inserted pieces.
+  const cut = h.offset + h.length;
+  const tail: Op[] = [];
+  let at = 0;
+  for (const op of ops) {
+    const len = typeof op.insert === 'string' ? op.insert.length : 1;
+    if (typeof op.insert === 'string' && at + len > cut) tail.push({ insert: op.insert.slice(Math.max(0, cut - at)), attributes: op.attributes });
+    at += len;
+  }
+  h.text.delete(h.offset, h.text.length - h.offset);
+  const nodes: (Y.XmlText | Y.XmlElement)[] = [];
+  const fills: { t: Y.XmlText; ops: Op[] }[] = [];
+  let pending: Op[] = [];
+  const flush = () => {
+    if (!pending.length) return;
+    const t = new Y.XmlText();
+    nodes.push(t);
+    fills.push({ t, ops: pending });
+    pending = [];
+  };
+  let first = true;
+  for (const p of pieces) {
+    if ('latex' in p) { first = false; flush(); const el = new Y.XmlElement('inlineMath'); el.setAttribute('latex', cleanLatex(p.latex)); nodes.push(el); continue; }
+    const attrs = { ...base, ...p.marks };
+    // Text before the first equation stays in the original run.
+    if (first) { h.text.insert(h.text.length, p.text, attrs); continue; }
+    pending.push({ insert: p.text, attributes: attrs });
+  }
+  pending.push(...tail);
+  flush();
+  parent.insert(index + 1, nodes);
+  for (const f of fills) f.t.applyDelta(f.ops.filter((o) => o.insert !== ''));
 }
 
 /**

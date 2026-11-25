@@ -16,6 +16,7 @@
 //   Footnotes are inline `footnote` nodes inside the text; the note and its citation are the node's attributes,
 //   so a footnote moves, copies and deletes with its marker. They are numbered per tab, in reading order.
 import * as Y from 'yjs';
+import { BLOCK_MATH, blockMathMarkdown, INLINE_MATH, inlineMathMarkdown } from './walk.ts';
 
 export const FRAGMENT = 'default';
 export const HTML_CODE = 'htmlCode';
@@ -109,6 +110,8 @@ function textOf(el: Y.XmlElement | Y.XmlText, fn?: FootnoteNumbers): string {
   // Plain text from the delta: toString() wraps marks in tags, and stripping those also ate literal "<...>" text.
   if (el instanceof Y.XmlText) return el.toDelta().map((d: { insert?: unknown }) => (typeof d.insert === 'string' ? d.insert : '')).join('');
   if (el.nodeName === LINK_NODE) return linkToken(el.getAttributes() as LinkTarget);
+  if (el.nodeName === INLINE_MATH) return inlineMathMarkdown(String(el.getAttribute('latex') ?? ''));
+  if (el.nodeName === BLOCK_MATH) return String(el.getAttribute('latex') ?? '').trim();
   if (el.nodeName === FOOTNOTE_NODE) {
     const n = fn?.get(String(el.getAttribute('id') ?? ''));
     return n ? `[^${n}]` : '';
@@ -165,6 +168,7 @@ export function listBlocks(doc: Y.Doc, tab?: string): BlockRow[] {
 function blockAsMarkdown(b: BlockRow): string {
   if (b.type === 'heading') return `${'#'.repeat(Number(b.attrs.level ?? 1))} ${b.text}`;
   if (b.type === HTML_NODE) return `<html-block id="${b.id}" title="${b.attrs.title ?? ''}">\n${b.text}\n</html-block>`;
+  if (b.type === BLOCK_MATH) return blockMathMarkdown(b.text);
   if (b.type === MIND_NODE) return `<mind-map id="${b.id}" title="${b.attrs.title ?? ''}">\n${b.text}\n</mind-map>`;
   return b.text;
 }
