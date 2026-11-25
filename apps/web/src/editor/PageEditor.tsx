@@ -20,6 +20,8 @@ import { TemplateFields } from './TemplateFields';
 import { titleOf, workspaceSnapshot } from '../workspace';
 import { Footnote } from './Footnote';
 import { Footnotes } from './Footnotes';
+import { BlockMath, InlineMath } from './Math';
+import { MathEditor } from './MathEditor';
 import { renderCaret } from './caret';
 import { Icon } from '../design/Icon';
 import { SlashCommands, SlashMenu, openSlashMenu, type SlashContext } from './SlashMenu';
@@ -65,6 +67,8 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         TemplateFields,
         PageLinkInput.configure({ getTitle: (id) => { const p = workspaceSnapshot()?.pages.find((x) => x.id === id); return p ? titleOf(p) : null; } }),
         Footnote.configure({ onInsert: (id) => setFootnoteEdit({ id, at: Date.now() }) }),
+        InlineMath,
+        BlockMath,
         CommentHighlights.configure({ store: comments ?? null }),
       ],
     },
@@ -106,6 +110,7 @@ export function PageEditor({ doc, provider, user, tab, readOnly, pageId, comment
         {!readOnly && <SlashMenu editor={editor} ctx={slashCtx} />}
         <SelectionMenu editor={editor} wrapRef={wrapRef} readOnly={readOnly} canComment={!!canComment && !!onComment} onComment={startComment} onAskAi={onAskAi} />
         {!readOnly && <InsertButton editor={editor} />}
+        {!readOnly && <MathEditor editor={editor} />}
       </div>
       <Footnotes editor={editor} readOnly={readOnly} editRequest={footnoteEdit} />
     </>

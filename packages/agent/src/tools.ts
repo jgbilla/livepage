@@ -83,6 +83,7 @@ Block ids stay valid while the page changes around them; a replaced or moved blo
 Pick the lightest block that does the job:
 - Plain writing: write_paragraph / add_heading.
 - Tabular data: insert_table (a native, editable table). Do not build tables in HTML.
+- Math: LaTeX in the Markdown you write, $x^2$ inline and $$ ... $$ on their own lines for a display equation. Do not draw equations in HTML.
 - Ideas and structure: insert_mind_map, then add_mind_map_node to grow it.
 - Only when it needs motion, drawing or interaction: insert_custom_ui. Give css, html and js separately;
   they stream in that order so people see the block take shape. Controls that only change the view should
@@ -121,7 +122,7 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     },
   );
 
-  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code, footnotes are [^n] with definitions (and ids) at the end of each tab. On a long page, get_outline plus read_blocks for one section costs far fewer tokens. To edit, use read_blocks: it gives the block ids the edit tools need.',
+  server.tool('read_page', 'Read the whole page as markdown. Tables are markdown tables, mind maps are outlines with node ids, HTML blocks show their code, footnotes are [^n] with definitions (and ids) at the end of each tab, equations are LaTeX in $...$ (inline) and $$...$$ (display). On a long page, get_outline plus read_blocks for one section costs far fewer tokens. To edit, use read_blocks: it gives the block ids the edit tools need.',
     { page }, async ({ page: p }) => text((await agentFor(p)).read() || '(empty page)'));
 
   // ---- Targeted edits ----
@@ -132,7 +133,7 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     after: blockId.optional().describe('Put it right after this block.'),
     at: z.enum(['start', 'end']).optional().describe('Without before/after: the start or the end (default) of the tab.'),
   };
-  const mdHelp = 'Markdown: headings, **bold**, lists, tables, code fences, [links](https://...), [[p_id]] page links.';
+  const mdHelp = 'Markdown: headings, **bold**, lists, tables, code fences, [links](https://...), [[p_id]] page links, $x^2$ inline math and $$ ... $$ display equations (LaTeX, rendered with KaTeX).';
   const idList = (ids: string[]) => ids.join(', ');
 
   server.tool('get_outline',
@@ -155,11 +156,11 @@ then answer with reply_to_comment and make any edit they asked for.${opts.channe
     }));
 
   server.tool('replace_text',
-    'Change words in place: find exact text and replace it, keeping formatting, links, footnotes and comments around it. The cheapest way to fix, reword or update something. find must sit inside one paragraph, heading, list item or table cell, written as plain text (no Markdown markers). If it appears more than once, quote more words or pass block_id, occurrence or all. An empty replace deletes the text.',
+    'Change words in place: find exact text and replace it, keeping formatting, links, footnotes and comments around it. The cheapest way to fix, reword or update something. find must sit inside one paragraph, heading, list item or table cell, written as plain text (no Markdown markers). If it appears more than once, quote more words or pass block_id, occurrence or all. An empty replace deletes the text. Equations: find text inside an equation\'s LaTeX to change just that part (quote it as $...$ to look only in equations), or replace plain text with $LaTeX$ to turn it into an equation.',
     {
       page,
       find: z.string().min(1).max(4000).describe('Exact text now on the page.'),
-      replace: z.string().max(20000).describe('Text to put in its place. Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url)) sets formatting.'),
+      replace: z.string().max(20000).describe('Text to put in its place. Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url), $math$) sets formatting.'),
       block_id: blockId.optional().describe('Only look inside this block.'),
       tab: z.string().optional().describe('Only look in this tab (id or title). Omit for every tab.'),
       occurrence: z.number().int().min(1).optional().describe('Which match to replace (1 = first) when there are several.'),

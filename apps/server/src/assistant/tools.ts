@@ -53,12 +53,12 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'replace_text',
-    description: 'Change words in place: replaces `find` (exact text now on the page, plain text without Markdown markers, within one paragraph, heading, list item or table cell) with `replace`, keeping the formatting, links and footnotes around it. The cheapest way to fix or reword something. If the text appears more than once, quote more words or pass block_id, occurrence or all. Use an empty `replace` to delete.',
+    description: 'Change words in place: replaces `find` (exact text now on the page, plain text without Markdown markers, within one paragraph, heading, list item or table cell) with `replace`, keeping the formatting, links and footnotes around it. The cheapest way to fix or reword something. If the text appears more than once, quote more words or pass block_id, occurrence or all. Use an empty `replace` to delete. Equations: find text inside an equation\'s LaTeX to change just that part (quote it as $...$ to look only in equations), or replace plain text with $LaTeX$ to make it an equation.',
     parameters: {
       type: 'object',
       properties: {
         find: { type: 'string', description: 'Exact text currently on the page.' },
-        replace: { type: 'string', description: 'Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url)) sets formatting.' },
+        replace: { type: 'string', description: 'Words that stay the same keep their formatting and comments; inline Markdown (**bold**, `code`, [link](url), $math$) sets formatting.' },
         block_id: { type: 'string', description: 'Only look inside this block.' },
         occurrence: { type: 'integer', minimum: 1, description: 'Which match to replace (1 = first) when there are several.' },
         all: { type: 'boolean', description: 'Replace every match.' },
@@ -68,7 +68,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'replace_blocks',
-    description: 'Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown: headings, **bold**, lists, tables, code fences, links. Everything else on the page is untouched. For a change of a few words use replace_text. Returns the new block ids.',
+    description: 'Rewrite one block, or a run of blocks (block_id through through_block_id, for example a whole section), with new Markdown: headings, **bold**, lists, tables, code fences, links, $x^2$ inline math and $$ ... $$ display equations (LaTeX). Everything else on the page is untouched. For a change of a few words use replace_text. Returns the new block ids.',
     parameters: {
       type: 'object',
       properties: { block_id: { type: 'string' }, through_block_id: { type: 'string', description: 'Last block of the run to replace (same tab).' }, markdown: { type: 'string' } },
@@ -77,7 +77,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'insert_blocks',
-    description: 'Insert new content, written as Markdown, right before or after a block (give one of before / after), or at the start or end of the current tab. Returns the new block ids.',
+    description: 'Insert new content, written as Markdown (LaTeX math: $x^2$ inline, $$ ... $$ for a display equation), right before or after a block (give one of before / after), or at the start or end of the current tab. Returns the new block ids.',
     parameters: {
       type: 'object',
       properties: {

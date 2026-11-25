@@ -3,7 +3,7 @@
 // published page fills with sandboxed iframes (the same separate-origin sandbox as the app).
 import * as Y from 'yjs';
 import { fragment, HTML_NODE, LINK_NODE, listTabs, MIND_NODE, mindChildren, mindMapNodes, type LinkTarget, type MindNode } from './index.ts';
-import { citationLine, footnoteParts, inlineOf, isFootnote, plainText, type Run } from './walk.ts';
+import { BLOCK_MATH, citationLine, footnoteParts, INLINE_MATH, inlineOf, isFootnote, mathLatex, plainText, type Run } from './walk.ts';
 import { safeHref } from './markdown.ts';
 
 export const escapeHtml = (s: string) =>
@@ -15,25 +15,41 @@ export type RenderedTab = { id: string; title: string; html: string };
 export type RenderOptions = {
   /** Where a page link goes. Return null to show it as plain text (a page that is not public). */
   link?: (t: LinkTarget) => { href: string; label: string } | { href: null; label: string };
+  /**
+   * Renders LaTeX to HTML (the server passes KaTeX). Must return safe HTML. Without it, equations
+   * show as their escaped source. `math` on the result tells the caller the page needs the math styles.
+   */
+  math?: (latex: string, display: boolean) => string;
 };
 
 /** Every tab as HTML, plus the HTML blocks the page needs to start in sandboxes. */
-export function pageToHtml(doc: Y.Doc, opts: RenderOptions = {}): { tabs: RenderedTab[]; blocks: RenderedBlock[] } {
+export function pageToHtml(doc: Y.Doc, opts: RenderOptions = {}): { tabs: RenderedTab[]; blocks: RenderedBlock[]; math: boolean } {
   const blocks: RenderedBlock[] = [];
+  const used = { math: false };
   const tabs = listTabs(doc).map((t) => {
     // Tab ids come from the shared document, which any editor can write to directly, so they are
     // escaped like any other text before they go into an id or href.
-    const ctx: Ctx = { doc, opts, blocks, notes: [], tab: escapeHtml(String(t.id)) };
+    const ctx: Ctx = { doc, opts, blocks, notes: [], tab: escapeHtml(String(t.id)), used };
     const body = (fragment(doc, t.id).toArray() as Y.XmlElement[]).map((n) => block(n, ctx)).join('\n');
     const notes = ctx.notes.length
       ? `<section class="footnotes"><ol>${ctx.notes.map((n, i) => `<li id="fn-${ctx.tab}-${i + 1}">${n} <a href="#fnref-${ctx.tab}-${i + 1}" class="back" aria-label="Back to text">↩</a></li>`).join('')}</ol></section>`
       : '';
     return { id: t.id, title: t.title, html: body + notes };
   });
-  return { tabs, blocks };
+  return { tabs, blocks, math: used.math };
 }
 
-type Ctx = { doc: Y.Doc; opts: RenderOptions; blocks: RenderedBlock[]; notes: string[]; tab: string };
+type Ctx = { doc: Y.Doc; opts: RenderOptions; blocks: RenderedBlock[]; notes: string[]; tab: string; used: { math: boolean } };
+
+function math(latex: string, display: boolean, ctx: Ctx): string {
+  const src = latex.trim();
+  if (!src) return '';
+  ctx.used.math = true;
+  let html: string | null = null;
+  try { html = ctx.opts.math?.(src, display) ?? null; } catch { html = null; }
+  const inner = html ?? tag('code', escapeHtml(src));
+  return display ? tag('div', inner, ' class="math-display"') : tag('span', inner, ' class="math-inline"');
+}
 
 const tag = (name: string, inner: string, attrs = '') => `<${name}${attrs}>${inner}</${name}>`;
 
@@ -67,6 +83,7 @@ function block(node: Y.XmlElement | Y.XmlText, ctx: Ctx): string {
     case 'heading': { const l = Math.min(6, Math.max(1, Number(el.getAttribute('level') ?? 1))); return tag(`h${l}`, inline(el, ctx)); }
     case 'blockquote': return tag('blockquote', kids());
     case 'horizontalRule': return '<hr>';
+    case BLOCK_MATH: return math(mathLatex(el), true, ctx);
     case 'codeBlock': return tag('pre', tag('code', escapeHtml(plainText(el))));
     case 'bulletList': return tag('ul', kids());
     case 'orderedList': { const s = Number(el.getAttribute('start') ?? 1); return tag('ol', kids(), s > 1 ? ` start="${s}"` : ''); }
@@ -130,6 +147,8 @@ function inline(el: Y.XmlElement, ctx: Ctx): string {
         { title: (t) => tag('cite', t), url: (u) => tag('a', u, ` href="${u}" rel="noopener noreferrer nofollow"`) },
       ));
       out += `<sup class="fnref" id="fnref-${ctx.tab}-${n}"><a href="#fn-${ctx.tab}-${n}">${n}</a></sup>`;
+    } else if (c.nodeName === INLINE_MATH) {
+      out += math(mathLatex(c), false, ctx);
     } else if (c.nodeName === 'hardBreak') {
       out += '<br>';
     } else {

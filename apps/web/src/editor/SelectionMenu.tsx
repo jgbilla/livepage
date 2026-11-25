@@ -1,5 +1,5 @@
 // The small menu that floats over selected text, like Notion's: bold, italic, strikethrough, code,
-// link, comment, footnote and Ask AI. It replaces the fixed toolbar; blocks come from the "/" menu.
+// link, comment, footnote, equation and Ask AI. It replaces the fixed toolbar; blocks come from the "/" menu.
 // On touch screens it sits under the selection so the phone's own copy/paste bar stays visible.
 import { Icon } from '../design/Icon';
 import { useEffect, useRef, useState, type RefObject } from 'react';
@@ -81,6 +81,7 @@ export function SelectionMenu({ editor, wrapRef, readOnly, canComment, onComment
           {!readOnly && btn(<Icon name="footnote" />, 'Footnote after the selection (Ctrl/⌘+Alt+F)', () => {
             editor.chain().focus().setTextSelection(editor.state.selection.to).insertFootnote().run();
           })}
+          {!readOnly && btn(<Icon name="radical" />, 'Turn into an equation (Ctrl/⌘+Shift+E)', () => editor.chain().focus().insertInlineMath().run())}
           {!readOnly && onAskAi && btn(<><Icon name="sparkles" />Ask AI</>, 'Ask AI about the selection', onAskAi, false, 'ask')}
         </>
       )}

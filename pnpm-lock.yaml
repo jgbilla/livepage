@@ -56,6 +56,9 @@ importers:
       jose:
         specifier: ^6.2.18
         version: 6.2.18
+      katex:
+        specifier: ^0.16.47
+        version: 0.16.47
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -129,6 +132,9 @@ importers:
       highlight.js:
         specifier: ^11.11.2
         version: 11.12.0
+      katex:
+        specifier: ^0.16.47
+        version: 0.16.47
       lowlight:
         specifier: ^3.3.0
         version: 3.3.0
@@ -1258,6 +1264,10 @@ packages:
     resolution: {integrity: sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w==}
     engines: {node: '>=20'}
 
+  commander@8.3.0:
+    resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
+    engines: {node: '>= 12'}
+
   content-disposition@2.0.1:
     resolution: {integrity: sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog==}
     engines: {node: '>=18'}
@@ -1554,6 +1564,10 @@ packages:
   json5@2.2.3:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
+    hasBin: true
+
+  katex@0.16.47:
+    resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
     hasBin: true
 
   kleur@4.1.5:
@@ -3009,6 +3023,8 @@ snapshots:
       strip-ansi: 7.2.0
       wrap-ansi: 9.0.2
 
+  commander@8.3.0: {}
+
   content-disposition@2.0.1: {}
 
   content-type@1.0.5: {}
@@ -3284,6 +3300,10 @@ snapshots:
   json-schema-typed@8.0.2: {}
 
   json5@2.2.3: {}
+
+  katex@0.16.47:
+    dependencies:
+      commander: 8.3.0
 
   kleur@4.1.5: {}
 

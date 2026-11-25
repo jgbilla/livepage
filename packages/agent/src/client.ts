@@ -8,7 +8,7 @@ import {
   actionsMap, addMindNode, appendHeading, fragment, htmlCodeText, htmlSections, insertHtmlBlock, insertMindMap, insertTable,
   addTab, listBlocks, listTabs, makeParagraph, resolveTab, pageAsMarkdown, pendingActions, removeMindNode, setHtmlBlockStatus, setHtmlCode,
   setMindNodeText, splitLinks, makeLink, updateAction, insertFootnote, updateFootnote, removeFootnote, listFootnotes,
-  blockIdOf, blocksAsText, deleteBlocks, deleteTableRow, findBlock, hitsToReplace, insertBlocks, insertTableRow, marksAt, moveBlocks,
+  blockIdOf, blocksAsText, deleteBlocks, deleteTableRow, findBlock, hitsToReplace, replacementHasMath, replaceText as replaceTextInDoc, insertBlocks, insertTableRow, marksAt, moveBlocks,
   outlineAsText, pageOutline, readBlocks, replaceBlocks, setTableCell,
   type BlockAction, type FootnoteInput, type HtmlParts, type MindTree, type ReadBlocksOptions, type ReplaceOptions, type Where,
 } from '@livepage/schema';
@@ -171,6 +171,12 @@ export class LiveAgent {
    */
   async replaceText(find: string, replace: string, opts: ReplaceOptions = {}): Promise<{ replaced: number; blocks: string[] }> {
     const hits = hitsToReplace(this.doc, find, opts);
+    // Equations (an edit inside one, or $math$ in the replacement) are applied in one go, not typed.
+    if (hits.some((h) => h.math) || replacementHasMath(replace)) {
+      const r = replaceTextInDoc(this.doc, find, replace, opts);
+      this.caretAtBlock(r.blocks[r.blocks.length - 1]);
+      return r;
+    }
     const typed = hits.length === 1 && replace.length <= 2000;
     // Last match first, so earlier offsets in the same text stay valid.
     for (const h of [...hits].reverse()) {

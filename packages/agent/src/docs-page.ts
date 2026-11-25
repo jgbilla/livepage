@@ -10,7 +10,7 @@
 // page up to date, change just the blocks or words that are out of date with the targeted edit tools (get_outline,
 // read_blocks, replace_text, replace_blocks, insert_blocks, set_table_cell...) rather than running this again.
 import * as Y from 'yjs';
-import { fragment, listTabs, MAIN_TAB, META, removeTab, renameTab } from '@livepage/schema';
+import { fragment, INLINE_MATH_RE, listTabs, MAIN_TAB, makeMath, META, removeTab, renameTab } from '@livepage/schema';
 import { LiveAgent } from './client.ts';
 import { httpBaseFor } from './tools.ts';
 
@@ -64,7 +64,29 @@ function inline(text: string): Y.XmlText {
   }
   return t;
 }
-const para = (text: string) => { const p = new Y.XmlElement('paragraph'); p.insert(0, [inline(text)]); return p; };
+/** Text with $inline math$ in it: text runs and equations (inside `code`, a $ is just a $). */
+function inlineWithMath(text: string): (Y.XmlText | Y.XmlElement)[] {
+  const out: (Y.XmlText | Y.XmlElement)[] = [];
+  let buf = '';
+  for (const part of text.split(/(`[^`]+`)/g)) {
+    if (part.startsWith('`')) { buf += part; continue; }
+    let rest = part;
+    for (let at = rest.indexOf('$'); at >= 0; at = rest.indexOf('$', at + 1)) {
+      const m = rest.slice(at).match(INLINE_MATH_RE);
+      if (!m) continue;
+      buf += rest.slice(0, at);
+      if (buf) out.push(inline(buf));
+      buf = '';
+      out.push(makeMath(m[1]));
+      rest = rest.slice(at + m[0].length);
+      at = -1;
+    }
+    buf += rest;
+  }
+  if (buf || !out.length) out.push(inline(buf));
+  return out;
+}
+const para = (text: string) => { const p = new Y.XmlElement('paragraph'); p.insert(0, inlineWithMath(text)); return p; };
 function list(kind: 'bulletList' | 'orderedList', items: string[]) {
   const l = new Y.XmlElement(kind);
   l.insert(0, items.map((it) => { const li = new Y.XmlElement('listItem'); li.insert(0, [para(it)]); return li; }));
@@ -84,6 +106,10 @@ function write(tab: string, src: string) {
       el.setAttribute('level', h[1].length as unknown as string);
       el.insert(0, [inline(h[2])]);
       out.push(el);
+    } else if (line.trim() === '$$') {
+      const tex: string[] = [];
+      while (++i < lines.length && lines[i].trim() !== '$$') tex.push(lines[i]);
+      out.push(makeMath(tex.join('\n'), true));
     } else if (line.startsWith('```')) {
       const code: string[] = [];
       while (++i < lines.length && !lines[i].startsWith('```')) code.push(lines[i]);
@@ -288,12 +314,21 @@ table(ed, [
   ['Custom UI / HTML block', 'Sandboxed code', '"Edit code" to co-edit the source live', 'Built'],
   ['Page link', 'Inline', 'Type [[ and pick a page, add # for a tab', 'Built'],
   ['Footnote', 'Inline', '/ menu > Footnote, or Ctrl/Cmd+Alt+F after a selection', 'Built'],
+  ['Equation (LaTeX)', 'Inline or block', 'Type $x^2$, or $$ and a space on an empty line; / menu > Equation; click one to edit', 'Built'],
   ['Drawing / whiteboard', 'Native', 'Shapes and arrows', 'Planned'],
   ['Design frame, images, files, database views', 'Native', '', 'Planned'],
 ]);
 write(ed, `
 ## Inserting and formatting
-Type \`/\` anywhere for the block menu: headings, lists, tables, mind maps, live HTML blocks, footnotes and page links. Select text for a small floating menu with bold, italic, link, comment, footnote and Ask AI. Footnotes are numbered in reading order and listed at the bottom of each tab.
+Type \`/\` anywhere for the block menu: headings, lists, tables, equations, mind maps, live HTML blocks, footnotes and page links. Select text for a small floating menu with bold, italic, link, comment, footnote, equation and Ask AI. Footnotes are numbered in reading order and listed at the bottom of each tab.
+
+## Math
+Write LaTeX and it renders as you type, with KaTeX. Inline, like $e^{i\\pi} + 1 = 0$: type \`$\` around it (prices like $5 and $10 stay text), \`\\(...\\)\`, or pick **Inline equation** in the / menu. Selecting text and pressing the equation button (Ctrl/Cmd+Shift+E) turns it into one.
+For a display equation on its own line, type \`$$\` and a space on an empty line, or pick **Equation** in the / menu:
+$$
+\\int_0^1 x^2\\,dx = \\frac{1}{3}
+$$
+Click an equation to edit its source; the equation updates live, for everyone on the page, while you type. Enter finishes, Shift+Enter adds a line, and the buttons under the field insert fractions, roots, sums and symbols (handy on a phone). An equation that does not parse shows in red with KaTeX's message. Equations work in lists and table cells, on published pages, in Markdown import and export (\`$...$\` and \`$$...$$\`), and for agents, who read and write them as LaTeX in Markdown.
 
 ## Native first, custom UI when it earns it
 Native blocks are editable, searchable and exportable like text, so they win whenever they fit. Custom UI is for what native blocks can't do: motion, simulations, interactive explainers and one-off visualizations. Agents follow the same rule: plain text first, then a native table or mind map, and custom UI only for motion or interaction.
@@ -335,7 +370,7 @@ Tag pages, then save **views** in the sidebar that list the pages with any or al
 Mark any page as a template from the ⋯ menu, start new pages from it in the sidebar, and pick one for your daily pages. \`{{date}}\`, \`{{title}}\`, \`{{yesterday}}\` and formats like \`{{date:MMMM D, YYYY}}\` fill in automatically. Any other \`{{Field}}\` stays highlighted for you or an agent to fill in.
 
 ## Import and export
-Import Markdown files, a folder or an Obsidian vault (or a .zip): folders, frontmatter, \`#tags\`, \`[[links]]\` and \`[^1]\` footnotes come across. Export a page as Markdown or PDF, or everything as a zip you can open in Obsidian.
+Import Markdown files, a folder or an Obsidian vault (or a .zip): folders, frontmatter, \`#tags\`, \`[[links]]\` \`[^1]\` footnotes and \`$...$\` / \`$$...$$\` math come across. Export a page as Markdown or PDF, or everything as a zip you can open in Obsidian.
 
 ## Publish to the web
 Publish a page to get a clean, public, read-only copy at \`/pub/<slug>\` that anyone can read without an account. Live HTML blocks keep running in the sandbox. Unpublish any time.
@@ -475,7 +510,7 @@ table(ag, [
   ['read_page', 'The whole page as markdown, every tab, with node and footnote ids'],
   ['get_outline', 'Just the structure: tabs and headings with block ids and section sizes'],
   ['read_blocks', 'Blocks with their ids: the whole page, one tab, one section or a window from a block'],
-  ['replace_text', 'Find and replace words in place; unchanged words keep formatting, links, footnotes and comments, and inline Markdown in the replacement applies'],
+  ['replace_text', 'Find and replace words in place; unchanged words keep formatting, links, footnotes and comments, and inline Markdown in the replacement applies. Also edits inside an equation\'s LaTeX, or turns text into $math$'],
   ['replace_blocks', 'Rewrite one block or a run of blocks (a section) with Markdown'],
   ['insert_blocks', 'New Markdown before or after a block, or at the start or end of a tab'],
   ['delete_blocks / move_blocks', 'Remove or reorder a block or a run of blocks, also across tabs'],

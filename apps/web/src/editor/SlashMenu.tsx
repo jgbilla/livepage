@@ -1,6 +1,6 @@
 // The "/" menu, like Notion's. Type / at the start of a line or after a space, then a few letters
 // to filter; arrow keys move, Enter or Tab picks, Escape closes. It lists every block the editor
-// can insert (headings, lists, tables, mind maps, live HTML blocks, footnotes, page links,
+// can insert (headings, lists, tables, mind maps, live HTML blocks, footnotes, equations, page links,
 // templates...) and page actions (comment, Ask AI). On touch screens the "+" button opens it too.
 import { Icon, type IconName } from '../design/Icon';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -67,9 +67,11 @@ function baseCommands(ctx: SlashContext): Command[] {
     { id: 'divider', group: 'Basic blocks', icon: 'divider', title: 'Divider', description: 'A line between sections', keywords: ['hr', 'rule', 'separator', 'line', '---'], run: (e) => c(e).setHorizontalRule().run() },
     { id: 'code', group: 'Basic blocks', icon: 'code', title: 'Code block', description: 'Code with syntax highlighting', keywords: ['code', 'snippet', 'pre', '```'], run: (e) => c(e).setCodeBlock().run() },
     { id: 'table', group: 'Basic blocks', icon: 'table', title: 'Table', description: 'A 3 × 3 table with a header row', keywords: ['grid', 'rows', 'columns', 'spreadsheet'], run: (e) => c(e).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { id: 'math', group: 'Basic blocks', icon: 'sigma', title: 'Equation', description: 'A display equation in LaTeX, like $$', keywords: ['math', 'latex', 'tex', 'katex', 'formula', 'equation', '$$'], run: (e) => c(e).insertBlockMath().run() },
     { id: 'mindmap', group: 'Live blocks', icon: 'mind-map', title: 'Mind map', description: 'Branching ideas you and agents edit live', keywords: ['mind', 'map', 'brainstorm', 'tree', 'diagram'], run: (e) => c(e).insertMindMap().run() },
     { id: 'html', group: 'Live blocks', icon: 'html-block', title: 'HTML block', description: 'Custom UI, animations and charts in a sandbox', keywords: ['html', 'custom', 'ui', 'embed', 'widget', 'animation', 'js', 'javascript', 'iframe', 'artifact'], run: (e) => c(e).insertHtmlBlock().run() },
     { id: 'footnote', group: 'Inline', icon: 'footnote', title: 'Footnote', description: 'A numbered note at the bottom of the tab', keywords: ['fn', 'footnote', 'note', 'citation', 'source', 'reference'], run: (e) => c(e).insertFootnote().run() },
+    { id: 'inline-math', group: 'Inline', icon: 'radical', title: 'Inline equation', description: 'LaTeX math inside a line, like $x^2$', keywords: ['math', 'latex', 'tex', 'katex', 'formula', 'equation', 'inline', '$'], run: (e) => c(e).insertInlineMath().run() },
     { id: 'link', group: 'Inline', icon: 'arrow-up-right', title: 'Link to page', description: 'Link to a page or tab, like [[', keywords: ['link', 'page', 'mention', '[[', 'backlink', 'tab'], run: (e) => c(e).insertContent('[[').run() },
     { id: 'date', group: 'Inline', icon: 'calendar', title: "Today's date", description: today(), keywords: ['date', 'today', 'now'], run: (e) => c(e).insertContent(today() + ' ').run() },
   ];

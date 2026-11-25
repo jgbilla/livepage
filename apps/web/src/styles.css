@@ -807,6 +807,50 @@ body:has(.modal-backdrop, .ws-offer) .pwa-install { display: none; }
 .fn-form .fn-bad { border-color: var(--lp-danger); }
 .fn-hint { color: var(--lp-danger); font-size: var(--lp-text-xs); }
 
+/* ---------- Math (KaTeX) ---------- */
+.editor .math-inline { display: inline-block; max-width: 100%; padding: 0 2px; margin: 0 1px; border-radius: var(--lp-radius-xs); vertical-align: baseline;
+  cursor: pointer; transition: background var(--lp-duration-instant); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.editor .math-inline::-webkit-scrollbar { display: none; }
+.editor .math-inline .katex { font-size: 1.08em; }
+.editor .math-block { position: relative; margin: var(--lp-space-3) 0; padding: var(--lp-space-3) var(--lp-space-4); border-radius: var(--lp-radius-lg);
+  text-align: center; cursor: pointer; overflow-x: auto; overflow-y: hidden; transition: background var(--lp-duration-instant); }
+.editor .math-block .katex-display { margin: 0; }
+.editor .math-block .katex { font-size: 1.15em; }
+.editor[contenteditable="false"] .math-inline, .editor[contenteditable="false"] .math-block, .ProseMirror[contenteditable="false"] .math-inline, .ProseMirror[contenteditable="false"] .math-block { cursor: default; }
+.ProseMirror[contenteditable="true"] .math-inline:hover, .ProseMirror[contenteditable="true"] .math-block:hover { background: var(--lp-hover); }
+.editor .math-inline.ProseMirror-selectednode, .editor .math-block.ProseMirror-selectednode { background: var(--lp-accent-soft); outline: none; box-shadow: 0 0 0 2px var(--lp-accent); }
+.editor .math-inline.is-empty, .editor .math-block.is-empty { color: var(--lp-text-placeholder); font-size: var(--lp-text-sm); font-family: var(--lp-font-sans); }
+.editor .math-block.is-empty { background: var(--lp-surface-sunken); padding: var(--lp-space-4); }
+.editor .math-inline.is-empty { background: var(--lp-surface-sunken); padding: 0 var(--lp-space-1-5); }
+.editor .math-inline.is-loading, .editor .math-block.is-loading { font-family: var(--lp-font-mono); font-size: .88em; color: var(--lp-text-tertiary); }
+.editor .math-inline.has-error, .editor .math-block.has-error { font-family: var(--lp-font-mono); font-size: .88em; color: var(--lp-danger); background: var(--lp-danger-soft); }
+.math-card { position: fixed; z-index: var(--lp-z-modal); background: var(--lp-surface-overlay); color: var(--lp-text); border: var(--lp-border-width) solid var(--lp-border);
+  border-radius: var(--lp-radius-lg); box-shadow: var(--lp-shadow-2); padding: var(--lp-space-3); font-size: var(--lp-text-md); line-height: var(--lp-leading-ui);
+  display: flex; flex-direction: column; gap: var(--lp-space-2); animation: lp-pop var(--lp-duration-fast) var(--lp-ease-out); }
+.math-card-head { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--lp-text-xs); color: var(--lp-text-secondary); font-weight: var(--lp-weight-medium); }
+.math-card-head .muted { color: var(--lp-text-tertiary); font-weight: var(--lp-weight-regular); }
+.math-input { width: 100%; resize: vertical; min-height: 36px; font: var(--lp-text-sm)/1.55 var(--lp-font-mono); padding: var(--lp-space-1-5) var(--lp-space-2);
+  background: var(--lp-surface); color: var(--lp-text); border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-md); }
+.math-input:hover { border-color: var(--lp-border-strong); }
+.math-input:focus { outline: none; border-color: var(--lp-accent); box-shadow: var(--lp-focus-ring); }
+.math-input[aria-invalid="true"] { border-color: var(--lp-danger); }
+.math-error { color: var(--lp-danger); font-size: var(--lp-text-xs); overflow-wrap: anywhere; }
+.math-snippets { display: flex; gap: var(--lp-space-1); overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--lp-space-1)); padding: 0 var(--lp-space-1); }
+.math-snippets::-webkit-scrollbar { display: none; }
+.math-snippets button { flex: none; min-width: 32px; height: 32px; padding: 0 var(--lp-space-1-5); display: inline-flex; align-items: center; justify-content: center;
+  border: var(--lp-border-width) solid var(--lp-border); border-radius: var(--lp-radius-sm); background: var(--lp-surface); color: var(--lp-text); cursor: pointer; font-size: var(--lp-text-sm); }
+.math-snippets button:hover { background: var(--lp-hover); border-color: var(--lp-border-strong); }
+.math-snippets button:focus-visible { outline: none; box-shadow: var(--lp-focus-ring); }
+.math-snippets .katex { font-size: 1em; }
+.math-card-actions { display: flex; align-items: center; gap: var(--lp-space-2); }
+.math-card-actions .math-hint { flex: 1; font-size: var(--lp-text-xs); color: var(--lp-text-tertiary); }
+@media (pointer: coarse) {
+  .math-card-actions .math-hint { display: none; }
+  .math-card-actions { justify-content: flex-end; }
+  .math-card-actions button, .math-snippets button { min-height: 40px; min-width: 40px; }
+  .math-input { font-size: 16px; } /* no zoom-on-focus in iOS Safari */
+}
+
 /* ---------- Comments (amber, like a highlighter) ---------- */
 .editor-wrap { position: relative; }
 /* Floating menu over selected text (bold, italic, link, comment, footnote, Ask AI) */
